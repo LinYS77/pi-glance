@@ -31,14 +31,9 @@ That's the only command — opens a configuration pane to tweak theme, icons, se
 
 ## What you see
 
-```text
-╭─ pi-glance ──────────────── 󰚩 Sonnet 4 high · 󰔟 23% · 󰄨 ↑12.4k ↓3.1k ·  main ─╮
-│                                                                                           │
-│                                                                                           │
-│                                                                                           │
-│                                                                                           │
-╰───────────────────────────────────────────────────────────────────────────────────────────╯
-```
+
+![pi-glance demo](assets/demo.gif)
+
 
 | | | |
 |---|---|---|
