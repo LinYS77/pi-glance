@@ -17,8 +17,24 @@ and an inline glance at model, context, tokens, cost, and branch.
 
 ## Install
 
+From npm:
+
 ```bash
 pi install npm:pi-glance
+```
+
+Or clone as a traditional pi extension directory:
+
+```bash
+git clone https://github.com/LinYS77/pi-glance.git ~/.pi/agent/extensions/pi-glance
+```
+
+Then restart pi or run `/reload`.
+
+For development/testing:
+
+```bash
+pi -e /path/to/pi-glance
 ```
 
 ## Use

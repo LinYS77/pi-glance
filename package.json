@@ -1,6 +1,6 @@
 {
   "name": "pi-glance",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "A polished input surface extension for pi, with a rounded multiline editor and inline model/context/status glance.",
   "keywords": [
     "pi-package",
@@ -24,19 +24,27 @@
     "url": "https://github.com/LinYS77/pi-glance/issues"
   },
   "files": [
-    "src/",
+    "*.ts",
+    "assets/",
     "README.md",
     "LICENSE"
   ],
   "pi": {
     "extensions": [
-      "./src/index.ts"
+      "./index.ts"
     ]
   },
   "peerDependencies": {
     "@mariozechner/pi-ai": "*",
     "@mariozechner/pi-coding-agent": "*",
     "@mariozechner/pi-tui": "*"
+  },
+  "devDependencies": {
+    "@mariozechner/pi-ai": "*",
+    "@mariozechner/pi-coding-agent": "*",
+    "@mariozechner/pi-tui": "*",
+    "@types/node": "*",
+    "typescript": "*"
   },
   "publishConfig": {
     "access": "public"

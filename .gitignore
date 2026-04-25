@@ -1,6 +1,26 @@
+# Dependencies
 node_modules/
-docs/
-.DS_Store
+
+# Local development / environment
 .env
+.env.*
+!.env.example
+.DS_Store
 *.log
+
+# Build / package artifacts
 *.tgz
+dist/
+build/
+coverage/
+
+# Temporary files
+/tmp/
+tmp/
+.cache/
+
+# Local planning notes (not published)
+docs/
+
+# pi local config if this repo is opened as a project
+.pi/
