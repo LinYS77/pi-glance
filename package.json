@@ -1,6 +1,6 @@
 {
   "name": "pi-glance",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "A polished input surface extension for pi, with a rounded multiline editor and inline model/context/status glance.",
   "keywords": [
     "pi-package",
@@ -25,7 +25,6 @@
   },
   "files": [
     "*.ts",
-    "assets/",
     "README.md",
     "LICENSE"
   ],
