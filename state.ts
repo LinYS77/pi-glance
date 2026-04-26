@@ -83,9 +83,9 @@ export function refreshWorkspace(state: GlanceState, ctx: ExtensionContext): boo
 
 export function refreshContextUsage(state: GlanceState, ctx: ExtensionContext): boolean {
 	const usage = ctx.getContextUsage();
-	const tokens = usage?.tokens ?? state.context.tokens ?? null;
+	const tokens = usage ? usage.tokens : (state.context.tokens ?? null);
 	const window = usage?.contextWindow ?? ctx.model?.contextWindow ?? state.context.window ?? 0;
-	const percent = usage?.percent ?? state.context.percent ?? null;
+	const percent = usage ? usage.percent : (state.context.percent ?? null);
 	if (state.context.tokens === tokens && state.context.window === window && state.context.percent === percent) return false;
 	state.context.tokens = tokens;
 	state.context.window = window;
