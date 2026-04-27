@@ -3,10 +3,10 @@ import { dirname, join } from "node:path";
 import { getAgentDir } from "@mariozechner/pi-coding-agent";
 import type { GlanceConfig, GlanceThemeName, IconMode, SegmentConfig, SegmentId } from "./types.js";
 
-export const CONFIG_PATH = join(getAgentDir(), "pi-glance", "config.json");
-export const CONFIG_VERSION = 2 as const;
+const CONFIG_PATH = join(getAgentDir(), "pi-glance", "config.json");
+const CONFIG_VERSION = 2 as const;
 
-export const DEFAULT_SEGMENTS: SegmentConfig[] = [
+const DEFAULT_SEGMENTS: SegmentConfig[] = [
 	{ id: "git.branch", enabled: true, priority: 65 },
 	{ id: "model", enabled: true, priority: 100 },
 	{ id: "context", enabled: true, priority: 95 },
@@ -95,7 +95,7 @@ function normalizeSegments(value: unknown): SegmentConfig[] {
 	return ordered;
 }
 
-export function normalizeConfig(raw: unknown): GlanceConfig {
+function normalizeConfig(raw: unknown): GlanceConfig {
 	const defaults = defaultConfig();
 	if (!raw || typeof raw !== "object") return defaults;
 	const record = raw as Record<string, unknown>;

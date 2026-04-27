@@ -9,12 +9,12 @@ export interface SegmentConfig {
 	priority: number;
 }
 
-export interface DisplayConfig {
+interface DisplayConfig {
 	adaptive: boolean;
 	showProvider: "auto" | "always" | "never";
 }
 
-export interface EditorConfig {
+interface EditorConfig {
 	minContentRows: number;
 }
 
@@ -71,7 +71,7 @@ export interface Rgb {
 	b: number;
 }
 
-export interface SegmentPalette {
+interface SegmentPalette {
 	fg: Rgb;
 }
 

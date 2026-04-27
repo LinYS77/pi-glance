@@ -12,7 +12,7 @@ function withIcon(ctx: SegmentRenderContext, segment: SegmentDefinition, value: 
 	};
 }
 
-export const SEGMENTS: SegmentDefinition[] = [
+const SEGMENTS: SegmentDefinition[] = [
 	{
 		id: "git.branch",
 		label: "Git Branch",

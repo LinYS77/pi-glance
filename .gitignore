@@ -19,7 +19,7 @@ coverage/
 tmp/
 .cache/
 
-# Local planning notes (not published)
+# Local planning notes / design docs are intentionally not published to GitHub or npm.
 docs/
 
 # pi local config if this repo is opened as a project

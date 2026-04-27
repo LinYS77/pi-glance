@@ -3,7 +3,15 @@ import { loadConfig, saveConfig } from "./config.js";
 import { GlanceEditor } from "./editor.js";
 import { GlanceFooterBridge } from "./footer-bridge.js";
 import { showGlancePane } from "./pane.js";
-import { computeUsageTotals, createInitialState, refreshContextUsage, refreshModel, refreshWorkspace, setUsageTotals } from "./state.js";
+import {
+	clearContextUsage,
+	computeUsageTotals,
+	createInitialState,
+	refreshContextUsage,
+	refreshModel,
+	refreshWorkspace,
+	setUsageTotals,
+} from "./state.js";
 import type { GlanceConfig, GlanceState } from "./types.js";
 
 export default function piGlance(pi: ExtensionAPI): void {
@@ -155,7 +163,10 @@ export default function piGlance(pi: ExtensionAPI): void {
 	pi.on("session_compact", async (_event, ctx) => {
 		await ensureConfig();
 		ensureState(ctx);
-		refreshReliableSnapshot(ctx, { model: true });
+		refreshWorkspace(state!, ctx);
+		refreshModel(state!, ctx, getConfig(), pi.getThinkingLevel());
+		setUsageTotals(state!, computeUsageTotals(ctx));
+		clearContextUsage(state!, ctx);
 		renderNow();
 	});
 

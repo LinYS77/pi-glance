@@ -34,7 +34,7 @@ export function createInitialState(ctx: ExtensionContext, config: GlanceConfig, 
 	return state;
 }
 
-export function touch(state: GlanceState): void {
+function touch(state: GlanceState): void {
 	state.version++;
 }
 
@@ -70,6 +70,16 @@ export function setUsageTotals(state: GlanceState, usage: UsageTotals): boolean 
 	return true;
 }
 
+export function clearContextUsage(state: GlanceState, ctx?: ExtensionContext): boolean {
+	const window = ctx?.model?.contextWindow ?? state.context.window ?? 0;
+	if (state.context.tokens === null && state.context.percent === null && state.context.window === window) return false;
+	state.context.tokens = null;
+	state.context.window = window;
+	state.context.percent = null;
+	touch(state);
+	return true;
+}
+
 export function refreshWorkspace(state: GlanceState, ctx: ExtensionContext): boolean {
 	const cwd = ctx.sessionManager.getCwd?.() || ctx.cwd;
 	if (state.workspace.path === cwd) return false;
@@ -81,11 +91,49 @@ export function refreshWorkspace(state: GlanceState, ctx: ExtensionContext): boo
 	return true;
 }
 
+function assistantContextTokens(message: AssistantMessage): number {
+	const usage = message.usage as
+		| {
+				totalTokens?: number;
+				input?: number;
+				output?: number;
+				cacheRead?: number;
+				cacheWrite?: number;
+		  }
+		| undefined;
+	if (!usage) return 0;
+	if (Number.isFinite(usage.totalTokens)) return usage.totalTokens ?? 0;
+	return (usage.input ?? 0) + (usage.output ?? 0) + (usage.cacheRead ?? 0) + (usage.cacheWrite ?? 0);
+}
+
+function hasUnknownContextAfterLatestCompaction(ctx: ExtensionContext): boolean {
+	const branch = ctx.sessionManager.getBranch();
+	let compactionIndex = -1;
+	for (let i = branch.length - 1; i >= 0; i--) {
+		if (branch[i]?.type === "compaction") {
+			compactionIndex = i;
+			break;
+		}
+	}
+	if (compactionIndex < 0) return false;
+
+	for (let i = branch.length - 1; i > compactionIndex; i--) {
+		const entry = branch[i];
+		if (entry?.type !== "message" || entry.message.role !== "assistant") continue;
+		const message = entry.message as AssistantMessage;
+		if (message.stopReason === "aborted" || message.stopReason === "error") return true;
+		return assistantContextTokens(message) <= 0;
+	}
+
+	return true;
+}
+
 export function refreshContextUsage(state: GlanceState, ctx: ExtensionContext): boolean {
 	const usage = ctx.getContextUsage();
-	const tokens = usage ? usage.tokens : (state.context.tokens ?? null);
+	const unknownAfterCompaction = hasUnknownContextAfterLatestCompaction(ctx);
+	const tokens = unknownAfterCompaction ? null : usage ? usage.tokens : (state.context.tokens ?? null);
 	const window = usage?.contextWindow ?? ctx.model?.contextWindow ?? state.context.window ?? 0;
-	const percent = usage ? usage.percent : (state.context.percent ?? null);
+	const percent = unknownAfterCompaction ? null : usage ? usage.percent : (state.context.percent ?? null);
 	if (state.context.tokens === tokens && state.context.window === window && state.context.percent === percent) return false;
 	state.context.tokens = tokens;
 	state.context.window = window;

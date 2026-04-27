@@ -54,7 +54,7 @@ export const ICONS: Record<IconMode, IconSet> = {
 	},
 };
 
-export function rgbToFg(color: Rgb): string {
+function rgbToFg(color: Rgb): string {
 	return `\x1b[38;2;${color.r};${color.g};${color.b}m`;
 }
 

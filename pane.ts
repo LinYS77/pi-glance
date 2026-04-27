@@ -25,7 +25,7 @@ function padRightAnsi(text: string, width: number): string {
 	return `${text}${" ".repeat(extra)}`;
 }
 
-export class GlanceConfigPane implements Component {
+class GlanceConfigPane implements Component {
 	private draft: GlanceConfig;
 	private focus: PaneFocus = "global";
 	private globalIndex = 0;
@@ -224,7 +224,7 @@ export class GlanceConfigPane implements Component {
 	}
 }
 
-export interface GlancePaneUI {
+interface GlancePaneUI {
 	custom<T>(
 		factory: (tui: TUI, theme: Theme, keybindings: unknown, done: (result: T) => void) => Component,
 	): Promise<T>;

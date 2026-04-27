@@ -70,7 +70,7 @@ function joinSegments(palette: GlancePalette, segments: SegmentRenderResult[]): 
 		.join(fg(palette.separator, " · "))}${RESET}`;
 }
 
-function fitSegments(config: GlanceConfig, palette: GlancePalette, segments: SegmentRenderResult[], width: number): SegmentRenderResult[] {
+function fitSegments(palette: GlancePalette, segments: SegmentRenderResult[], width: number): SegmentRenderResult[] {
 	const fitted = [...segments];
 	while (fitted.length > 1 && visibleWidth(joinSegments(palette, fitted)) > width) {
 		const lowestPriority = Math.min(...fitted.map((segment) => segment.priority));
@@ -83,7 +83,7 @@ function fitSegments(config: GlanceConfig, palette: GlancePalette, segments: Seg
 export function renderGlanceLine(state: GlanceState, config: GlanceConfig, width: number, providerCount = state.providers.availableCount): string {
 	if (!config.enabled) return "";
 	const { palette, segments } = renderEnabledSegments(state, config, width, providerCount);
-	const fitted = fitSegments(config, palette, segments, width);
+	const fitted = fitSegments(palette, segments, width);
 	let line = joinSegments(palette, fitted);
 	if (visibleWidth(line) > width) {
 		line = truncateToWidth(line, width, fg(palette.dim, "…"));
@@ -91,7 +91,7 @@ export function renderGlanceLine(state: GlanceState, config: GlanceConfig, width
 	return line;
 }
 
-export interface InputSurfaceRenderOptions {
+interface InputSurfaceRenderOptions {
 	contentLines?: string[];
 	focused?: boolean;
 	showTitle?: boolean;

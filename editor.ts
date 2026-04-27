@@ -21,19 +21,17 @@ function ansiPadRight(text: string, width: number): string {
 	return `${text}${" ".repeat(Math.max(0, width - visibleWidth(text)))}`;
 }
 
-function stripAnsi(text: string): string {
-	return text.replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, "");
-}
-
 function stripBorderColor(line: string, borderColor: (text: string) => string): string {
 	const sample = borderColor("─");
-	if (!sample || sample === "─") return stripAnsi(line);
-	const prefix = sample.slice(0, sample.indexOf("─"));
-	const suffix = sample.slice(sample.indexOf("─") + 1);
+	if (!sample || sample === "─") return stripControls(line);
+	const markerIndex = sample.indexOf("─");
+	if (markerIndex < 0) return stripControls(line);
+	const prefix = sample.slice(0, markerIndex);
+	const suffix = sample.slice(markerIndex + 1);
 	let out = line;
 	if (prefix) out = out.split(prefix).join("");
 	if (suffix) out = out.split(suffix).join("");
-	return stripAnsi(out);
+	return stripControls(out);
 }
 
 function isHorizontalBorder(line: string, borderColor: (text: string) => string): boolean {
@@ -120,20 +118,20 @@ export class GlanceEditor extends CustomEditor {
 		const maxTitleWidth = Math.max(1, Math.min(32, Math.floor(innerWidth * 0.35)));
 		const rawTitle = ` ${workspaceName} `;
 		const titleText = truncateToWidth(rawTitle, maxTitleWidth, "…");
-		
+
 		// Title gets a leading dash if there is enough space (width >= 20)
 		const titleToken = scrollIndicator ?? (innerWidth >= 20 ? `${BORDER.horizontal} ${workspaceName} ` : innerWidth >= 16 ? `${BORDER.horizontal}${titleText}` : BORDER.horizontal);
 		const titleWidth = visibleWidth(titleToken);
-		
+
 		// Status budget leaves room for: leading space, trailing space, and a right cap rail.
 		const statusBudget = Math.max(0, innerWidth - titleWidth - 3);
 		let status = this.renderStatus(statusBudget);
-		
+
 		if (!isFocused && status) {
 			const palette = PALETTES[config.theme];
 			status = fg(palette.dim, stripControls(status));
 		}
-		
+
 		const statusWidth = visibleWidth(status);
 		const leftGap = status ? " " : "";
 		const rightGap = status ? " " : "";
@@ -142,7 +140,7 @@ export class GlanceEditor extends CustomEditor {
 			0,
 			innerWidth - titleWidth - visibleWidth(leftGap) - statusWidth - visibleWidth(rightGap) - visibleWidth(rightCap),
 		);
-		
+
 		const titleLine = scrollIndicator
 			? this.border(titleToken, isFocused)
 			: titleToken.includes(workspaceName)
@@ -150,7 +148,7 @@ export class GlanceEditor extends CustomEditor {
 				: titleToken === BORDER.horizontal
 					? this.border(titleToken, isFocused)
 					: `${this.border(BORDER.horizontal, isFocused)}${this.title(titleText, isFocused)}`;
-					
+
 		return `${this.border(BORDER.topLeft, isFocused)}${titleLine}${this.border(BORDER.horizontal.repeat(fillerWidth), isFocused)}${leftGap}${status}${rightGap}${this.border(rightCap, isFocused)}${this.border(BORDER.topRight, isFocused)}`;
 	}
 

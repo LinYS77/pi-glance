@@ -48,5 +48,9 @@ export function displayDirectory(cwd: string): string {
 }
 
 export function stripControls(text: string): string {
-	return text.replace(/[\r\n\t]/g, " ").replace(/ +/g, " ").trim();
+	return text
+		.replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, "")
+		.replace(/[\r\n\t]/g, " ")
+		.replace(/ +/g, " ")
+		.trim();
 }
