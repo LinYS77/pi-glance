@@ -3,7 +3,7 @@ export type GlanceThemeName = "light" | "dark";
 export type IconMode = "nerd" | "plain";
 export type WidthMode = "full" | "compact" | "minimal";
 export type GitStatus = "clean" | "dirty" | "conflict" | "unknown";
-export type GitShaMode = "auto" | "always" | "never";
+type GitShaMode = "auto" | "always" | "never";
 type SegmentMetadataValue = string | number | boolean | null;
 type SegmentMetadata = Record<string, SegmentMetadataValue>;
 

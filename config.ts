@@ -1,7 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { getAgentDir } from "@mariozechner/pi-coding-agent";
-import type { GitShaMode, GlanceConfig, GlanceThemeName, IconMode, SegmentConfig, SegmentId } from "./types.js";
+import type { GlanceConfig, GlanceThemeName, IconMode, SegmentConfig, SegmentId } from "./types.js";
 
 const CONFIG_PATH = join(getAgentDir(), "pi-glance", "config.json");
 const CONFIG_VERSION = 2 as const;
@@ -18,7 +18,6 @@ const SEGMENT_IDS = new Set<SegmentId>(DEFAULT_SEGMENTS.map((s) => s.id));
 const THEMES = new Set<GlanceThemeName>(["light", "dark"]);
 const ICON_MODES = new Set<IconMode>(["nerd", "plain"]);
 const PROVIDER_MODES = new Set<GlanceConfig["display"]["showProvider"]>(["auto", "always", "never"]);
-const SHA_MODES = new Set<GitShaMode>(["auto", "always", "never"]);
 const ORDER_PRIORITY_START = 100;
 const ORDER_PRIORITY_STEP = 10;
 
@@ -156,7 +155,7 @@ function normalizeConfig(raw: unknown): GlanceConfig {
 		git: {
 			showDirty: parseBool(git.showDirty, defaults.git.showDirty),
 			showAheadBehind: parseBool(git.showAheadBehind, defaults.git.showAheadBehind),
-			showSha: parseStringEnum(git.showSha, SHA_MODES, defaults.git.showSha),
+			showSha: defaults.git.showSha,
 			timeoutMs: parseIntAtLeast(git.timeoutMs, defaults.git.timeoutMs, 100),
 			refreshDebounceMs: parseIntAtLeast(git.refreshDebounceMs, defaults.git.refreshDebounceMs, 0),
 			snapshotTtlMs: parseIntAtLeast(git.snapshotTtlMs, defaults.git.snapshotTtlMs, 1000),
