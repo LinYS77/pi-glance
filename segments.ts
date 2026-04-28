@@ -1,14 +1,28 @@
 import { formatCost, formatPercent, formatTokens, stripControls } from "./format.js";
-import type { SegmentDefinition, SegmentRenderContext, SegmentRenderResult } from "./types.js";
+import type { SegmentData, SegmentDefinition, SegmentRenderContext, SegmentRenderResult } from "./types.js";
 
-function withIcon(ctx: SegmentRenderContext, segment: SegmentDefinition, value: string): SegmentRenderResult {
-	const icon = ctx.icons[segment.id];
-	const prefix = icon ? `${icon} ` : "";
+function configuredPriority(ctx: SegmentRenderContext, segment: SegmentDefinition): number {
 	const config = ctx.config.segments.find((s) => s.id === segment.id);
+	return config?.priority ?? segment.defaultPriority;
+}
+
+function displayForMode(data: SegmentData, widthMode: SegmentRenderContext["widthMode"]): string {
+	if (widthMode === "minimal" && data.display?.minimal !== undefined) return data.display.minimal;
+	if (widthMode === "compact" && data.display?.compact !== undefined) return data.display.compact;
+	if (widthMode === "full" && data.display?.full !== undefined) return data.display.full;
+	const secondary = data.secondary ? ` ${data.secondary}` : "";
+	return `${data.primary}${secondary}`.trim();
+}
+
+function renderCollectedSegment(ctx: SegmentRenderContext, segment: SegmentDefinition, data: SegmentData): SegmentRenderResult {
+	const icon = ctx.icons[segment.id];
+	const value = displayForMode(data, ctx.widthMode);
+	const prefix = icon ? `${icon} ` : "";
 	return {
 		id: segment.id,
+		data,
 		text: `${prefix}${value}`.trim(),
-		priority: config?.priority ?? segment.defaultPriority,
+		priority: configuredPriority(ctx, segment),
 	};
 }
 
@@ -17,60 +31,132 @@ const SEGMENTS: SegmentDefinition[] = [
 		id: "git.branch",
 		label: "Git Branch",
 		defaultPriority: 65,
-		render(ctx) {
-			if (!ctx.state.git.branch) return undefined;
-			return withIcon(ctx, this, stripControls(ctx.state.git.branch));
+		collect(ctx) {
+			const branch = ctx.state.git.branch ? stripControls(ctx.state.git.branch) : "";
+			if (!branch) return undefined;
+			return {
+				primary: branch,
+				parts: [{ text: branch, kind: "primary" }],
+				metadata: {
+					branch,
+					repo: true,
+				},
+			};
 		},
 	},
 	{
 		id: "model",
 		label: "Model",
 		defaultPriority: 100,
-		render(ctx) {
+		collect(ctx) {
 			let model = ctx.state.model.displayName || ctx.state.model.id || "no-model";
 			if (ctx.showProvider && ctx.state.model.provider && ctx.widthMode === "full") {
 				model = `${ctx.state.model.provider}/${model}`;
 			}
-			if (ctx.state.model.thinking && ctx.state.model.thinking !== "off" && ctx.widthMode !== "minimal") {
-				model += ` ${ctx.state.model.thinking}`;
-			}
-			return withIcon(ctx, this, model);
+			const thinking = ctx.state.model.thinking && ctx.state.model.thinking !== "off" ? ctx.state.model.thinking : "";
+			return {
+				primary: model,
+				secondary: thinking || undefined,
+				parts: [
+					{ text: model, kind: "primary" },
+					...(thinking ? [{ text: thinking, kind: "detail" as const, tone: "muted" as const }] : []),
+				],
+				display: {
+					full: thinking ? `${model} ${thinking}` : model,
+					compact: thinking ? `${model} ${thinking}` : model,
+					minimal: model,
+				},
+				metadata: {
+					id: ctx.state.model.id ?? null,
+					provider: ctx.state.model.provider ?? null,
+					displayName: ctx.state.model.displayName ?? null,
+					thinking: ctx.state.model.thinking || null,
+				},
+			};
 		},
 	},
 	{
 		id: "context",
 		label: "Context",
 		defaultPriority: 95,
-		render(ctx) {
+		collect(ctx) {
 			const pct = formatPercent(ctx.state.context.percent);
 			const tokens = formatTokens(ctx.state.context.tokens);
 			const window = formatTokens(ctx.state.context.window);
-			const value = ctx.widthMode === "full" ? `${pct} ${tokens}/${window}` : pct;
-			return withIcon(ctx, this, value);
+			return {
+				primary: pct,
+				secondary: `${tokens}/${window}`,
+				parts: [
+					{ text: pct, kind: "primary" },
+					{ text: `${tokens}/${window}`, kind: "detail", tone: "muted" },
+				],
+				display: {
+					full: `${pct} ${tokens}/${window}`,
+					compact: pct,
+					minimal: pct,
+				},
+				metadata: {
+					known: ctx.state.context.percent !== null && ctx.state.context.tokens !== null,
+					percent: ctx.state.context.percent,
+					tokens: ctx.state.context.tokens,
+					window: ctx.state.context.window,
+				},
+			};
 		},
 	},
 	{
 		id: "tokens",
 		label: "Tokens",
 		defaultPriority: 55,
-		render(ctx) {
+		collect(ctx) {
 			const usage = ctx.state.usage;
-			const parts = [`↑${formatTokens(usage.input)}`, `↓${formatTokens(usage.output)}`];
-			if (ctx.widthMode === "full") {
-				if (usage.cacheRead) parts.push(`R${formatTokens(usage.cacheRead)}`);
-				if (usage.cacheWrite) parts.push(`W${formatTokens(usage.cacheWrite)}`);
-			}
-			return withIcon(ctx, this, parts.join(" "));
+			const primary = `↑${formatTokens(usage.input)} ↓${formatTokens(usage.output)}`;
+			const cacheParts = [];
+			if (usage.cacheRead) cacheParts.push(`R${formatTokens(usage.cacheRead)}`);
+			if (usage.cacheWrite) cacheParts.push(`W${formatTokens(usage.cacheWrite)}`);
+			return {
+				primary,
+				secondary: cacheParts.join(" ") || undefined,
+				parts: [
+					{ text: `↑${formatTokens(usage.input)}`, kind: "metric" },
+					{ text: `↓${formatTokens(usage.output)}`, kind: "metric" },
+					...cacheParts.map((part) => ({ text: part, kind: "detail" as const, tone: "muted" as const })),
+				],
+				display: {
+					full: [primary, ...cacheParts].join(" "),
+					compact: primary,
+					minimal: primary,
+				},
+				metadata: {
+					input: usage.input,
+					output: usage.output,
+					cacheRead: usage.cacheRead,
+					cacheWrite: usage.cacheWrite,
+					total: usage.input + usage.output + usage.cacheRead + usage.cacheWrite,
+				},
+			};
 		},
 	},
 	{
 		id: "cost",
 		label: "Cost",
 		defaultPriority: 35,
-		render(ctx) {
-			return withIcon(ctx, this, formatCost(ctx.state.usage.cost));
+		collect(ctx) {
+			const cost = formatCost(ctx.state.usage.cost);
+			return {
+				primary: cost,
+				parts: [{ text: cost, kind: "primary" }],
+				metadata: {
+					usd: ctx.state.usage.cost,
+				},
+			};
 		},
 	},
 ];
+
+export function renderSegment(ctx: SegmentRenderContext, segment: SegmentDefinition): SegmentRenderResult | undefined {
+	const data = segment.collect(ctx);
+	return data ? renderCollectedSegment(ctx, segment, data) : undefined;
+}
 
 export const SEGMENT_BY_ID = new Map(SEGMENTS.map((segment) => [segment.id, segment]));

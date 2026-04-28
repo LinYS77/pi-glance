@@ -1,6 +1,6 @@
 import { truncateToWidth, visibleWidth } from "@mariozechner/pi-tui";
 import { ICONS, PALETTES, fg } from "./palette.js";
-import { SEGMENT_BY_ID } from "./segments.js";
+import { SEGMENT_BY_ID, renderSegment } from "./segments.js";
 import type {
 	GlanceConfig,
 	GlancePalette,
@@ -57,7 +57,7 @@ function renderEnabledSegments(
 		if (!segmentConfig.enabled) continue;
 		const definition = SEGMENT_BY_ID.get(segmentConfig.id);
 		if (!definition) continue;
-		const result = definition.render(ctx);
+		const result = renderSegment(ctx, definition);
 		if (result) rendered.push(result);
 	}
 	return { palette, segments: rendered };
