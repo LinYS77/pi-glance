@@ -60,6 +60,11 @@ That's the only command — opens a configuration pane to tweak theme, icons, se
 | 💤 | **Dim unfocused** | Surface quiets down when you scroll the chat |
 | 🎨 | **Two themes** | `light` and `dark` with tuned grey-green borders |
 
+## Notes
+
+- Icons default to `plain` so pi-glance works with normal terminal fonts.
+- If you use a Nerd Font, open `/glance` and set `Icons` to `nerd` for richer symbols.
+
 ## Design
 
 - No pi core patches — public extension APIs only

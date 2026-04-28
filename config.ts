@@ -24,7 +24,7 @@ export function defaultConfig(): GlanceConfig {
 		version: CONFIG_VERSION,
 		enabled: true,
 		theme: "light",
-		icons: "nerd",
+		icons: "plain",
 		editor: {
 			minContentRows: 4,
 		},

@@ -1,4 +1,3 @@
-import { DynamicBorder } from "@mariozechner/pi-coding-agent";
 import { Key, matchesKey, truncateToWidth, visibleWidth, type Component, type TUI } from "@mariozechner/pi-tui";
 import type { Theme } from "@mariozechner/pi-coding-agent";
 import { cloneConfig, defaultConfig, moveSegment, toggleSegment } from "./config.js";
@@ -8,8 +7,17 @@ import type { GlanceConfig, GlanceState, GlanceThemeName, IconMode } from "./typ
 
 type PaneFocus = "global" | "segments";
 type PaneResult = { action: "save"; config: GlanceConfig } | { action: "cancel" };
-
 type Done = (result: PaneResult) => void;
+type GlobalItem = { id: string; label: string; value: string };
+
+type Tone = (text: string) => string;
+interface PaneColors {
+	accent: Tone;
+	muted: Tone;
+	dim: Tone;
+	warn: Tone;
+	success: Tone;
+}
 
 function nextIn<T extends string>(current: T, values: readonly T[]): T {
 	const index = values.indexOf(current);
@@ -25,12 +33,32 @@ function padRightAnsi(text: string, width: number): string {
 	return `${text}${" ".repeat(extra)}`;
 }
 
+function spreadAnsi(left: string, right: string, width: number): string {
+	const leftWidth = visibleWidth(left);
+	const rightWidth = visibleWidth(right);
+	if (leftWidth + rightWidth + 1 > width) {
+		const leftBudget = Math.max(0, width - rightWidth - 1);
+		if (leftBudget <= 0) return truncateToWidth(right, width, "…");
+		return `${truncateToWidth(left, leftBudget, "…")} ${right}`;
+	}
+	return `${left}${" ".repeat(Math.max(0, width - leftWidth - rightWidth))}${right}`;
+}
+
+function sameConfig(a: GlanceConfig, b: GlanceConfig): boolean {
+	return JSON.stringify(a) === JSON.stringify(b);
+}
+
+function shortcut(colors: PaneColors, key: string, label: string): string {
+	return `${colors.accent(`[${key}]`)} ${colors.dim(label)}`;
+}
+
 class GlanceConfigPane implements Component {
+	private readonly initial: GlanceConfig;
 	private draft: GlanceConfig;
 	private focus: PaneFocus = "global";
 	private globalIndex = 0;
 	private segmentIndex = 0;
-	private status = "Edit settings, then Save or Cancel.";
+	private status = "Changes stay local until you press S.";
 
 	constructor(
 		initial: GlanceConfig,
@@ -39,12 +67,17 @@ class GlanceConfigPane implements Component {
 		private readonly requestRender: () => void,
 		private readonly previewState?: GlanceState,
 	) {
+		this.initial = cloneConfig(initial);
 		this.draft = cloneConfig(initial);
 	}
 
 	invalidate(): void {}
 
-	private globalItems(): Array<{ id: string; label: string; value: string }> {
+	private isDirty(): boolean {
+		return !sameConfig(this.draft, this.initial);
+	}
+
+	private globalItems(): GlobalItem[] {
 		return [
 			{ id: "enabled", label: "Enabled", value: this.draft.enabled ? "on" : "off" },
 			{ id: "theme", label: "Theme", value: this.draft.theme },
@@ -77,22 +110,30 @@ class GlanceConfigPane implements Component {
 				this.draft.display.showProvider = nextIn(this.draft.display.showProvider, ["auto", "always", "never"] as const);
 				break;
 		}
-		this.status = `${item.label} changed. Press S to save.`;
+		const next = this.globalItems()[this.globalIndex];
+		this.status = `${item.label} → ${next?.value ?? "updated"}. Press S to save.`;
 	}
 
 	private toggleCurrentSegment(): void {
 		const segment = this.draft.segments[this.segmentIndex];
 		if (!segment) return;
 		this.draft = toggleSegment(this.draft, segment.id);
-		this.status = `${SEGMENT_BY_ID.get(segment.id)?.label ?? segment.id} toggled. Press S to save.`;
+		const updated = this.draft.segments[this.segmentIndex];
+		const label = SEGMENT_BY_ID.get(segment.id)?.label ?? segment.id;
+		this.status = `${label} ${updated?.enabled ? "enabled" : "disabled"}. Press S to save.`;
 	}
 
 	private moveCurrentSegment(direction: -1 | 1): void {
 		const segment = this.draft.segments[this.segmentIndex];
 		if (!segment) return;
+		const nextIndex = this.segmentIndex + direction;
+		if (nextIndex < 0 || nextIndex >= this.draft.segments.length) {
+			this.status = direction < 0 ? "Already at the top." : "Already at the bottom.";
+			return;
+		}
 		this.draft = moveSegment(this.draft, segment.id, direction);
-		this.segmentIndex = Math.max(0, Math.min(this.draft.segments.length - 1, this.segmentIndex + direction));
-		this.status = "Segment order changed. Press S to save.";
+		this.segmentIndex = nextIndex;
+		this.status = "Segment order updated. Press S to save.";
 	}
 
 	handleInput(data: string): void {
@@ -112,7 +153,7 @@ class GlanceConfigPane implements Component {
 			this.draft = defaultConfig();
 			this.globalIndex = 0;
 			this.segmentIndex = 0;
-			this.status = "Reset to defaults. Press S to save or Esc to cancel.";
+			this.status = "Defaults restored locally. Press S to save or Esc to discard.";
 			this.requestRender();
 			return;
 		}
@@ -150,16 +191,114 @@ class GlanceConfigPane implements Component {
 		}
 	}
 
+	private renderGlobalRows(colors: PaneColors): string[] {
+		const active = this.focus === "global";
+		const items = this.globalItems();
+		const labelWidth = Math.max(...items.map((item) => visibleWidth(item.label))) + 2;
+		return items.map((item, index) => {
+			const selected = active && index === this.globalIndex;
+			const cursor = selected ? colors.accent("▶ ") : "  ";
+			const labelTone = selected ? colors.accent : active ? colors.muted : colors.dim;
+			const valueTone = selected ? colors.accent : active ? colors.muted : colors.dim;
+			const label = padRightAnsi(labelTone(item.label), labelWidth);
+			const value = valueTone(`[ ${item.value} ]`);
+			return `${cursor}${label}${value}`;
+		});
+	}
+
+	private renderSegmentRows(colors: PaneColors): string[] {
+		const active = this.focus === "segments";
+		const indexWidth = `${this.draft.segments.length}.`.length + 1;
+		return this.draft.segments.map((segment, index) => {
+			const selected = active && index === this.segmentIndex;
+			const cursor = selected ? colors.accent("▶ ") : "  ";
+			const number = padRightAnsi((active ? colors.muted : colors.dim)(`${index + 1}.`), indexWidth);
+			const bracketTone = active ? colors.muted : colors.dim;
+			const marker = segment.enabled ? (active ? colors.success("●") : colors.dim("●")) : colors.dim("○");
+			const label = SEGMENT_BY_ID.get(segment.id)?.label ?? segment.id;
+			const labelTone = selected ? colors.accent : active ? colors.muted : colors.dim;
+			return `${cursor}${number}${bracketTone("[")}${marker}${bracketTone("]")} ${labelTone(label)}`;
+		});
+	}
+
+	private renderSettingsColumns(lines: string[], width: number, colors: PaneColors): void {
+		const contentWidth = Math.max(20, width - 4);
+		const globalHeader = this.focus === "global" ? colors.accent("GLOBAL SETTINGS") : colors.dim("GLOBAL SETTINGS");
+		const segmentHeader = this.focus === "segments" ? colors.accent("STATUS SEGMENTS") : colors.dim("STATUS SEGMENTS");
+		const segmentHint = this.focus === "segments" ? colors.muted(" priority order") : colors.dim(" priority order");
+		const globalRows = this.renderGlobalRows(colors);
+		const segmentRows = this.renderSegmentRows(colors);
+
+		if (width < 86) {
+			lines.push(plainLine(["  ", globalHeader], width));
+			for (const row of globalRows) lines.push(plainLine(["  ", row], width));
+			lines.push("");
+			lines.push(plainLine(["  ", segmentHeader, segmentHint], width));
+			for (const row of segmentRows) lines.push(plainLine(["  ", row], width));
+			return;
+		}
+
+		const colGap = 6;
+		const leftWidth = Math.max(30, Math.floor((contentWidth - colGap) * 0.42));
+		const rightWidth = Math.max(30, contentWidth - leftWidth - colGap);
+		lines.push(
+			plainLine(
+				[
+					"  ",
+					padRightAnsi(globalHeader, leftWidth),
+					" ".repeat(colGap),
+					truncateToWidth(`${segmentHeader}${segmentHint}`, rightWidth, "…"),
+				],
+				width,
+			),
+		);
+		lines.push("");
+		const rows = Math.max(globalRows.length, segmentRows.length);
+		for (let i = 0; i < rows; i++) {
+			const left = globalRows[i] ?? "";
+			const right = segmentRows[i] ?? "";
+			lines.push(
+				plainLine(
+					[
+						"  ",
+						padRightAnsi(truncateToWidth(left, leftWidth, "…"), leftWidth),
+						" ".repeat(colGap),
+						truncateToWidth(right, rightWidth, "…"),
+					],
+					width,
+				),
+			);
+		}
+	}
+
+	private renderHelp(lines: string[], width: number, colors: PaneColors): void {
+		const help = [
+			shortcut(colors, "Tab", "panel"),
+			shortcut(colors, "↑↓", "nav"),
+			shortcut(colors, "Enter", "toggle"),
+			shortcut(colors, "J/K", "order"),
+			shortcut(colors, "S", "save"),
+			shortcut(colors, "R", "reset"),
+			shortcut(colors, "Esc", "cancel"),
+		];
+		lines.push(plainLine(["  ", help.join(colors.dim(" · "))], width));
+	}
+
 	render(width: number): string[] {
 		const t = this.theme;
-		const accent = (s: string) => t.fg("accent", s);
-		const muted = (s: string) => t.fg("muted", s);
-		const dim = (s: string) => t.fg("dim", s);
-		const warn = (s: string) => t.fg("warning", s);
-		const success = (s: string) => t.fg("success", s);
-		const title = accent(t.bold("pi-glance")) + dim("  input surface configuration") + dim("  fixed: project title · rounded · top-right · labels off");
-		const border = new DynamicBorder((s: string) => t.fg("accent", s)).render(width)[0] ?? "";
-		const lines: string[] = [border, plainLine(["  ", title], width), ""];
+		const colors: PaneColors = {
+			accent: (s: string) => t.fg("accent", s),
+			muted: (s: string) => t.fg("muted", s),
+			dim: (s: string) => t.fg("dim", s),
+			warn: (s: string) => t.fg("warning", s),
+			success: (s: string) => t.fg("success", s),
+		};
+		const dirty = this.isDirty();
+		const headerLeft = `${colors.accent(t.bold("◌ pi-glance"))} ${colors.dim("settings")}`;
+		const headerRight = dirty ? colors.warn("● Unsaved changes") : colors.success("✓ Saved");
+		const lines: string[] = [plainLine(["  ", spreadAnsi(headerLeft, headerRight, Math.max(10, width - 4))], width)];
+		lines.push(plainLine(["  ", colors.dim("calm input surface · global config · save applies immediately")], width));
+		lines.push("");
 
 		const preview = this.previewState
 			? renderInputSurface(this.previewState, this.draft, Math.max(24, width - 4), {
@@ -170,56 +309,15 @@ class GlanceConfigPane implements Component {
 					contentLines: ["Ask pi to improve the input surface..."],
 					focused: true,
 				});
-		lines.push(plainLine(["  ", accent("Preview")], width));
+		lines.push(plainLine(["  ", colors.accent("PREVIEW")], width));
 		for (const previewLine of preview) {
 			lines.push(plainLine(["  ", previewLine], width));
 		}
 		lines.push("");
 
-		const colGap = 3;
-		const leftWidth = Math.max(24, Math.floor((width - colGap) * 0.42));
-		const rightWidth = Math.max(24, width - leftWidth - colGap);
-		const globalItems = this.globalItems();
-		const rows = Math.max(globalItems.length, this.draft.segments.length);
-		const globalHeader = this.focus === "global" ? accent(t.bold("Global Settings")) : muted("Global Settings");
-		const segmentHeader = this.focus === "segments" ? accent(t.bold("Status Segments")) : muted("Status Segments");
-		lines.push(plainLine(["  ", padRightAnsi(globalHeader, leftWidth), " ".repeat(colGap), segmentHeader], width));
-
-		for (let i = 0; i < rows; i++) {
-			const global = globalItems[i];
-			let left = "";
-			if (global) {
-				const selected = this.focus === "global" && i === this.globalIndex;
-				const cursor = selected ? accent("▶ ") : "  ";
-				const value = selected ? accent(global.value) : muted(global.value);
-				left = `${cursor}${global.label}: ${value}`;
-			}
-
-			const segment = this.draft.segments[i];
-			let right = "";
-			if (segment) {
-				const selected = this.focus === "segments" && i === this.segmentIndex;
-				const cursor = selected ? accent("▶ ") : "  ";
-				const marker = segment.enabled ? success("●") : dim("○");
-				const definition = SEGMENT_BY_ID.get(segment.id);
-				const label = definition?.label ?? segment.id;
-				right = `${cursor}${marker} ${label}`;
-			}
-			lines.push(plainLine(["  ", padRightAnsi(left, leftWidth), " ".repeat(colGap), truncateToWidth(right, rightWidth, "…")], width));
-		}
-
+		this.renderSettingsColumns(lines, width, colors);
 		lines.push("");
-		lines.push(
-			plainLine(
-				[
-					"  ",
-					dim("Tab switch • ↑↓ navigate • Enter/Space toggle • J/K move segment • S save • R reset • Esc/Q cancel"),
-				],
-				width,
-			),
-		);
-		lines.push(plainLine(["  ", this.status.includes("save") ? warn(this.status) : muted(this.status)], width));
-		lines.push(border);
+		this.renderHelp(lines, width, colors);
 		return lines;
 	}
 }
