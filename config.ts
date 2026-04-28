@@ -7,11 +7,11 @@ const CONFIG_PATH = join(getAgentDir(), "pi-glance", "config.json");
 const CONFIG_VERSION = 2 as const;
 
 const DEFAULT_SEGMENTS: SegmentConfig[] = [
-	{ id: "git", enabled: true, priority: 65 },
-	{ id: "model", enabled: true, priority: 100 },
-	{ id: "context", enabled: true, priority: 95 },
-	{ id: "tokens", enabled: true, priority: 55 },
-	{ id: "cost", enabled: false, priority: 35 },
+	{ id: "git", enabled: true, priority: 100 },
+	{ id: "context", enabled: true, priority: 90 },
+	{ id: "cost", enabled: true, priority: 80 },
+	{ id: "tokens", enabled: false, priority: 70 },
+	{ id: "model", enabled: true, priority: 60 },
 ];
 
 const SEGMENT_IDS = new Set<SegmentId>(DEFAULT_SEGMENTS.map((s) => s.id));
@@ -19,6 +19,8 @@ const THEMES = new Set<GlanceThemeName>(["light", "dark"]);
 const ICON_MODES = new Set<IconMode>(["nerd", "plain"]);
 const PROVIDER_MODES = new Set<GlanceConfig["display"]["showProvider"]>(["auto", "always", "never"]);
 const SHA_MODES = new Set<GitShaMode>(["auto", "always", "never"]);
+const ORDER_PRIORITY_START = 100;
+const ORDER_PRIORITY_STEP = 10;
 
 export function defaultConfig(): GlanceConfig {
 	return {
@@ -27,7 +29,7 @@ export function defaultConfig(): GlanceConfig {
 		theme: "light",
 		icons: "plain",
 		editor: {
-			minContentRows: 4,
+			minContentRows: 3,
 		},
 		display: {
 			adaptive: true,
@@ -40,7 +42,7 @@ export function defaultConfig(): GlanceConfig {
 		git: {
 			showDirty: true,
 			showAheadBehind: true,
-			showSha: "auto",
+			showSha: "never",
 			timeoutMs: 1000,
 			refreshDebounceMs: 1500,
 			snapshotTtlMs: 30_000,
@@ -81,6 +83,13 @@ function parseIntAtLeast(value: unknown, fallback: number, min: number): number 
 	return Math.max(min, Math.floor(value));
 }
 
+function applyOrderPriorities(segments: SegmentConfig[]): SegmentConfig[] {
+	return segments.map((segment, index) => ({
+		...segment,
+		priority: ORDER_PRIORITY_START - index * ORDER_PRIORITY_STEP,
+	}));
+}
+
 function normalizeSegments(value: unknown): SegmentConfig[] {
 	const defaults = DEFAULT_SEGMENTS.map((s) => ({ ...s }));
 	const byId = new Map<SegmentId, SegmentConfig>(defaults.map((s) => [s.id, s]));
@@ -109,7 +118,7 @@ function normalizeSegments(value: unknown): SegmentConfig[] {
 		if (!ordered.some((s) => s.id === segment.id)) ordered.push(byId.get(segment.id)!);
 	}
 
-	return ordered;
+	return applyOrderPriorities(ordered);
 }
 
 function normalizeConfig(raw: unknown): GlanceConfig {
@@ -176,6 +185,7 @@ export function moveSegment(config: GlanceConfig, id: SegmentId, direction: -1 |
 	const target = index + direction;
 	if (target < 0 || target >= next.segments.length) return next;
 	[next.segments[index], next.segments[target]] = [next.segments[target]!, next.segments[index]!];
+	next.segments = applyOrderPriorities(next.segments);
 	return next;
 }
 
