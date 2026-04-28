@@ -20,7 +20,6 @@ function renderCollectedSegment(ctx: SegmentRenderContext, segment: SegmentDefin
 	const prefix = icon ? `${icon} ` : "";
 	return {
 		id: segment.id,
-		data,
 		text: `${prefix}${value}`.trim(),
 		priority: configuredPriority(ctx, segment),
 	};
@@ -36,7 +35,6 @@ const SEGMENTS: SegmentDefinition[] = [
 			if (!branch) return undefined;
 			return {
 				primary: branch,
-				parts: [{ text: branch, kind: "primary" }],
 				metadata: {
 					branch,
 					repo: true,
@@ -57,10 +55,6 @@ const SEGMENTS: SegmentDefinition[] = [
 			return {
 				primary: model,
 				secondary: thinking || undefined,
-				parts: [
-					{ text: model, kind: "primary" },
-					...(thinking ? [{ text: thinking, kind: "detail" as const, tone: "muted" as const }] : []),
-				],
 				display: {
 					full: thinking ? `${model} ${thinking}` : model,
 					compact: thinking ? `${model} ${thinking}` : model,
@@ -86,10 +80,6 @@ const SEGMENTS: SegmentDefinition[] = [
 			return {
 				primary: pct,
 				secondary: `${tokens}/${window}`,
-				parts: [
-					{ text: pct, kind: "primary" },
-					{ text: `${tokens}/${window}`, kind: "detail", tone: "muted" },
-				],
 				display: {
 					full: `${pct} ${tokens}/${window}`,
 					compact: pct,
@@ -117,11 +107,6 @@ const SEGMENTS: SegmentDefinition[] = [
 			return {
 				primary,
 				secondary: cacheParts.join(" ") || undefined,
-				parts: [
-					{ text: `↑${formatTokens(usage.input)}`, kind: "metric" },
-					{ text: `↓${formatTokens(usage.output)}`, kind: "metric" },
-					...cacheParts.map((part) => ({ text: part, kind: "detail" as const, tone: "muted" as const })),
-				],
 				display: {
 					full: [primary, ...cacheParts].join(" "),
 					compact: primary,
@@ -142,10 +127,8 @@ const SEGMENTS: SegmentDefinition[] = [
 		label: "Cost",
 		defaultPriority: 35,
 		collect(ctx) {
-			const cost = formatCost(ctx.state.usage.cost);
 			return {
-				primary: cost,
-				parts: [{ text: cost, kind: "primary" }],
+				primary: formatCost(ctx.state.usage.cost),
 				metadata: {
 					usd: ctx.state.usage.cost,
 				},

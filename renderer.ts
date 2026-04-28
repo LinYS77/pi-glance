@@ -49,7 +49,6 @@ function renderEnabledSegments(
 		config,
 		widthMode,
 		icons,
-		palette,
 		showProvider: resolveShowProvider(config, providerCount, widthMode),
 	};
 	const rendered: SegmentRenderResult[] = [];

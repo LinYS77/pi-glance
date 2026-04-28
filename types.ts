@@ -2,8 +2,6 @@ export type SegmentId = "git.branch" | "model" | "context" | "tokens" | "cost";
 export type GlanceThemeName = "light" | "dark";
 export type IconMode = "nerd" | "plain";
 export type WidthMode = "full" | "compact" | "minimal";
-type SegmentTone = "normal" | "muted" | "success" | "warning" | "error";
-type SegmentPartKind = "primary" | "secondary" | "status" | "metric" | "detail";
 type SegmentMetadataValue = string | number | boolean | null;
 type SegmentMetadata = Record<string, SegmentMetadataValue>;
 
@@ -99,19 +97,10 @@ interface SegmentDisplay {
 	minimal?: string;
 }
 
-interface SegmentPart {
-	text: string;
-	kind?: SegmentPartKind;
-	tone?: SegmentTone;
-	metadata?: SegmentMetadata;
-}
-
 export interface SegmentData {
 	primary: string;
 	secondary?: string;
-	parts?: SegmentPart[];
 	metadata?: SegmentMetadata;
-	tone?: SegmentTone;
 	display?: SegmentDisplay;
 }
 
@@ -120,13 +109,11 @@ export interface SegmentRenderContext {
 	config: GlanceConfig;
 	widthMode: WidthMode;
 	icons: IconSet;
-	palette: GlancePalette;
 	showProvider: boolean;
 }
 
 export interface SegmentRenderResult {
 	id: SegmentId;
-	data: SegmentData;
 	text: string;
 	priority: number;
 }
