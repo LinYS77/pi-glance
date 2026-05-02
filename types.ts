@@ -1,5 +1,5 @@
 export type SegmentId = "git" | "model" | "context" | "tokens" | "cost";
-export type GlanceThemeName = "light" | "dark";
+export type GlanceThemeName = "light" | "dark" | "catppuccin-latte" | "catppuccin-mocha";
 export type IconMode = "nerd" | "plain";
 export type WidthMode = "full" | "compact" | "minimal";
 export type GitStatus = "clean" | "dirty" | "conflict" | "unknown";

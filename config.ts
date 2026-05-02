@@ -15,7 +15,7 @@ const DEFAULT_SEGMENTS: SegmentConfig[] = [
 ];
 
 const SEGMENT_IDS = new Set<SegmentId>(DEFAULT_SEGMENTS.map((s) => s.id));
-const THEMES = new Set<GlanceThemeName>(["light", "dark"]);
+const THEMES = new Set<GlanceThemeName>(["light", "dark", "catppuccin-latte", "catppuccin-mocha"]);
 const ICON_MODES = new Set<IconMode>(["nerd", "plain"]);
 const PROVIDER_MODES = new Set<GlanceConfig["display"]["showProvider"]>(["auto", "always", "never"]);
 const ORDER_PRIORITY_START = 100;
