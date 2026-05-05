@@ -5,6 +5,7 @@ import type { GitConfig, GitSnapshot } from "../types.js";
 const config: GitConfig = {
 	showDirty: true,
 	showAheadBehind: true,
+	shaMode: "off",
 	timeoutMs: 1000,
 	refreshDebounceMs: 1500,
 	pollIntervalMs: 5000,

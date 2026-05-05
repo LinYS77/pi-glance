@@ -21,7 +21,12 @@ function renderCollectedSegment(ctx: SegmentRenderContext, segment: SegmentDefin
 
 function gitBranchLabel(ctx: SegmentRenderContext): string {
 	const git = ctx.state.git;
-	return git.branch || (git.detached && git.sha ? git.sha : "HEAD");
+	if (git.branch) {
+		if (ctx.config.git.shaMode === "always" && git.sha) return `${git.branch} ${git.sha}`;
+		return git.branch;
+	}
+	if (git.detached && git.sha && ctx.config.git.shaMode !== "off") return git.sha;
+	return "HEAD";
 }
 
 function gitStatusMark(ctx: SegmentRenderContext): string {
@@ -35,7 +40,7 @@ function gitDetailParts(ctx: SegmentRenderContext): string[] {
 	const git = ctx.state.git;
 	const parts: string[] = [];
 	const status = gitStatusMark(ctx);
-	if (ctx.config.git.showDirty && status) parts.push(status);
+	if (status && (ctx.config.git.showDirty || git.status === "conflict")) parts.push(status);
 	if (ctx.config.git.showAheadBehind) {
 		if (git.ahead > 0) parts.push(`↑${git.ahead}`);
 		if (git.behind > 0) parts.push(`↓${git.behind}`);
@@ -53,13 +58,14 @@ const SEGMENTS: SegmentDefinition[] = [
 			const branch = gitBranchLabel(ctx);
 			const parts = gitDetailParts(ctx);
 			const secondary = parts.join(" ") || undefined;
+			const minimalStatus = git.status === "conflict" || ctx.config.git.showDirty ? gitStatusMark(ctx) : "";
 			return {
 				primary: branch,
 				secondary,
 				display: {
 					full: [branch, secondary].filter(Boolean).join(" "),
 					compact: [branch, secondary].filter(Boolean).join(" "),
-					minimal: [branch, gitStatusMark(ctx)].filter(Boolean).join(" "),
+					minimal: [branch, minimalStatus].filter(Boolean).join(" "),
 				},
 			};
 		},

@@ -3,6 +3,7 @@ export type GlanceThemeName = "light" | "dark";
 export type IconMode = "nerd" | "plain";
 export type WidthMode = "full" | "compact" | "minimal";
 export type GitStatus = "clean" | "dirty" | "conflict" | "unknown";
+export type GitShaMode = "off" | "detached" | "always";
 
 export interface SegmentConfig {
 	id: SegmentId;
@@ -21,6 +22,7 @@ interface EditorConfig {
 export interface GitConfig {
 	showDirty: boolean;
 	showAheadBehind: boolean;
+	shaMode: GitShaMode;
 	timeoutMs: number;
 	refreshDebounceMs: number;
 	pollIntervalMs: number;

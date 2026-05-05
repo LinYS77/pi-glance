@@ -50,7 +50,7 @@ npm run debug:git
 /glance
 ```
 
-That's the only command — opens a configuration pane to tweak theme, icons, segments, and more.
+That's the only command — opens a calm settings pane with a home screen and per-segment detail pages.
 
 ## What you see
 
@@ -63,7 +63,7 @@ That's the only command — opens a configuration pane to tweak theme, icons, se
 | 🖊️ | **Rounded editor** | Configurable 2 / 3 / 4 min rows, preserves all pi defaults |
 | 🏷️ | **Project title** | Current folder name on the top-left border |
 | 📊 | **Inline status** | Model · context · tokens · cost · Git status — top-right |
-| ⚙️ | **`/glance` pane** | Theme, icons, segments, visibility — Save / Cancel |
+| ⚙️ | **`/glance` pane** | General settings, segment order, and per-segment detail settings — Save / Cancel |
 | 💤 | **Dim unfocused** | Surface quiets down when you scroll the chat |
 | 🎨 | **Two themes** | `light` and `dark` with tuned grey-green borders |
 
@@ -81,6 +81,13 @@ The Git segment is intentionally quiet:
 - Conflicts add `!` in plain mode or `⚠` in Nerd Font mode.
 - Ahead/behind counts appear when Git reports an upstream, for example `↑2 ↓1`.
 - Non-Git directories hide the Git segment.
+
+Open `/glance`, select **Git**, and press Enter to configure:
+
+- `Dirty marker` — hide/show normal dirty markers; conflict markers stay visible.
+- `Ahead / behind` — hide/show upstream counts.
+- `SHA` — `off`, `detached`, or `always`.
+- `Polling` — `2s`, `5s`, `10s`, or `30s`.
 
 Git is collected asynchronously and cached. External file changes usually appear within a few seconds. For local development/debugging you can compare pi-glance with Git directly:
 

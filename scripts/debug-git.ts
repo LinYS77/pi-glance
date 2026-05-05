@@ -4,6 +4,7 @@ import type { GitConfig } from "../types.js";
 const config: GitConfig = {
 	showDirty: true,
 	showAheadBehind: true,
+	shaMode: "off",
 	timeoutMs: 1000,
 	refreshDebounceMs: 0,
 	pollIntervalMs: 5000,
