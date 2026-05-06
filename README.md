@@ -37,9 +37,10 @@ For development/testing:
 pi -e /path/to/pi-glance
 ```
 
-Local Git diagnostics:
+Local checks and Git diagnostics:
 
 ```bash
+npm test
 npm run test:git
 npm run debug:git
 ```
