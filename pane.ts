@@ -3,7 +3,20 @@ import type { Theme } from "@mariozechner/pi-coding-agent";
 import { cloneConfig, defaultConfig, moveSegment, toggleSegment } from "./config.js";
 import { renderInputSurface, renderInputSurfacePreview } from "./renderer.js";
 import { SEGMENT_BY_ID } from "./segments.js";
-import type { GitShaMode, GlanceConfig, GlanceState, GlanceThemeName, IconMode, SegmentConfig, SegmentId } from "./types.js";
+import type {
+	ContextDisplayMode,
+	ContextUnknownMode,
+	GitShaMode,
+	GlanceConfig,
+	GlanceState,
+	GlanceThemeName,
+	IconMode,
+	ModelThinkingMode,
+	SegmentConfig,
+	SegmentId,
+	TokensCacheMode,
+	TokensDisplayMode,
+} from "./types.js";
 
 type PaneFocus = "categories" | "settings";
 type CategoryId = "general" | SegmentId;
@@ -23,6 +36,15 @@ interface PaneColors {
 }
 
 const POLL_INTERVALS = [2000, 5000, 10000, 30000] as const;
+const CONTEXT_DISPLAY_LABELS: Record<ContextDisplayMode, string> = {
+	"percent+tokens": "percent / tokens",
+	percent: "percent",
+	tokens: "tokens",
+};
+const TOKENS_DISPLAY_LABELS: Record<TokensDisplayMode, string> = {
+	"input-output": "input / output",
+	total: "total",
+};
 
 function nextIn<T extends string>(current: T, values: readonly T[]): T {
 	const index = values.indexOf(current);
@@ -75,6 +97,14 @@ function formatPolling(ms: number): string {
 	return `${ms}ms`;
 }
 
+function contextDisplayLabel(mode: ContextDisplayMode): string {
+	return CONTEXT_DISPLAY_LABELS[mode];
+}
+
+function tokensDisplayLabel(mode: TokensDisplayMode): string {
+	return TOKENS_DISPLAY_LABELS[mode];
+}
+
 class GlanceConfigPane implements Component {
 	private readonly initial: GlanceConfig;
 	private draft: GlanceConfig;
@@ -117,44 +147,13 @@ class GlanceConfigPane implements Component {
 			case "git":
 				return this.gitRows();
 			case "context":
-				return this.segmentRows("context", [
-					{
-						label: "Display",
-						value: "percent + tokens",
-						hint: "Shows fresh context usage; unknown is shown as ? after compaction.",
-						kind: "info",
-					},
-				]);
+				return this.contextRows();
 			case "cost":
-				return this.segmentRows("cost", [
-					{
-						label: "Display",
-						value: "compact USD",
-						hint: "Shows current session cost when pi reports usage.",
-						kind: "info",
-					},
-				]);
+				return this.costRows();
 			case "tokens":
-				return this.segmentRows("tokens", [
-					{
-						label: "Display",
-						value: "input / output",
-						hint: "Includes cache read/write details when present in full width.",
-						kind: "info",
-					},
-				]);
+				return this.tokensRows();
 			case "model":
-				return this.segmentRows("model", [
-					{
-						label: "Provider label",
-						value: this.draft.display.showProvider,
-						hint: "Auto shows provider only when multiple providers are available.",
-						kind: "cycle",
-						mutate: () => {
-							this.draft.display.showProvider = nextIn(this.draft.display.showProvider, ["auto", "always", "never"] as const);
-						},
-					},
-				]);
+				return this.modelRows();
 			default:
 				return [];
 		}
@@ -165,6 +164,7 @@ class GlanceConfigPane implements Component {
 			{
 				label: "Enabled",
 				value: onOff(this.draft.enabled),
+				hint: "Disable pi-glance without removing the extension.",
 				kind: "toggle",
 				mutate: () => {
 					this.draft.enabled = !this.draft.enabled;
@@ -173,6 +173,7 @@ class GlanceConfigPane implements Component {
 			{
 				label: "Theme",
 				value: this.draft.theme,
+				hint: "Switch the input surface palette.",
 				kind: "cycle",
 				mutate: () => {
 					this.draft.theme = nextIn(this.draft.theme, ["light", "dark"] as GlanceThemeName[]);
@@ -181,6 +182,7 @@ class GlanceConfigPane implements Component {
 			{
 				label: "Icons",
 				value: this.draft.icons,
+				hint: "Plain icons work with normal terminal fonts.",
 				kind: "cycle",
 				mutate: () => {
 					this.draft.icons = nextIn(this.draft.icons, ["plain", "nerd"] as IconMode[]);
@@ -189,6 +191,7 @@ class GlanceConfigPane implements Component {
 			{
 				label: "Min input rows",
 				value: `${this.draft.editor.minContentRows}`,
+				hint: "Controls the editor's resting height.",
 				kind: "cycle",
 				mutate: () => {
 					this.draft.editor.minContentRows = nextNumber(this.draft.editor.minContentRows, [2, 3, 4] as const);
@@ -197,12 +200,102 @@ class GlanceConfigPane implements Component {
 			{
 				label: "Adaptive width",
 				value: onOff(this.draft.display.adaptive),
+				hint: "Drops lower-priority segments as space gets tight.",
 				kind: "toggle",
 				mutate: () => {
 					this.draft.display.adaptive = !this.draft.display.adaptive;
 				},
 			},
 		];
+	}
+
+	private contextRows(): SettingRow[] {
+		return this.segmentRows("context", [
+			{
+				label: "Display",
+				value: contextDisplayLabel(this.draft.context.display),
+				hint: "Choose how context usage is shown.",
+				kind: "cycle",
+				mutate: () => {
+					this.draft.context.display = nextIn(this.draft.context.display, ["percent+tokens", "percent", "tokens"] as ContextDisplayMode[]);
+				},
+			},
+			{
+				label: "Unknown",
+				value: this.draft.context.unknown,
+				hint: "Hide context when usage is unknown.",
+				kind: "cycle",
+				mutate: () => {
+					this.draft.context.unknown = nextIn(this.draft.context.unknown, ["show", "hide"] as ContextUnknownMode[]);
+				},
+			},
+		]);
+	}
+
+	private costRows(): SettingRow[] {
+		return this.segmentRows("cost", [
+			{
+				label: "Hide zero",
+				value: onOff(this.draft.cost.hideZero),
+				hint: "Hide cost until usage is greater than zero.",
+				kind: "toggle",
+				mutate: () => {
+					this.draft.cost.hideZero = !this.draft.cost.hideZero;
+				},
+			},
+			{
+				label: "Display",
+				value: "compact USD",
+				hint: "Shows current session cost when pi reports usage.",
+				kind: "info",
+			},
+		]);
+	}
+
+	private tokensRows(): SettingRow[] {
+		return this.segmentRows("tokens", [
+			{
+				label: "Display",
+				value: tokensDisplayLabel(this.draft.tokens.display),
+				hint: "Choose input/output or total token usage.",
+				kind: "cycle",
+				mutate: () => {
+					this.draft.tokens.display = nextIn(this.draft.tokens.display, ["input-output", "total"] as TokensDisplayMode[]);
+				},
+			},
+			{
+				label: "Cache",
+				value: this.draft.tokens.cache,
+				hint: "Control cache read/write details.",
+				kind: "cycle",
+				mutate: () => {
+					this.draft.tokens.cache = nextIn(this.draft.tokens.cache, ["auto", "show", "hide"] as TokensCacheMode[]);
+				},
+			},
+		]);
+	}
+
+	private modelRows(): SettingRow[] {
+		return this.segmentRows("model", [
+			{
+				label: "Provider label",
+				value: this.draft.display.showProvider,
+				hint: "Auto shows provider only when multiple providers are available.",
+				kind: "cycle",
+				mutate: () => {
+					this.draft.display.showProvider = nextIn(this.draft.display.showProvider, ["auto", "always", "never"] as const);
+				},
+			},
+			{
+				label: "Thinking label",
+				value: this.draft.model.showThinking,
+				hint: "Control the model thinking label.",
+				kind: "cycle",
+				mutate: () => {
+					this.draft.model.showThinking = nextIn(this.draft.model.showThinking, ["auto", "always", "never"] as ModelThinkingMode[]);
+				},
+			},
+		]);
 	}
 
 	private gitRows(): SettingRow[] {
@@ -219,6 +312,7 @@ class GlanceConfigPane implements Component {
 			{
 				label: "Ahead / behind",
 				value: onOff(this.draft.git.showAheadBehind),
+				hint: "Show upstream counts when Git reports them.",
 				kind: "toggle",
 				mutate: () => {
 					this.draft.git.showAheadBehind = !this.draft.git.showAheadBehind;
@@ -251,6 +345,7 @@ class GlanceConfigPane implements Component {
 			{
 				label: "Enabled",
 				value: onOff(Boolean(segment?.enabled)),
+				hint: "Show or hide this segment.",
 				kind: "toggle",
 				mutate: () => {
 					this.draft = toggleSegment(this.draft, id);

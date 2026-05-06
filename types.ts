@@ -4,6 +4,11 @@ export type IconMode = "nerd" | "plain";
 export type WidthMode = "full" | "compact" | "minimal";
 export type GitStatus = "clean" | "dirty" | "conflict" | "unknown";
 export type GitShaMode = "off" | "detached" | "always";
+export type ContextDisplayMode = "percent+tokens" | "percent" | "tokens";
+export type ContextUnknownMode = "show" | "hide";
+export type TokensDisplayMode = "input-output" | "total";
+export type TokensCacheMode = "auto" | "show" | "hide";
+export type ModelThinkingMode = "auto" | "always" | "never";
 
 export interface SegmentConfig {
 	id: SegmentId;
@@ -28,6 +33,20 @@ export interface GitConfig {
 	pollIntervalMs: number;
 }
 
+interface ContextConfig {
+	display: ContextDisplayMode;
+	unknown: ContextUnknownMode;
+}
+
+interface CostConfig {
+	hideZero: boolean;
+}
+
+interface TokensConfig {
+	display: TokensDisplayMode;
+	cache: TokensCacheMode;
+}
+
 export interface GlanceConfig {
 	version: 2;
 	enabled: boolean;
@@ -38,8 +57,12 @@ export interface GlanceConfig {
 	segments: SegmentConfig[];
 	model: {
 		customNames: Record<string, string>;
+		showThinking: ModelThinkingMode;
 	};
 	git: GitConfig;
+	context: ContextConfig;
+	cost: CostConfig;
+	tokens: TokensConfig;
 }
 
 export interface UsageTotals {

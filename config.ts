@@ -1,7 +1,19 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { getAgentDir } from "@mariozechner/pi-coding-agent";
-import type { GitShaMode, GlanceConfig, GlanceThemeName, IconMode, SegmentConfig, SegmentId } from "./types.js";
+import type {
+	ContextDisplayMode,
+	ContextUnknownMode,
+	GitShaMode,
+	GlanceConfig,
+	GlanceThemeName,
+	IconMode,
+	ModelThinkingMode,
+	SegmentConfig,
+	SegmentId,
+	TokensCacheMode,
+	TokensDisplayMode,
+} from "./types.js";
 
 const CONFIG_PATH = join(getAgentDir(), "pi-glance", "config.json");
 const CONFIG_VERSION = 2 as const;
@@ -19,6 +31,11 @@ const THEMES = new Set<GlanceThemeName>(["light", "dark"]);
 const ICON_MODES = new Set<IconMode>(["nerd", "plain"]);
 const PROVIDER_MODES = new Set<GlanceConfig["display"]["showProvider"]>(["auto", "always", "never"]);
 const GIT_SHA_MODES = new Set<GitShaMode>(["off", "detached", "always"]);
+const CONTEXT_DISPLAY_MODES = new Set<ContextDisplayMode>(["percent+tokens", "percent", "tokens"]);
+const CONTEXT_UNKNOWN_MODES = new Set<ContextUnknownMode>(["show", "hide"]);
+const TOKENS_DISPLAY_MODES = new Set<TokensDisplayMode>(["input-output", "total"]);
+const TOKENS_CACHE_MODES = new Set<TokensCacheMode>(["auto", "show", "hide"]);
+const MODEL_THINKING_MODES = new Set<ModelThinkingMode>(["auto", "always", "never"]);
 
 export function defaultConfig(): GlanceConfig {
 	return {
@@ -36,6 +53,7 @@ export function defaultConfig(): GlanceConfig {
 		segments: DEFAULT_SEGMENTS.map((s) => ({ ...s })),
 		model: {
 			customNames: {},
+			showThinking: "auto",
 		},
 		git: {
 			showDirty: true,
@@ -44,6 +62,17 @@ export function defaultConfig(): GlanceConfig {
 			timeoutMs: 1000,
 			refreshDebounceMs: 1500,
 			pollIntervalMs: 5000,
+		},
+		context: {
+			display: "percent+tokens",
+			unknown: "show",
+		},
+		cost: {
+			hideZero: false,
+		},
+		tokens: {
+			display: "input-output",
+			cache: "auto",
 		},
 	};
 }
@@ -54,8 +83,11 @@ export function cloneConfig(config: GlanceConfig): GlanceConfig {
 		editor: { ...config.editor },
 		display: { ...config.display },
 		segments: config.segments.map((s) => ({ ...s })),
-		model: { customNames: { ...config.model.customNames } },
+		model: { customNames: { ...config.model.customNames }, showThinking: config.model.showThinking },
 		git: { ...config.git },
+		context: { ...config.context },
+		cost: { ...config.cost },
+		tokens: { ...config.tokens },
 	};
 }
 
@@ -115,6 +147,9 @@ function normalizeConfig(raw: unknown): GlanceConfig {
 	const display = record.display && typeof record.display === "object" ? (record.display as Record<string, unknown>) : {};
 	const model = record.model && typeof record.model === "object" ? (record.model as Record<string, unknown>) : {};
 	const git = record.git && typeof record.git === "object" ? (record.git as Record<string, unknown>) : {};
+	const context = record.context && typeof record.context === "object" ? (record.context as Record<string, unknown>) : {};
+	const cost = record.cost && typeof record.cost === "object" ? (record.cost as Record<string, unknown>) : {};
+	const tokens = record.tokens && typeof record.tokens === "object" ? (record.tokens as Record<string, unknown>) : {};
 
 	return {
 		version: CONFIG_VERSION,
@@ -138,6 +173,7 @@ function normalizeConfig(raw: unknown): GlanceConfig {
 							),
 						) as Record<string, string>)
 					: {},
+			showThinking: parseStringEnum(model.showThinking, MODEL_THINKING_MODES, defaults.model.showThinking),
 		},
 		git: {
 			showDirty: parseBool(git.showDirty, defaults.git.showDirty),
@@ -146,6 +182,17 @@ function normalizeConfig(raw: unknown): GlanceConfig {
 			timeoutMs: parseIntAtLeast(git.timeoutMs, defaults.git.timeoutMs, 100),
 			refreshDebounceMs: parseIntAtLeast(git.refreshDebounceMs, defaults.git.refreshDebounceMs, 0),
 			pollIntervalMs: parseIntAtLeast(git.pollIntervalMs, defaults.git.pollIntervalMs, 1000),
+		},
+		context: {
+			display: parseStringEnum(context.display, CONTEXT_DISPLAY_MODES, defaults.context.display),
+			unknown: parseStringEnum(context.unknown, CONTEXT_UNKNOWN_MODES, defaults.context.unknown),
+		},
+		cost: {
+			hideZero: parseBool(cost.hideZero, defaults.cost.hideZero),
+		},
+		tokens: {
+			display: parseStringEnum(tokens.display, TOKENS_DISPLAY_MODES, defaults.tokens.display),
+			cache: parseStringEnum(tokens.cache, TOKENS_CACHE_MODES, defaults.tokens.cache),
 		},
 	};
 }

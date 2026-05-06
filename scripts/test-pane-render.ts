@@ -113,6 +113,92 @@ assertNotContains(initial, "Changes stay local", "empty default status copy shou
 assertNotContains(initial, "NOTES", "old notes section should stay removed");
 assertNotContains(initial, "[Tab]", "tab navigation should stay removed");
 
+const contextPane = await makePane();
+press(contextPane.component, "\x1b[B");
+press(contextPane.component, "\x1b[B");
+const contextCategory = plainText(contextPane.component);
+assertContains(contextCategory, "CONTEXT SETTINGS", "context category should show context detail settings");
+assertContains(contextCategory, "Display  [ percent / tokens ]", "context display setting should render");
+assertContains(contextCategory, "Unknown  [ show ]", "context unknown setting should render");
+
+press(contextPane.component, "\x1b[C");
+press(contextPane.component, "\x1b[B");
+const contextDisplay = plainText(contextPane.component);
+assertContains(contextDisplay, "Choose how context usage is shown.", "context display hint should render");
+press(contextPane.component, "\r");
+const contextDisplayChanged = plainText(contextPane.component);
+assertContains(contextDisplayChanged, "Display  [ percent ]", "enter should cycle context display");
+press(contextPane.component, "\x1b[B");
+press(contextPane.component, "\r");
+const contextUnknownChanged = plainText(contextPane.component);
+assertContains(contextUnknownChanged, "Unknown  [ hide ]", "enter should cycle context unknown behavior");
+assertContains(contextUnknownChanged, "Hide context when usage is unknown.", "context unknown hint should render");
+
+const costPane = await makePane();
+press(costPane.component, "\x1b[B");
+press(costPane.component, "\x1b[B");
+press(costPane.component, "\x1b[B");
+const costCategory = plainText(costPane.component);
+assertContains(costCategory, "COST SETTINGS", "cost category should show cost detail settings");
+assertContains(costCategory, "Hide zero  [ off ]", "cost hide zero setting should render");
+assertContains(costCategory, "Display    compact USD", "cost display info should render");
+
+press(costPane.component, "\x1b[C");
+press(costPane.component, "\x1b[B");
+press(costPane.component, "\r");
+const costChanged = plainText(costPane.component);
+assertContains(costChanged, "Hide zero  [ on ]", "enter should toggle cost hide zero");
+assertContains(costChanged, "Hide cost until usage is greater than zero.", "cost hide zero hint should render");
+
+const tokensPane = await makePane();
+press(tokensPane.component, "\x1b[B");
+press(tokensPane.component, "\x1b[B");
+press(tokensPane.component, "\x1b[B");
+press(tokensPane.component, "\x1b[B");
+const tokensCategory = plainText(tokensPane.component);
+assertContains(tokensCategory, "TOKENS SETTINGS", "tokens category should show tokens detail settings");
+assertContains(tokensCategory, "Display  [ input / output ]", "tokens display setting should render");
+assertContains(tokensCategory, "Cache    [ auto ]", "tokens cache setting should render");
+
+press(tokensPane.component, "\x1b[C");
+press(tokensPane.component, "\x1b[B");
+press(tokensPane.component, "\r");
+const tokensDisplayChanged = plainText(tokensPane.component);
+assertContains(tokensDisplayChanged, "Display  [ total ]", "enter should cycle tokens display");
+press(tokensPane.component, "\x1b[B");
+press(tokensPane.component, "\r");
+const tokensCacheChanged = plainText(tokensPane.component);
+assertContains(tokensCacheChanged, "Cache    [ show ]", "enter should cycle tokens cache mode");
+assertContains(tokensCacheChanged, "Control cache read/write details.", "tokens cache hint should render");
+
+const modelPane = await makePane();
+press(modelPane.component, "\x1b[B");
+press(modelPane.component, "\x1b[B");
+press(modelPane.component, "\x1b[B");
+press(modelPane.component, "\x1b[B");
+press(modelPane.component, "\x1b[B");
+const modelCategory = plainText(modelPane.component);
+assertContains(modelCategory, "MODEL SETTINGS", "model category should show model detail settings");
+assertContains(modelCategory, "Provider label  [ auto ]", "model provider setting should render");
+assertContains(modelCategory, "Thinking label  [ auto ]", "model thinking setting should render");
+
+press(modelPane.component, "\x1b[C");
+press(modelPane.component, "\x1b[B");
+press(modelPane.component, "\r");
+const providerChanged = plainText(modelPane.component);
+assertContains(providerChanged, "Provider label  [ always ]", "enter should cycle provider label");
+press(modelPane.component, "\x1b[B");
+press(modelPane.component, "\r");
+const thinkingChanged = plainText(modelPane.component);
+assertContains(thinkingChanged, "Thinking label  [ always ]", "enter should cycle thinking label");
+assertContains(thinkingChanged, "Control the model thinking label.", "model thinking hint should render");
+
+const generalHintPane = await makePane();
+press(generalHintPane.component, "\x1b[C");
+assertContains(plainText(generalHintPane.component), "Disable pi-glance without removing the extension.", "general enabled hint should render");
+press(generalHintPane.component, "\x1b[B");
+assertContains(plainText(generalHintPane.component), "Switch the input surface palette.", "general theme hint should render");
+
 const gitPane = await makePane();
 press(gitPane.component, "\x1b[B");
 const gitCategory = plainText(gitPane.component);
