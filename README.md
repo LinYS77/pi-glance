@@ -51,7 +51,7 @@ npm run debug:git
 /glance
 ```
 
-That's the only command — opens a calm settings pane with a home screen and per-segment detail pages.
+That's the only command — opens a calm settings pane with a real input-surface preview and a compact three-column settings grid.
 
 ## What you see
 
@@ -64,7 +64,7 @@ That's the only command — opens a calm settings pane with a home screen and pe
 | 🖊️ | **Rounded editor** | Configurable 2 / 3 / 4 min rows, preserves all pi defaults |
 | 🏷️ | **Project title** | Current folder name, or a safe `~/...` path when enabled |
 | 📊 | **Inline status** | Model · context · tokens · cost · Git status — top-right |
-| ⚙️ | **`/glance` pane** | General settings, segment order, and per-segment detail settings — Save / Cancel |
+| ⚙️ | **`/glance` pane** | General settings, segment order, and per-segment detail settings in a calm grid |
 | 💤 | **Dim unfocused** | Surface quiets down when you scroll the chat |
 | 🎨 | **Two themes** | `light` and `dark` with tuned grey-green borders |
 
@@ -103,7 +103,7 @@ The Git segment is intentionally quiet:
 - Ahead/behind counts appear when Git reports an upstream, for example `↑2 ↓1`.
 - Non-Git directories hide the Git segment.
 
-Open `/glance`, select **Git**, and press Enter to configure:
+Open `/glance`, select **Git**, move to a value with the arrow keys, and press Enter to configure:
 
 - `Dirty marker` — hide/show normal dirty markers; conflict markers stay visible.
 - `Ahead / behind` — hide/show upstream counts.

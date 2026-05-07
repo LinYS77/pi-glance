@@ -18,7 +18,7 @@ import type {
 	WorkspaceLabelMode,
 } from "./types.js";
 
-type PaneFocus = "categories" | "settings";
+type PaneFocus = "categories" | "settings" | "values";
 type CategoryId = "general" | SegmentId;
 type Category = { id: CategoryId; label: string };
 type PaneResult = { action: "save"; config: GlanceConfig } | { action: "cancel" };
@@ -34,6 +34,63 @@ interface PaneColors {
 	warn: Tone;
 	success: Tone;
 }
+
+interface PaneLayout {
+	width: number;
+	contentWidth: number;
+	outerPadding: string;
+	categoryWidth: number;
+	settingLabelWidth: number;
+	valueWidth: number;
+	settingsWidth: number;
+	asideWidth: number;
+	columnGap: string;
+	asideGap: string;
+	asideSeparator: string;
+	showAside: boolean;
+}
+
+type HelpShortcut = { key: string; label: string };
+
+type CategoryViewModel = Category & {
+	selected: boolean;
+	hasFocus: boolean;
+	enabled?: boolean;
+};
+
+type SettingViewModel = Omit<SettingRow, "mutate"> & {
+	selected: boolean;
+	labelHasFocus: boolean;
+	valueHasFocus: boolean;
+};
+
+interface GlancePaneViewModel {
+	dirty: boolean;
+	status: string;
+	categories: CategoryViewModel[];
+	selectedCategory?: Category;
+	settingsTitle: string;
+	settings: SettingViewModel[];
+	selectedHint?: string;
+	help: HelpShortcut[];
+}
+
+const PANE_FOCUS_ORDER: PaneFocus[] = ["categories", "settings", "values"];
+
+const PANE_SPACING = {
+	outerPadding: 2,
+	contentInset: 4,
+	categoryWidth: 14,
+	settingLabelWidth: 20,
+	valueWidth: 16,
+	minValueWidth: 8,
+	asideWidth: 36,
+	minAsideWidth: 22,
+	columnGap: 4,
+	asideGap: 4,
+	minContentWidth: 10,
+	asideSeparator: "│",
+} as const;
 
 const POLL_INTERVALS = [2000, 5000, 10000, 30000] as const;
 const CONTEXT_DISPLAY_LABELS: Record<ContextDisplayMode, string> = {
@@ -61,6 +118,39 @@ function plainLine(parts: string[], width: number): string {
 	return truncateToWidth(parts.join(""), width, "…");
 }
 
+function makePaneLayout(width: number): PaneLayout {
+	const contentWidth = Math.max(PANE_SPACING.minContentWidth, width - PANE_SPACING.contentInset);
+	const categoryWidth = PANE_SPACING.categoryWidth;
+	const columnGapWidth = PANE_SPACING.columnGap;
+	const asideFrameWidth = PANE_SPACING.asideGap + visibleWidth(PANE_SPACING.asideSeparator) + 1;
+	const settingLabelWidth = PANE_SPACING.settingLabelWidth;
+	const valueRoom = contentWidth - categoryWidth - columnGapWidth - settingLabelWidth - columnGapWidth;
+	const valueWidth = Math.max(PANE_SPACING.minValueWidth, Math.min(PANE_SPACING.valueWidth, valueRoom));
+	const settingsWidth = settingLabelWidth + columnGapWidth + valueWidth;
+	const coreWidth = categoryWidth + columnGapWidth + settingsWidth;
+	const asideRoom = contentWidth - coreWidth - asideFrameWidth;
+	const showAside = asideRoom >= PANE_SPACING.minAsideWidth;
+	const asideWidth = showAside ? Math.min(PANE_SPACING.asideWidth, asideRoom) : 0;
+	return {
+		width,
+		contentWidth,
+		outerPadding: " ".repeat(PANE_SPACING.outerPadding),
+		categoryWidth,
+		settingLabelWidth,
+		valueWidth,
+		settingsWidth,
+		asideWidth,
+		columnGap: " ".repeat(PANE_SPACING.columnGap),
+		asideGap: " ".repeat(PANE_SPACING.asideGap),
+		asideSeparator: PANE_SPACING.asideSeparator,
+		showAside,
+	};
+}
+
+function paneLine(layout: PaneLayout, parts: string[]): string {
+	return plainLine([layout.outerPadding, ...parts], layout.width);
+}
+
 function padRightAnsi(text: string, width: number): string {
 	const extra = Math.max(0, width - visibleWidth(text));
 	return `${text}${" ".repeat(extra)}`;
@@ -81,8 +171,28 @@ function sameConfig(a: GlanceConfig, b: GlanceConfig): boolean {
 	return JSON.stringify(a) === JSON.stringify(b);
 }
 
+function makePaneColors(theme: Theme): PaneColors {
+	return {
+		accent: (s: string) => theme.fg("accent", s),
+		muted: (s: string) => theme.fg("muted", s),
+		dim: (s: string) => theme.fg("dim", s),
+		warn: (s: string) => theme.fg("warning", s),
+		success: (s: string) => theme.fg("success", s),
+	};
+}
+
 function shortcut(colors: PaneColors, key: string, label: string): string {
 	return `${colors.accent(`[${key}]`)} ${colors.dim(label)}`;
+}
+
+function helpText(help: HelpShortcut[], colors: PaneColors): string {
+	return help.map((item) => shortcut(colors, item.key, item.label)).join(colors.dim("  ·  "));
+}
+
+function focusGap(gap: string, colors: PaneColors): string {
+	const gapWidth = visibleWidth(gap);
+	if (gapWidth <= 1) return colors.accent("›");
+	return `${" ".repeat(Math.max(0, gapWidth - 2))}${colors.accent("› ")}`;
 }
 
 function onOff(value: boolean): string {
@@ -141,6 +251,55 @@ class GlanceConfigPane implements Component {
 
 	private isDirty(): boolean {
 		return !sameConfig(this.draft, this.initial);
+	}
+
+	private getViewModel(): GlancePaneViewModel {
+		const categories = this.getCategories();
+		const selectedCategory = categories[this.catIndex];
+		const settings = selectedCategory ? this.getSettings(selectedCategory.id) : [];
+		return {
+			dirty: this.isDirty(),
+			status: this.status,
+			categories: categories.map((cat, index) => {
+				const segment = cat.id === "general" ? undefined : this.draft.segments.find((s) => s.id === cat.id);
+				return {
+					...cat,
+					selected: index === this.catIndex,
+					hasFocus: this.focus === "categories",
+					enabled: segment?.enabled,
+				};
+			}),
+			selectedCategory,
+			settingsTitle: selectedCategory ? (selectedCategory.id === "general" ? "General" : selectedCategory.label) : "",
+			settings: settings.map((row, index) => ({
+				label: row.label,
+				value: row.value,
+				hint: row.hint,
+				kind: row.kind,
+				selected: index === this.setIndex,
+				labelHasFocus: this.focus === "settings",
+				valueHasFocus: this.focus === "values",
+			})),
+			selectedHint: settings[this.setIndex]?.hint,
+			help: this.helpShortcuts(),
+		};
+	}
+
+	private helpShortcuts(): HelpShortcut[] {
+		const stable: HelpShortcut[] = [
+			{ key: "←→↑↓", label: "move" },
+			{ key: "S", label: "save" },
+			{ key: "R", label: "reset" },
+		];
+
+		switch (this.focus) {
+			case "categories":
+				return [...stable, { key: "J/K", label: "switch" }, { key: "Esc", label: "cancel" }];
+			case "settings":
+				return [...stable, { key: "Esc", label: "back" }];
+			case "values":
+				return [...stable, { key: "Enter", label: "change" }, { key: "Esc", label: "back" }];
+		}
 	}
 
 	private getCategories(): Category[] {
@@ -306,27 +465,33 @@ class GlanceConfigPane implements Component {
 			return;
 		}
 		if (matchesKey(data, Key.escape) || data === "q" || data === "Q") {
-			if (this.focus === "settings") {
+			if (this.focus === "categories") {
+				this.done({ action: "cancel" });
+			} else {
 				this.focus = "categories";
 				this.requestRender();
-			} else {
-				this.done({ action: "cancel" });
 			}
 			return;
 		}
 		if (matchesKey(data, Key.left)) {
+			const index = PANE_FOCUS_ORDER.indexOf(this.focus);
 			if (this.focus === "settings") {
-				this.focus = "categories";
-				this.requestRender();
+				const count = this.getCategories().length;
+				this.catIndex = count === 0 ? 0 : Math.min(this.setIndex, count - 1);
 			}
+			this.focus = PANE_FOCUS_ORDER[Math.max(0, index - 1)] ?? "categories";
+			this.requestRender();
 			return;
 		}
 		if (matchesKey(data, Key.right)) {
+			const index = PANE_FOCUS_ORDER.indexOf(this.focus);
 			if (this.focus === "categories") {
-				this.focus = "settings";
-				this.setIndex = 0;
-				this.requestRender();
+				const cat = this.getCategories()[this.catIndex];
+				const count = cat ? this.getSettings(cat.id).length : 0;
+				this.setIndex = count === 0 ? 0 : Math.min(this.catIndex, count - 1);
 			}
+			this.focus = PANE_FOCUS_ORDER[Math.min(PANE_FOCUS_ORDER.length - 1, index + 1)] ?? "values";
+			this.requestRender();
 			return;
 		}
 		if (data === "s" || data === "S") {
@@ -346,7 +511,9 @@ class GlanceConfigPane implements Component {
 			if (this.focus === "categories") {
 				const count = this.getCategories().length;
 				this.catIndex = count === 0 ? 0 : (this.catIndex - 1 + count) % count;
-				this.setIndex = 0;
+				const cat = this.getCategories()[this.catIndex];
+				const settingsCount = cat ? this.getSettings(cat.id).length : 0;
+				this.setIndex = settingsCount === 0 ? 0 : Math.min(this.catIndex, settingsCount - 1);
 			} else {
 				const cat = this.getCategories()[this.catIndex];
 				const count = cat ? this.getSettings(cat.id).length : 0;
@@ -359,7 +526,9 @@ class GlanceConfigPane implements Component {
 			if (this.focus === "categories") {
 				const count = this.getCategories().length;
 				this.catIndex = count === 0 ? 0 : (this.catIndex + 1) % count;
-				this.setIndex = 0;
+				const cat = this.getCategories()[this.catIndex];
+				const settingsCount = cat ? this.getSettings(cat.id).length : 0;
+				this.setIndex = settingsCount === 0 ? 0 : Math.min(this.catIndex, settingsCount - 1);
 			} else {
 				const cat = this.getCategories()[this.catIndex];
 				const count = cat ? this.getSettings(cat.id).length : 0;
@@ -369,13 +538,10 @@ class GlanceConfigPane implements Component {
 			return;
 		}
 		if (matchesKey(data, Key.enter)) {
-			if (this.focus === "categories") {
-				this.focus = "settings";
-				this.setIndex = 0;
-			} else {
+			if (this.focus === "values") {
 				this.activateCurrent();
+				this.requestRender();
 			}
-			this.requestRender();
 			return;
 		}
 		if (matchesKey(data, Key.space)) return;
@@ -390,157 +556,118 @@ class GlanceConfigPane implements Component {
 		}
 	}
 
-	private renderPreview(lines: string[], width: number, colors: PaneColors): void {
+	private renderPreview(lines: string[], layout: PaneLayout): void {
 		const preview = this.previewState
-			? renderInputSurface(this.previewState, this.draft, Math.max(24, width - 4), {
+			? renderInputSurface(this.previewState, this.draft, layout.width, {
 					contentLines: ["Ask pi to improve the input surface..."],
 					focused: true,
 				})
-			: renderInputSurfacePreview(this.draft, Math.max(24, width - 4), {
+			: renderInputSurfacePreview(this.draft, layout.width, {
 					contentLines: ["Ask pi to improve the input surface..."],
 					focused: true,
 				});
-		lines.push(plainLine(["  ", colors.accent("PREVIEW")], width));
 		for (const previewLine of preview) {
-			lines.push(plainLine(["  ", previewLine], width));
+			lines.push(previewLine);
 		}
 	}
 
-	private renderLeftPane(colors: PaneColors): string[] {
-		const cats = this.getCategories();
-		return cats.map((cat, i) => {
-			const selectedCat = i === this.catIndex;
-			const hasFocus = this.focus === "categories";
-			const segment = cat.id === "general" ? undefined : this.draft.segments.find((s) => s.id === cat.id);
+	private renderCategoryRow(cat: CategoryViewModel, colors: PaneColors): string {
+		let labelTone = colors.muted;
 
-			let cursor = "  ";
-			let labelTone = colors.muted;
+		if (cat.selected) {
+			labelTone = cat.hasFocus ? colors.accent : colors.muted;
+		} else if (cat.enabled === false) {
+			labelTone = colors.dim;
+		}
 
-			if (selectedCat) {
-				cursor = hasFocus ? colors.accent("› ") : colors.muted("› ");
-				labelTone = hasFocus ? colors.accent : colors.muted;
-			} else if (segment && !segment.enabled) {
-				labelTone = colors.dim;
-			}
-
-			const marker = segment ? `${(segment.enabled ? colors.muted : colors.dim)(segment.enabled ? "●" : "○")} ` : "";
-			return `${cursor}${marker}${labelTone(cat.label)}`;
-		});
+		const cursor = cat.selected && cat.hasFocus ? colors.accent("› ") : "  ";
+		return `${cursor}${labelTone(cat.label)}`;
 	}
 
-	private renderSettingValue(row: SettingRow, selected: boolean, hasFocus: boolean, colors: PaneColors): string {
+	private renderLeftPane(model: GlancePaneViewModel, colors: PaneColors): string[] {
+		return model.categories.map((cat) => this.renderCategoryRow(cat, colors));
+	}
+
+	private renderSettingValue(row: SettingViewModel, colors: PaneColors): string {
 		if (row.kind === "info") return colors.dim(row.value);
-		const valueTone = selected && hasFocus ? colors.accent : row.value === "on" ? colors.success : row.value === "off" ? colors.dim : colors.muted;
-		return `${colors.dim("[ ")}${valueTone(row.value)}${colors.dim(" ]")}`;
+		const valueTone = row.selected && row.valueHasFocus ? colors.accent : row.value === "on" ? colors.success : row.value === "off" ? colors.dim : colors.muted;
+		return valueTone(row.value);
 	}
 
-	private renderRightPane(colors: PaneColors): string[] {
-		const rows: string[] = [];
-		const cat = this.getCategories()[this.catIndex];
-		if (!cat) return rows;
+	private renderSettingRow(row: SettingViewModel, layout: PaneLayout, colors: PaneColors): string {
+		let labelTone = colors.muted;
 
-		const title = cat.id === "general" ? "GENERAL" : `${cat.label.toUpperCase()} SETTINGS`;
-		rows.push(colors.accent(title));
-
-		const settings = this.getSettings(cat.id);
-		if (settings.length === 0) {
-			rows.push(colors.dim("No settings available."));
-			return rows;
+		if (row.selected && row.labelHasFocus) {
+			labelTone = colors.accent;
+		} else if (row.kind === "info") {
+			labelTone = colors.dim;
 		}
 
-		const labelWidth = Math.max(...settings.map((s) => visibleWidth(s.label))) + 2;
-
-		for (let i = 0; i < settings.length; i++) {
-			const s = settings[i]!;
-			const selectedSet = i === this.setIndex;
-			const hasFocus = this.focus === "settings";
-
-			let cursor = "  ";
-			let labelTone = colors.muted;
-
-			if (selectedSet && hasFocus) {
-				cursor = colors.accent("› ");
-				labelTone = colors.accent;
-			} else if (s.kind === "info") {
-				labelTone = colors.dim;
-			}
-
-			const marker = s.kind === "info" ? colors.dim(" ") : selectedSet && hasFocus ? colors.accent("•") : colors.dim("•");
-			const paddedLabel = padRightAnsi(labelTone(s.label), labelWidth);
-			const valStr = this.renderSettingValue(s, selectedSet, hasFocus, colors);
-
-			rows.push(`${cursor}${marker} ${paddedLabel}${valStr}`);
-		}
-
-		const selectedHint = settings[this.setIndex]?.hint;
-		rows.push("");
-		rows.push(selectedHint ? colors.dim(selectedHint) : "");
-
-		return rows;
+		const label = truncateToWidth(row.label, layout.settingLabelWidth, "…");
+		const paddedLabel = padRightAnsi(labelTone(label), layout.settingLabelWidth);
+		const gap = row.selected && row.valueHasFocus ? focusGap(layout.columnGap, colors) : layout.columnGap;
+		const valueStr = this.renderSettingValue(row, colors);
+		const value = truncateToWidth(valueStr, layout.valueWidth, "…");
+		return `${paddedLabel}${gap}${value}`;
 	}
 
-	private renderDualPane(lines: string[], width: number, colors: PaneColors): void {
-		const lefts = this.renderLeftPane(colors);
-		const rights = this.renderRightPane(colors);
+	private renderSettingsPane(model: GlancePaneViewModel, layout: PaneLayout, colors: PaneColors): string[] {
+		if (!model.selectedCategory) return [];
 
-		const leftWidth = 22;
-		const sep = colors.dim("   │   ");
+		if (model.settings.length === 0) {
+			return [colors.dim("No settings available.")];
+		}
 
-		const maxLines = Math.max(lefts.length, rights.length);
+		return model.settings.map((row) => this.renderSettingRow(row, layout, colors));
+	}
+
+	private renderAsidePane(model: GlancePaneViewModel, layout: PaneLayout, colors: PaneColors): string[] {
+		const hint = model.selectedHint ? truncateToWidth(model.selectedHint, layout.asideWidth, "…") : "";
+		return [colors.muted(model.settingsTitle), hint ? colors.dim(`“${hint}”`) : ""];
+	}
+
+	private renderSettingsColumns(lines: string[], model: GlancePaneViewModel, layout: PaneLayout, colors: PaneColors): void {
+		const categories = this.renderLeftPane(model, colors);
+		const settings = this.renderSettingsPane(model, layout, colors);
+		const aside = layout.showAside ? this.renderAsidePane(model, layout, colors) : [];
+
+		const maxLines = Math.max(categories.length, settings.length, aside.length);
 		for (let i = 0; i < maxLines; i++) {
-			const l = padRightAnsi(lefts[i] ?? "", leftWidth);
-			const r = rights[i] ?? "";
-			lines.push(plainLine(["  ", l, sep, r], width));
+			const category = padRightAnsi(categories[i] ?? "", layout.categoryWidth);
+			const selectedSetting = model.settings[i];
+			const categoryGap = selectedSetting?.selected && selectedSetting.labelHasFocus ? focusGap(layout.columnGap, colors) : layout.columnGap;
+			const setting = padRightAnsi(settings[i] ?? "", layout.settingsWidth);
+			const asideLine = aside[i] ?? "";
+			const asidePart = layout.showAside ? [layout.asideGap, colors.dim(`${layout.asideSeparator} `), asideLine] : [];
+			lines.push(paneLine(layout, [category, categoryGap, setting, ...asidePart]));
 		}
 	}
 
-	private renderHelp(lines: string[], width: number, colors: PaneColors): void {
-		const help =
-			this.focus === "categories"
-				? [
-						shortcut(colors, "↑↓", "nav"),
-						shortcut(colors, "Enter/→", "edit"),
-						shortcut(colors, "J/K", "switch"),
-						shortcut(colors, "S", "save"),
-						shortcut(colors, "R", "reset"),
-						shortcut(colors, "Esc", "cancel"),
-					]
-				: [
-						shortcut(colors, "↑↓", "nav"),
-						shortcut(colors, "Enter", "change"),
-						shortcut(colors, "←/Esc", "back"),
-						shortcut(colors, "S", "save"),
-						shortcut(colors, "R", "reset"),
-					];
-		lines.push(plainLine(["  ", help.join(colors.dim(" · "))], width));
+	private renderSettings(lines: string[], model: GlancePaneViewModel, layout: PaneLayout, colors: PaneColors): void {
+		this.renderSettingsColumns(lines, model, layout, colors);
+	}
+
+	private renderFooter(lines: string[], model: GlancePaneViewModel, layout: PaneLayout, colors: PaneColors): void {
+		const footerLeft = helpText(model.help, colors);
+		const footerRight = model.dirty ? colors.warn("● Unsaved changes") : colors.success("✓ Saved");
+		lines.push(paneLine(layout, [spreadAnsi(footerLeft, footerRight, layout.contentWidth)]));
 	}
 
 	render(width: number): string[] {
-		const t = this.theme;
-		const colors: PaneColors = {
-			accent: (s: string) => t.fg("accent", s),
-			muted: (s: string) => t.fg("muted", s),
-			dim: (s: string) => t.fg("dim", s),
-			warn: (s: string) => t.fg("warning", s),
-			success: (s: string) => t.fg("success", s),
-		};
+		const colors = makePaneColors(this.theme);
+		const layout = makePaneLayout(width);
+		const model = this.getViewModel();
+		const lines: string[] = [];
 
-		const dirty = this.isDirty();
-		const headerLeft = `${colors.accent(t.bold("◌ pi-glance"))} ${colors.dim("settings")}`;
-		const headerRight = dirty ? colors.warn("● Unsaved changes") : colors.success("✓ Saved");
+		if (model.status) lines.push(paneLine(layout, [colors.dim(model.status)]));
 
-		const lines: string[] = [plainLine(["  ", spreadAnsi(headerLeft, headerRight, Math.max(10, width - 4))], width)];
-		if (this.status) lines.push(plainLine(["  ", colors.dim(this.status)], width));
+		this.renderPreview(lines, layout);
 		lines.push("");
 
-		this.renderPreview(lines, width, colors);
+		this.renderSettings(lines, model, layout, colors);
 		lines.push("");
 
-		lines.push(plainLine(["  ", colors.accent("SETTINGS")], width));
-		this.renderDualPane(lines, width, colors);
-
-		lines.push("");
-		this.renderHelp(lines, width, colors);
+		this.renderFooter(lines, model, layout, colors);
 		return lines;
 	}
 }
