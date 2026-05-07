@@ -117,6 +117,17 @@ assertNotContains(initial, "Changes stay local", "empty default status copy shou
 assertNotContains(initial, "NOTES", "old notes section should stay removed");
 assertNotContains(initial, "[Tab]", "tab navigation should stay removed");
 
+const themePane = await makePane();
+press(themePane.component, "\x1b[C");
+press(themePane.component, "\x1b[B");
+press(themePane.component, "\x1b[C");
+press(themePane.component, "\r");
+assertLineContainsAll(plainText(themePane.component), ["Theme", "dark"], "theme should cycle to dark");
+press(themePane.component, "\r");
+assertLineContainsAll(plainText(themePane.component), ["Theme", "catppuccin-latte"], "theme should cycle to Catppuccin Latte");
+press(themePane.component, "\r");
+assertLineContainsAll(plainText(themePane.component), ["Theme", "catppuccin-mocha"], "theme should cycle to Catppuccin Mocha");
+
 const gridPane = await makePane();
 press(gridPane.component, "\x1b[B");
 press(gridPane.component, "\x1b[C");

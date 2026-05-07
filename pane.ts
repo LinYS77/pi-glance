@@ -337,7 +337,7 @@ class GlanceConfigPane implements Component {
 				this.draft.enabled = !this.draft.enabled;
 			}),
 			cycleRow("Theme", this.draft.theme, "Switch the palette.", () => {
-				this.draft.theme = nextIn(this.draft.theme, ["light", "dark"] as GlanceThemeName[]);
+				this.draft.theme = nextIn(this.draft.theme, ["light", "dark", "catppuccin-latte", "catppuccin-mocha"] as GlanceThemeName[]);
 			}),
 			cycleRow("Icons", this.draft.icons, "Plain works without Nerd Font.", () => {
 				this.draft.icons = nextIn(this.draft.icons, ["plain", "nerd"] as IconMode[]);

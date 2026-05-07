@@ -66,7 +66,7 @@ That's the only command — opens a calm settings pane with a real input-surface
 | 📊 | **Inline status** | Model · context · tokens · cost · Git status — top-right |
 | ⚙️ | **`/glance` pane** | General settings, segment order, and per-segment detail settings in a calm grid |
 | 💤 | **Dim unfocused** | Surface quiets down when you scroll the chat |
-| 🎨 | **Two themes** | `light` and `dark` with tuned grey-green borders |
+| 🎨 | **Themes** | `light`, `dark`, `catppuccin-latte`, and `catppuccin-mocha` |
 
 ## Notes
 
