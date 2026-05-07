@@ -75,13 +75,13 @@ That's the only command — opens a calm settings pane with a home screen and pe
 
 ## Segment details
 
-Open `/glance` to adjust small per-segment display controls:
+`/glance` keeps segment settings small and display-focused:
 
-- **Context** — choose `percent / tokens`, `percent`, or `tokens`; optionally hide unknown context.
-- **Cost** — optionally hide `$0.000` until usage is greater than zero.
-- **Tokens** — choose input/output or total usage, and control cache read/write details.
-- **Model** — control provider and thinking labels.
-- **Git** — configure dirty markers, upstream counts, SHA, and polling.
+- **Context** — percent / tokens, or hide unknown usage.
+- **Cost** — hide zero cost.
+- **Tokens** — input / output, total, or cache details.
+- **Model** — provider and thinking labels.
+- **Git** — dirty marker, upstream counts, SHA, and polling.
 
 ## Git status
 

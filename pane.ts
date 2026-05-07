@@ -164,7 +164,7 @@ class GlanceConfigPane implements Component {
 			{
 				label: "Enabled",
 				value: onOff(this.draft.enabled),
-				hint: "Disable pi-glance without removing the extension.",
+				hint: "Temporarily disable pi-glance.",
 				kind: "toggle",
 				mutate: () => {
 					this.draft.enabled = !this.draft.enabled;
@@ -173,7 +173,7 @@ class GlanceConfigPane implements Component {
 			{
 				label: "Theme",
 				value: this.draft.theme,
-				hint: "Switch the input surface palette.",
+				hint: "Switch the palette.",
 				kind: "cycle",
 				mutate: () => {
 					this.draft.theme = nextIn(this.draft.theme, ["light", "dark"] as GlanceThemeName[]);
@@ -182,7 +182,7 @@ class GlanceConfigPane implements Component {
 			{
 				label: "Icons",
 				value: this.draft.icons,
-				hint: "Plain icons work with normal terminal fonts.",
+				hint: "Plain works without Nerd Font.",
 				kind: "cycle",
 				mutate: () => {
 					this.draft.icons = nextIn(this.draft.icons, ["plain", "nerd"] as IconMode[]);
@@ -191,7 +191,7 @@ class GlanceConfigPane implements Component {
 			{
 				label: "Min input rows",
 				value: `${this.draft.editor.minContentRows}`,
-				hint: "Controls the editor's resting height.",
+				hint: "Set the resting editor height.",
 				kind: "cycle",
 				mutate: () => {
 					this.draft.editor.minContentRows = nextNumber(this.draft.editor.minContentRows, [2, 3, 4] as const);
@@ -200,7 +200,7 @@ class GlanceConfigPane implements Component {
 			{
 				label: "Adaptive width",
 				value: onOff(this.draft.display.adaptive),
-				hint: "Drops lower-priority segments as space gets tight.",
+				hint: "Drop later segments first.",
 				kind: "toggle",
 				mutate: () => {
 					this.draft.display.adaptive = !this.draft.display.adaptive;
@@ -214,7 +214,7 @@ class GlanceConfigPane implements Component {
 			{
 				label: "Display",
 				value: contextDisplayLabel(this.draft.context.display),
-				hint: "Choose how context usage is shown.",
+				hint: "Choose percent, tokens, or both.",
 				kind: "cycle",
 				mutate: () => {
 					this.draft.context.display = nextIn(this.draft.context.display, ["percent+tokens", "percent", "tokens"] as ContextDisplayMode[]);
@@ -223,7 +223,7 @@ class GlanceConfigPane implements Component {
 			{
 				label: "Unknown",
 				value: this.draft.context.unknown,
-				hint: "Hide context when usage is unknown.",
+				hint: "Hide when usage is unknown.",
 				kind: "cycle",
 				mutate: () => {
 					this.draft.context.unknown = nextIn(this.draft.context.unknown, ["show", "hide"] as ContextUnknownMode[]);
@@ -237,7 +237,7 @@ class GlanceConfigPane implements Component {
 			{
 				label: "Hide zero",
 				value: onOff(this.draft.cost.hideZero),
-				hint: "Hide cost until usage is greater than zero.",
+				hint: "Hide until cost is non-zero.",
 				kind: "toggle",
 				mutate: () => {
 					this.draft.cost.hideZero = !this.draft.cost.hideZero;
@@ -246,7 +246,7 @@ class GlanceConfigPane implements Component {
 			{
 				label: "Display",
 				value: "compact USD",
-				hint: "Shows current session cost when pi reports usage.",
+				hint: "Compact session cost.",
 				kind: "info",
 			},
 		]);
@@ -257,7 +257,7 @@ class GlanceConfigPane implements Component {
 			{
 				label: "Display",
 				value: tokensDisplayLabel(this.draft.tokens.display),
-				hint: "Choose input/output or total token usage.",
+				hint: "Choose input/output or total.",
 				kind: "cycle",
 				mutate: () => {
 					this.draft.tokens.display = nextIn(this.draft.tokens.display, ["input-output", "total"] as TokensDisplayMode[]);
@@ -266,7 +266,7 @@ class GlanceConfigPane implements Component {
 			{
 				label: "Cache",
 				value: this.draft.tokens.cache,
-				hint: "Control cache read/write details.",
+				hint: "Show or hide cache details.",
 				kind: "cycle",
 				mutate: () => {
 					this.draft.tokens.cache = nextIn(this.draft.tokens.cache, ["auto", "show", "hide"] as TokensCacheMode[]);
@@ -280,7 +280,7 @@ class GlanceConfigPane implements Component {
 			{
 				label: "Provider label",
 				value: this.draft.display.showProvider,
-				hint: "Auto shows provider only when multiple providers are available.",
+				hint: "Show provider name.",
 				kind: "cycle",
 				mutate: () => {
 					this.draft.display.showProvider = nextIn(this.draft.display.showProvider, ["auto", "always", "never"] as const);
@@ -289,7 +289,7 @@ class GlanceConfigPane implements Component {
 			{
 				label: "Thinking label",
 				value: this.draft.model.showThinking,
-				hint: "Control the model thinking label.",
+				hint: "Show thinking level.",
 				kind: "cycle",
 				mutate: () => {
 					this.draft.model.showThinking = nextIn(this.draft.model.showThinking, ["auto", "always", "never"] as ModelThinkingMode[]);
@@ -303,7 +303,7 @@ class GlanceConfigPane implements Component {
 			{
 				label: "Dirty marker",
 				value: onOff(this.draft.git.showDirty),
-				hint: "Conflict markers are always shown.",
+				hint: "Conflicts always stay visible.",
 				kind: "toggle",
 				mutate: () => {
 					this.draft.git.showDirty = !this.draft.git.showDirty;
@@ -312,7 +312,7 @@ class GlanceConfigPane implements Component {
 			{
 				label: "Ahead / behind",
 				value: onOff(this.draft.git.showAheadBehind),
-				hint: "Show upstream counts when Git reports them.",
+				hint: "Show upstream counts.",
 				kind: "toggle",
 				mutate: () => {
 					this.draft.git.showAheadBehind = !this.draft.git.showAheadBehind;
@@ -321,7 +321,7 @@ class GlanceConfigPane implements Component {
 			{
 				label: "SHA",
 				value: this.draft.git.shaMode,
-				hint: "off keeps branches quiet; detached shows SHA only on detached HEAD.",
+				hint: "Keep branches quiet unless enabled.",
 				kind: "cycle",
 				mutate: () => {
 					this.draft.git.shaMode = nextIn(this.draft.git.shaMode, ["off", "detached", "always"] as GitShaMode[]);
@@ -330,7 +330,7 @@ class GlanceConfigPane implements Component {
 			{
 				label: "Polling",
 				value: formatPolling(this.draft.git.pollIntervalMs),
-				hint: "External file changes usually appear on the next poll.",
+				hint: "Check external Git changes.",
 				kind: "cycle",
 				mutate: () => {
 					this.draft.git.pollIntervalMs = nextNumber(this.draft.git.pollIntervalMs, POLL_INTERVALS);

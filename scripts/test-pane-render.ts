@@ -124,7 +124,7 @@ assertContains(contextCategory, "Unknown  [ show ]", "context unknown setting sh
 press(contextPane.component, "\x1b[C");
 press(contextPane.component, "\x1b[B");
 const contextDisplay = plainText(contextPane.component);
-assertContains(contextDisplay, "Choose how context usage is shown.", "context display hint should render");
+assertContains(contextDisplay, "Choose percent, tokens, or both.", "context display hint should render");
 press(contextPane.component, "\r");
 const contextDisplayChanged = plainText(contextPane.component);
 assertContains(contextDisplayChanged, "Display  [ percent ]", "enter should cycle context display");
@@ -132,7 +132,7 @@ press(contextPane.component, "\x1b[B");
 press(contextPane.component, "\r");
 const contextUnknownChanged = plainText(contextPane.component);
 assertContains(contextUnknownChanged, "Unknown  [ hide ]", "enter should cycle context unknown behavior");
-assertContains(contextUnknownChanged, "Hide context when usage is unknown.", "context unknown hint should render");
+assertContains(contextUnknownChanged, "Hide when usage is unknown.", "context unknown hint should render");
 
 const costPane = await makePane();
 press(costPane.component, "\x1b[B");
@@ -148,7 +148,7 @@ press(costPane.component, "\x1b[B");
 press(costPane.component, "\r");
 const costChanged = plainText(costPane.component);
 assertContains(costChanged, "Hide zero  [ on ]", "enter should toggle cost hide zero");
-assertContains(costChanged, "Hide cost until usage is greater than zero.", "cost hide zero hint should render");
+assertContains(costChanged, "Hide until cost is non-zero.", "cost hide zero hint should render");
 
 const tokensPane = await makePane();
 press(tokensPane.component, "\x1b[B");
@@ -169,7 +169,7 @@ press(tokensPane.component, "\x1b[B");
 press(tokensPane.component, "\r");
 const tokensCacheChanged = plainText(tokensPane.component);
 assertContains(tokensCacheChanged, "Cache    [ show ]", "enter should cycle tokens cache mode");
-assertContains(tokensCacheChanged, "Control cache read/write details.", "tokens cache hint should render");
+assertContains(tokensCacheChanged, "Show or hide cache details.", "tokens cache hint should render");
 
 const modelPane = await makePane();
 press(modelPane.component, "\x1b[B");
@@ -191,13 +191,13 @@ press(modelPane.component, "\x1b[B");
 press(modelPane.component, "\r");
 const thinkingChanged = plainText(modelPane.component);
 assertContains(thinkingChanged, "Thinking label  [ always ]", "enter should cycle thinking label");
-assertContains(thinkingChanged, "Control the model thinking label.", "model thinking hint should render");
+assertContains(thinkingChanged, "Show thinking level.", "model thinking hint should render");
 
 const generalHintPane = await makePane();
 press(generalHintPane.component, "\x1b[C");
-assertContains(plainText(generalHintPane.component), "Disable pi-glance without removing the extension.", "general enabled hint should render");
+assertContains(plainText(generalHintPane.component), "Temporarily disable pi-glance.", "general enabled hint should render");
 press(generalHintPane.component, "\x1b[B");
-assertContains(plainText(generalHintPane.component), "Switch the input surface palette.", "general theme hint should render");
+assertContains(plainText(generalHintPane.component), "Switch the palette.", "general theme hint should render");
 
 const gitPane = await makePane();
 press(gitPane.component, "\x1b[B");
@@ -217,13 +217,13 @@ assertNotContains(gitSettings, "[Enter/→] edit", "category help should be hidd
 press(gitPane.component, "\x1b[B");
 const dirtyLines = plainRender(gitPane.component);
 const dirtyText = dirtyLines.join("\n");
-assertContains(dirtyText, "Conflict markers are always shown.", "selected hint should render for dirty marker");
+assertContains(dirtyText, "Conflicts always stay visible.", "selected hint should render for dirty marker");
 const dirtyHelpIndex = helpIndex(dirtyLines);
 
 press(gitPane.component, "\x1b[B");
 const aheadLines = plainRender(gitPane.component);
 const aheadText = aheadLines.join("\n");
-assertNotContains(aheadText, "Conflict markers are always shown.", "hint should change with the selected setting");
+assertNotContains(aheadText, "Conflicts always stay visible.", "hint should change with the selected setting");
 assert.equal(helpIndex(aheadLines), dirtyHelpIndex, "hint row should be reserved even when selected setting has no hint");
 
 const interaction = await makePane();
