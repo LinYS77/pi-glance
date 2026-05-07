@@ -9,6 +9,7 @@ export type ContextUnknownMode = "show" | "hide";
 export type TokensDisplayMode = "input-output" | "total";
 export type TokensCacheMode = "auto" | "show" | "hide";
 export type ModelThinkingMode = "auto" | "always" | "never";
+export type WorkspaceLabelMode = "name" | "smart" | "path";
 
 export interface SegmentConfig {
 	id: SegmentId;
@@ -18,6 +19,7 @@ export interface SegmentConfig {
 interface DisplayConfig {
 	adaptive: boolean;
 	showProvider: "auto" | "always" | "never";
+	workspaceLabel: WorkspaceLabelMode;
 }
 
 interface EditorConfig {

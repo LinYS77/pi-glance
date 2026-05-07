@@ -2,44 +2,8 @@ import { strict as assert } from "node:assert";
 import { defaultConfig } from "../config.js";
 import { stripControls } from "../format.js";
 import { renderGlanceLine } from "../renderer.js";
+import { testState } from "./helpers.js";
 import type { GlanceState } from "../types.js";
-
-function state(overrides: Partial<GlanceState> = {}): GlanceState {
-	const base: GlanceState = {
-		workspace: { name: "repo", path: "/repo" },
-		git: {
-			repo: false,
-			branch: null,
-			detached: false,
-			sha: null,
-			upstream: null,
-			ahead: 0,
-			behind: 0,
-			staged: 0,
-			unstaged: 0,
-			untracked: 0,
-			conflicts: 0,
-			dirty: false,
-			status: "unknown",
-			updatedAt: 0,
-		},
-		providers: { availableCount: 1 },
-		model: { id: "gpt-5.5", provider: "openai", displayName: "GPT 5.5", thinking: "off" },
-		context: { tokens: 46_800, window: 200_000, percent: 23.4 },
-		usage: { input: 100, output: 50, cacheRead: 0, cacheWrite: 0, cost: 0 },
-		version: 0,
-	};
-	return {
-		...base,
-		...overrides,
-		workspace: { ...base.workspace, ...overrides.workspace },
-		git: { ...base.git, ...overrides.git },
-		providers: { ...base.providers, ...overrides.providers },
-		model: { ...base.model, ...overrides.model },
-		context: { ...base.context, ...overrides.context },
-		usage: { ...base.usage, ...overrides.usage },
-	};
-}
 
 function line(
 	segmentId: "context" | "cost" | "tokens" | "model",
@@ -50,7 +14,7 @@ function line(
 	const config = defaultConfig();
 	config.segments = config.segments.map((segment) => ({ ...segment, enabled: segment.id === segmentId }));
 	mutateConfig?.(config);
-	return stripControls(renderGlanceLine(state(stateOverrides), config, width));
+	return stripControls(renderGlanceLine(testState(stateOverrides), config, width));
 }
 
 assert.equal(line("context"), "ctx 23% 47k/200k", "context defaults to percent / tokens");

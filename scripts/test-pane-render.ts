@@ -3,6 +3,7 @@ import { visibleWidth, type Component, type TUI } from "@mariozechner/pi-tui";
 import type { Theme } from "@mariozechner/pi-coding-agent";
 import { defaultConfig } from "../config.js";
 import { showGlancePane } from "../pane.js";
+import { testState } from "./helpers.js";
 import type { GlanceConfig, GlanceState } from "../types.js";
 
 const ANSI_PATTERN = /\x1b\[[0-?]*[ -/]*[@-~]/g;
@@ -29,8 +30,7 @@ function press(component: Component, data: string): void {
 }
 
 function makeState(): GlanceState {
-	return {
-		workspace: { name: "repo", path: "/repo" },
+	return testState({
 		git: {
 			repo: true,
 			branch: "main",
@@ -51,8 +51,7 @@ function makeState(): GlanceState {
 		model: { id: "claude-sonnet-4-20250514", provider: "anthropic", displayName: "Sonnet 4", thinking: "high" },
 		context: { tokens: 46_800, window: 200_000, percent: 23.4 },
 		usage: { input: 12_400, output: 3_100, cacheRead: 800, cacheWrite: 0, cost: 0.042 },
-		version: 0,
-	};
+	});
 }
 
 async function makePane(config: GlanceConfig = defaultConfig()): Promise<{ component: Component; renders: () => number; done: () => unknown }> {
@@ -198,6 +197,15 @@ press(generalHintPane.component, "\x1b[C");
 assertContains(plainText(generalHintPane.component), "Temporarily disable pi-glance.", "general enabled hint should render");
 press(generalHintPane.component, "\x1b[B");
 assertContains(plainText(generalHintPane.component), "Switch the palette.", "general theme hint should render");
+press(generalHintPane.component, "\x1b[B");
+press(generalHintPane.component, "\x1b[B");
+press(generalHintPane.component, "\x1b[B");
+press(generalHintPane.component, "\x1b[B");
+const workspaceLabel = plainText(generalHintPane.component);
+assertContains(workspaceLabel, "Workspace label  [ name ]", "workspace label setting should render");
+assertContains(workspaceLabel, "Use ~/ path when space allows.", "workspace label hint should render");
+press(generalHintPane.component, "\r");
+assertContains(plainText(generalHintPane.component), "Workspace label  [ smart ]", "enter should cycle workspace label");
 
 const gitPane = await makePane();
 press(gitPane.component, "\x1b[B");
@@ -239,7 +247,7 @@ assertContains(afterSpace, "✓ Saved", "space should not dirty the draft");
 press(interaction.component, "\r");
 const afterEnter = plainText(interaction.component);
 assertContains(afterEnter, "● Unsaved changes", "enter should change the selected setting and dirty the draft");
-assertContains(afterEnter, "Enabled         [ off ]", "enter should toggle the selected setting");
+assertContains(afterEnter, "Enabled          [ off ]", "enter should toggle the selected setting");
 
 press(interaction.component, "s");
 const saveResult = interaction.done();

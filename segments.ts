@@ -56,11 +56,11 @@ function contextIsUnknown(ctx: SegmentRenderContext): boolean {
 	return ctx.state.context.percent === null && ctx.state.context.tokens === null;
 }
 
-function contextDisplayValue(ctx: SegmentRenderContext, mode = ctx.config.context.display): string {
+function contextDisplayValue(ctx: SegmentRenderContext): string {
 	const pct = formatPercent(ctx.state.context.percent);
 	const ratio = contextTokenRatio(ctx);
-	if (mode === "percent") return pct;
-	if (mode === "tokens") return ratio;
+	if (ctx.config.context.display === "percent") return pct;
+	if (ctx.config.context.display === "tokens") return ratio;
 	return `${pct} ${ratio}`;
 }
 
@@ -111,8 +111,6 @@ const SEGMENTS: SegmentDefinition[] = [
 				primary: branch,
 				secondary,
 				display: {
-					full: [branch, secondary].filter(Boolean).join(" "),
-					compact: [branch, secondary].filter(Boolean).join(" "),
 					minimal: [branch, minimalStatus].filter(Boolean).join(" "),
 				},
 			};

@@ -1,19 +1,11 @@
 import { strict as assert } from "node:assert";
-import { emptyGitSnapshot, parseGitStatus } from "../git.js";
+import { parseGitStatus } from "../git.js";
 import { refreshWorkspace, setGitSnapshot } from "../state.js";
+import { testState } from "./helpers.js";
 import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
-import type { GlanceState } from "../types.js";
 
-function stateFor(cwd: string): GlanceState {
-	return {
-		workspace: { name: cwd.split("/").pop() || cwd, path: cwd },
-		git: emptyGitSnapshot(),
-		providers: { availableCount: 1 },
-		model: { thinking: "off" },
-		context: { tokens: null, window: 0, percent: null },
-		usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 },
-		version: 0,
-	};
+function stateFor(cwd: string) {
+	return testState({ workspace: { name: cwd.split("/").pop() || cwd, path: cwd } });
 }
 
 function ctxFor(cwd: string): ExtensionContext {

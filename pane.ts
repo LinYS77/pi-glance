@@ -12,10 +12,10 @@ import type {
 	GlanceThemeName,
 	IconMode,
 	ModelThinkingMode,
-	SegmentConfig,
 	SegmentId,
 	TokensCacheMode,
 	TokensDisplayMode,
+	WorkspaceLabelMode,
 } from "./types.js";
 
 type PaneFocus = "categories" | "settings";
@@ -45,6 +45,7 @@ const TOKENS_DISPLAY_LABELS: Record<TokensDisplayMode, string> = {
 	"input-output": "input / output",
 	total: "total",
 };
+const WORKSPACE_LABEL_MODES: WorkspaceLabelMode[] = ["name", "smart", "path"];
 
 function nextIn<T extends string>(current: T, values: readonly T[]): T {
 	const index = values.indexOf(current);
@@ -105,6 +106,18 @@ function tokensDisplayLabel(mode: TokensDisplayMode): string {
 	return TOKENS_DISPLAY_LABELS[mode];
 }
 
+function toggleRow(label: string, value: boolean, hint: string, mutate: () => void): SettingRow {
+	return { label, value: onOff(value), hint, kind: "toggle", mutate };
+}
+
+function cycleRow(label: string, value: string, hint: string, mutate: () => void): SettingRow {
+	return { label, value, hint, kind: "cycle", mutate };
+}
+
+function infoRow(label: string, value: string, hint: string): SettingRow {
+	return { label, value, hint, kind: "info" };
+}
+
 class GlanceConfigPane implements Component {
 	private readonly initial: GlanceConfig;
 	private draft: GlanceConfig;
@@ -161,196 +174,92 @@ class GlanceConfigPane implements Component {
 
 	private generalRows(): SettingRow[] {
 		return [
-			{
-				label: "Enabled",
-				value: onOff(this.draft.enabled),
-				hint: "Temporarily disable pi-glance.",
-				kind: "toggle",
-				mutate: () => {
-					this.draft.enabled = !this.draft.enabled;
-				},
-			},
-			{
-				label: "Theme",
-				value: this.draft.theme,
-				hint: "Switch the palette.",
-				kind: "cycle",
-				mutate: () => {
-					this.draft.theme = nextIn(this.draft.theme, ["light", "dark"] as GlanceThemeName[]);
-				},
-			},
-			{
-				label: "Icons",
-				value: this.draft.icons,
-				hint: "Plain works without Nerd Font.",
-				kind: "cycle",
-				mutate: () => {
-					this.draft.icons = nextIn(this.draft.icons, ["plain", "nerd"] as IconMode[]);
-				},
-			},
-			{
-				label: "Min input rows",
-				value: `${this.draft.editor.minContentRows}`,
-				hint: "Set the resting editor height.",
-				kind: "cycle",
-				mutate: () => {
-					this.draft.editor.minContentRows = nextNumber(this.draft.editor.minContentRows, [2, 3, 4] as const);
-				},
-			},
-			{
-				label: "Adaptive width",
-				value: onOff(this.draft.display.adaptive),
-				hint: "Drop later segments first.",
-				kind: "toggle",
-				mutate: () => {
-					this.draft.display.adaptive = !this.draft.display.adaptive;
-				},
-			},
+			toggleRow("Enabled", this.draft.enabled, "Temporarily disable pi-glance.", () => {
+				this.draft.enabled = !this.draft.enabled;
+			}),
+			cycleRow("Theme", this.draft.theme, "Switch the palette.", () => {
+				this.draft.theme = nextIn(this.draft.theme, ["light", "dark"] as GlanceThemeName[]);
+			}),
+			cycleRow("Icons", this.draft.icons, "Plain works without Nerd Font.", () => {
+				this.draft.icons = nextIn(this.draft.icons, ["plain", "nerd"] as IconMode[]);
+			}),
+			cycleRow("Min input rows", `${this.draft.editor.minContentRows}`, "Set the resting editor height.", () => {
+				this.draft.editor.minContentRows = nextNumber(this.draft.editor.minContentRows, [2, 3, 4] as const);
+			}),
+			toggleRow("Adaptive width", this.draft.display.adaptive, "Drop later segments first.", () => {
+				this.draft.display.adaptive = !this.draft.display.adaptive;
+			}),
+			cycleRow("Workspace label", this.draft.display.workspaceLabel, "Use ~/ path when space allows.", () => {
+				this.draft.display.workspaceLabel = nextIn(this.draft.display.workspaceLabel, WORKSPACE_LABEL_MODES);
+			}),
 		];
 	}
 
 	private contextRows(): SettingRow[] {
 		return this.segmentRows("context", [
-			{
-				label: "Display",
-				value: contextDisplayLabel(this.draft.context.display),
-				hint: "Choose percent, tokens, or both.",
-				kind: "cycle",
-				mutate: () => {
-					this.draft.context.display = nextIn(this.draft.context.display, ["percent+tokens", "percent", "tokens"] as ContextDisplayMode[]);
-				},
-			},
-			{
-				label: "Unknown",
-				value: this.draft.context.unknown,
-				hint: "Hide when usage is unknown.",
-				kind: "cycle",
-				mutate: () => {
-					this.draft.context.unknown = nextIn(this.draft.context.unknown, ["show", "hide"] as ContextUnknownMode[]);
-				},
-			},
+			cycleRow("Display", contextDisplayLabel(this.draft.context.display), "Choose percent, tokens, or both.", () => {
+				this.draft.context.display = nextIn(this.draft.context.display, ["percent+tokens", "percent", "tokens"] as ContextDisplayMode[]);
+			}),
+			cycleRow("Unknown", this.draft.context.unknown, "Hide when usage is unknown.", () => {
+				this.draft.context.unknown = nextIn(this.draft.context.unknown, ["show", "hide"] as ContextUnknownMode[]);
+			}),
 		]);
 	}
 
 	private costRows(): SettingRow[] {
 		return this.segmentRows("cost", [
-			{
-				label: "Hide zero",
-				value: onOff(this.draft.cost.hideZero),
-				hint: "Hide until cost is non-zero.",
-				kind: "toggle",
-				mutate: () => {
-					this.draft.cost.hideZero = !this.draft.cost.hideZero;
-				},
-			},
-			{
-				label: "Display",
-				value: "compact USD",
-				hint: "Compact session cost.",
-				kind: "info",
-			},
+			toggleRow("Hide zero", this.draft.cost.hideZero, "Hide until cost is non-zero.", () => {
+				this.draft.cost.hideZero = !this.draft.cost.hideZero;
+			}),
+			infoRow("Display", "compact USD", "Compact session cost."),
 		]);
 	}
 
 	private tokensRows(): SettingRow[] {
 		return this.segmentRows("tokens", [
-			{
-				label: "Display",
-				value: tokensDisplayLabel(this.draft.tokens.display),
-				hint: "Choose input/output or total.",
-				kind: "cycle",
-				mutate: () => {
-					this.draft.tokens.display = nextIn(this.draft.tokens.display, ["input-output", "total"] as TokensDisplayMode[]);
-				},
-			},
-			{
-				label: "Cache",
-				value: this.draft.tokens.cache,
-				hint: "Show or hide cache details.",
-				kind: "cycle",
-				mutate: () => {
-					this.draft.tokens.cache = nextIn(this.draft.tokens.cache, ["auto", "show", "hide"] as TokensCacheMode[]);
-				},
-			},
+			cycleRow("Display", tokensDisplayLabel(this.draft.tokens.display), "Choose input/output or total.", () => {
+				this.draft.tokens.display = nextIn(this.draft.tokens.display, ["input-output", "total"] as TokensDisplayMode[]);
+			}),
+			cycleRow("Cache", this.draft.tokens.cache, "Show or hide cache details.", () => {
+				this.draft.tokens.cache = nextIn(this.draft.tokens.cache, ["auto", "show", "hide"] as TokensCacheMode[]);
+			}),
 		]);
 	}
 
 	private modelRows(): SettingRow[] {
 		return this.segmentRows("model", [
-			{
-				label: "Provider label",
-				value: this.draft.display.showProvider,
-				hint: "Show provider name.",
-				kind: "cycle",
-				mutate: () => {
-					this.draft.display.showProvider = nextIn(this.draft.display.showProvider, ["auto", "always", "never"] as const);
-				},
-			},
-			{
-				label: "Thinking label",
-				value: this.draft.model.showThinking,
-				hint: "Show thinking level.",
-				kind: "cycle",
-				mutate: () => {
-					this.draft.model.showThinking = nextIn(this.draft.model.showThinking, ["auto", "always", "never"] as ModelThinkingMode[]);
-				},
-			},
+			cycleRow("Provider label", this.draft.display.showProvider, "Show provider name.", () => {
+				this.draft.display.showProvider = nextIn(this.draft.display.showProvider, ["auto", "always", "never"] as const);
+			}),
+			cycleRow("Thinking label", this.draft.model.showThinking, "Show thinking level.", () => {
+				this.draft.model.showThinking = nextIn(this.draft.model.showThinking, ["auto", "always", "never"] as ModelThinkingMode[]);
+			}),
 		]);
 	}
 
 	private gitRows(): SettingRow[] {
 		return this.segmentRows("git", [
-			{
-				label: "Dirty marker",
-				value: onOff(this.draft.git.showDirty),
-				hint: "Conflicts always stay visible.",
-				kind: "toggle",
-				mutate: () => {
-					this.draft.git.showDirty = !this.draft.git.showDirty;
-				},
-			},
-			{
-				label: "Ahead / behind",
-				value: onOff(this.draft.git.showAheadBehind),
-				hint: "Show upstream counts.",
-				kind: "toggle",
-				mutate: () => {
-					this.draft.git.showAheadBehind = !this.draft.git.showAheadBehind;
-				},
-			},
-			{
-				label: "SHA",
-				value: this.draft.git.shaMode,
-				hint: "Keep branches quiet unless enabled.",
-				kind: "cycle",
-				mutate: () => {
-					this.draft.git.shaMode = nextIn(this.draft.git.shaMode, ["off", "detached", "always"] as GitShaMode[]);
-				},
-			},
-			{
-				label: "Polling",
-				value: formatPolling(this.draft.git.pollIntervalMs),
-				hint: "Check external Git changes.",
-				kind: "cycle",
-				mutate: () => {
-					this.draft.git.pollIntervalMs = nextNumber(this.draft.git.pollIntervalMs, POLL_INTERVALS);
-				},
-			},
+			toggleRow("Dirty marker", this.draft.git.showDirty, "Conflicts always stay visible.", () => {
+				this.draft.git.showDirty = !this.draft.git.showDirty;
+			}),
+			toggleRow("Ahead / behind", this.draft.git.showAheadBehind, "Show upstream counts.", () => {
+				this.draft.git.showAheadBehind = !this.draft.git.showAheadBehind;
+			}),
+			cycleRow("SHA", this.draft.git.shaMode, "Keep branches quiet unless enabled.", () => {
+				this.draft.git.shaMode = nextIn(this.draft.git.shaMode, ["off", "detached", "always"] as GitShaMode[]);
+			}),
+			cycleRow("Polling", formatPolling(this.draft.git.pollIntervalMs), "Check external Git changes.", () => {
+				this.draft.git.pollIntervalMs = nextNumber(this.draft.git.pollIntervalMs, POLL_INTERVALS);
+			}),
 		]);
 	}
 
 	private segmentRows(id: SegmentId, rows: SettingRow[]): SettingRow[] {
 		const segment = this.draft.segments.find((s) => s.id === id);
 		return [
-			{
-				label: "Enabled",
-				value: onOff(Boolean(segment?.enabled)),
-				hint: "Show or hide this segment.",
-				kind: "toggle",
-				mutate: () => {
-					this.draft = toggleSegment(this.draft, id);
-				},
-			},
+			toggleRow("Enabled", Boolean(segment?.enabled), "Show or hide this segment.", () => {
+				this.draft = toggleSegment(this.draft, id);
+			}),
 			...rows,
 		];
 	}

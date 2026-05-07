@@ -1,4 +1,5 @@
 import { truncateToWidth, visibleWidth } from "@mariozechner/pi-tui";
+import { formatWorkspaceLabel } from "./format.js";
 import { ICONS, PALETTES, fg } from "./palette.js";
 import { SEGMENT_BY_ID, renderSegment } from "./segments.js";
 import type {
@@ -62,30 +63,37 @@ function renderEnabledSegments(
 	return { palette, segments: rendered };
 }
 
-function joinSegments(palette: GlancePalette, segments: SegmentRenderResult[]): string {
-	if (segments.length === 0) return "";
-	return `${segments
-		.map((segment) => applyInlineSegmentStyle(segment, palette, segment.text))
-		.join(fg(palette.separator, " · "))}${RESET}`;
+interface JoinedSegments {
+	text: string;
+	width: number;
 }
 
-function fitSegments(palette: GlancePalette, segments: SegmentRenderResult[], width: number): SegmentRenderResult[] {
+function joinSegments(palette: GlancePalette, segments: SegmentRenderResult[]): JoinedSegments {
+	if (segments.length === 0) return { text: "", width: 0 };
+	const text = `${segments
+		.map((segment) => applyInlineSegmentStyle(segment, palette, segment.text))
+		.join(fg(palette.separator, " · "))}${RESET}`;
+	return { text, width: visibleWidth(text) };
+}
+
+function fitSegments(palette: GlancePalette, segments: SegmentRenderResult[], width: number): JoinedSegments {
 	const fitted = [...segments];
-	while (fitted.length > 1 && visibleWidth(joinSegments(palette, fitted)) > width) {
+	let joined = joinSegments(palette, fitted);
+	while (fitted.length > 1 && joined.width > width) {
 		fitted.pop();
+		joined = joinSegments(palette, fitted);
 	}
-	return fitted;
+	return joined;
 }
 
 export function renderGlanceLine(state: GlanceState, config: GlanceConfig, width: number, providerCount = state.providers.availableCount): string {
 	if (!config.enabled) return "";
 	const { palette, segments } = renderEnabledSegments(state, config, width, providerCount);
-	const fitted = fitSegments(palette, segments, width);
-	let line = joinSegments(palette, fitted);
-	if (visibleWidth(line) > width) {
-		line = truncateToWidth(line, width, fg(palette.dim, "…"));
+	const line = fitSegments(palette, segments, width);
+	if (line.width > width) {
+		return truncateToWidth(line.text, width, fg(palette.dim, "…"));
 	}
-	return line;
+	return line.text;
 }
 
 interface InputSurfaceRenderOptions {
@@ -157,8 +165,10 @@ export function renderInputSurface(
 	const minRows = Math.max(2, Math.min(4, config.editor.minContentRows));
 	const contentLines = options.contentLines ?? [""];
 	const rows = Math.max(minRows, contentLines.length);
-	const rawTitle = options.showTitle === false ? "" : ` ${state.workspace.name} `;
-	const title = rawTitle ? truncateToWidth(rawTitle, Math.max(1, Math.min(32, Math.floor(innerWidth * 0.35))), "…") : "";
+	const maxTitleWidth = Math.max(1, Math.min(48, Math.floor(innerWidth * 0.42)));
+	const workspaceLabel = formatWorkspaceLabel(state.workspace.path, state.workspace.name, config.display.workspaceLabel, Math.max(1, maxTitleWidth - 2), safeWidth);
+	const rawTitle = options.showTitle === false ? "" : ` ${workspaceLabel} `;
+	const title = rawTitle ? truncateToWidth(rawTitle, maxTitleWidth, "…") : "";
 	const statusBudget = Math.max(0, innerWidth - (title ? visibleWidth(title) + 3 : 1));
 	const status = renderGlanceLine(state, config, statusBudget, state.providers.availableCount);
 	const statusWidth = visibleWidth(status);

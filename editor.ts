@@ -2,7 +2,7 @@ import { CustomEditor, type KeybindingsManager } from "@mariozechner/pi-coding-a
 import { truncateToWidth, visibleWidth, type EditorOptions, type EditorTheme, type TUI } from "@mariozechner/pi-tui";
 import { PALETTES, fg } from "./palette.js";
 import { renderGlanceLine } from "./renderer.js";
-import { stripControls } from "./format.js";
+import { formatWorkspaceLabel, stripControls } from "./format.js";
 import type { GlanceConfig, GlanceState } from "./types.js";
 
 const CONTENT_PADDING_X = 1;
@@ -53,6 +53,11 @@ function normalizeRenderedLine(line: string, width: number): string {
 function indentAutocompleteLine(line: string, width: number): string {
 	const indent = " ".repeat(Math.min(AUTOCOMPLETE_INDENT, Math.max(0, width - 1)));
 	return normalizeRenderedLine(`${indent}${line}`, width);
+}
+
+interface TitleLayout {
+	line: string;
+	width: number;
 }
 
 export class GlanceEditor extends CustomEditor {
@@ -110,46 +115,61 @@ export class GlanceEditor extends CustomEditor {
 		return fg(isFocused ? palette.title : palette.dim, text);
 	}
 
+	private titleLayout(width: number, innerWidth: number, original: string, isFocused: boolean): TitleLayout {
+		const scrollIndicator = this.extractScrollIndicator(original, width);
+		if (scrollIndicator) {
+			return {
+				line: this.border(scrollIndicator, isFocused),
+				width: visibleWidth(scrollIndicator),
+			};
+		}
+
+		if (innerWidth < 16) {
+			return {
+				line: this.border(BORDER.horizontal, isFocused),
+				width: visibleWidth(BORDER.horizontal),
+			};
+		}
+
+		const config = this.getConfig();
+		const state = this.getState();
+		const maxTitleWidth = Math.max(1, Math.min(48, Math.floor(innerWidth * 0.42)));
+		const workspaceName = formatWorkspaceLabel(
+			state.workspace.path,
+			state.workspace.name || "workspace",
+			config.display.workspaceLabel,
+			Math.max(1, maxTitleWidth - 2),
+			width,
+		);
+		const rawTitle = ` ${workspaceName} `;
+		const titleText = truncateToWidth(rawTitle, maxTitleWidth, "…");
+		const line =
+			innerWidth >= 20
+				? `${this.border(BORDER.horizontal, isFocused)}${this.title(rawTitle, isFocused)}`
+				: `${this.border(BORDER.horizontal, isFocused)}${this.title(titleText, isFocused)}`;
+		return { line, width: visibleWidth(line) };
+	}
+
+	private dimStatus(status: string, isFocused: boolean, config: GlanceConfig): string {
+		if (isFocused || !status) return status;
+		return fg(PALETTES[config.theme].dim, stripControls(status));
+	}
+
 	private makeTopBorder(width: number, original: string, isFocused: boolean): string {
 		const config = this.getConfig();
 		const innerWidth = Math.max(0, width - 2);
-		const scrollIndicator = this.extractScrollIndicator(original, width);
-		const workspaceName = this.getState().workspace.name || "workspace";
-		const maxTitleWidth = Math.max(1, Math.min(32, Math.floor(innerWidth * 0.35)));
-		const rawTitle = ` ${workspaceName} `;
-		const titleText = truncateToWidth(rawTitle, maxTitleWidth, "…");
-
-		// Title gets a leading dash if there is enough space (width >= 20)
-		const titleToken = scrollIndicator ?? (innerWidth >= 20 ? `${BORDER.horizontal} ${workspaceName} ` : innerWidth >= 16 ? `${BORDER.horizontal}${titleText}` : BORDER.horizontal);
-		const titleWidth = visibleWidth(titleToken);
-
-		// Status budget leaves room for: leading space, trailing space, and a right cap rail.
-		const statusBudget = Math.max(0, innerWidth - titleWidth - 3);
-		let status = this.renderStatus(statusBudget);
-
-		if (!isFocused && status) {
-			const palette = PALETTES[config.theme];
-			status = fg(palette.dim, stripControls(status));
-		}
-
+		const title = this.titleLayout(width, innerWidth, original, isFocused);
+		const status = this.dimStatus(this.renderStatus(Math.max(0, innerWidth - title.width - 3)), isFocused, config);
 		const statusWidth = visibleWidth(status);
 		const leftGap = status ? " " : "";
 		const rightGap = status ? " " : "";
 		const rightCap = status ? BORDER.horizontal : "";
 		const fillerWidth = Math.max(
 			0,
-			innerWidth - titleWidth - visibleWidth(leftGap) - statusWidth - visibleWidth(rightGap) - visibleWidth(rightCap),
+			innerWidth - title.width - visibleWidth(leftGap) - statusWidth - visibleWidth(rightGap) - visibleWidth(rightCap),
 		);
 
-		const titleLine = scrollIndicator
-			? this.border(titleToken, isFocused)
-			: titleToken.includes(workspaceName)
-				? `${this.border(BORDER.horizontal, isFocused)}${this.title(` ${workspaceName} `, isFocused)}`
-				: titleToken === BORDER.horizontal
-					? this.border(titleToken, isFocused)
-					: `${this.border(BORDER.horizontal, isFocused)}${this.title(titleText, isFocused)}`;
-
-		return `${this.border(BORDER.topLeft, isFocused)}${titleLine}${this.border(BORDER.horizontal.repeat(fillerWidth), isFocused)}${leftGap}${status}${rightGap}${this.border(rightCap, isFocused)}${this.border(BORDER.topRight, isFocused)}`;
+		return `${this.border(BORDER.topLeft, isFocused)}${title.line}${this.border(BORDER.horizontal.repeat(fillerWidth), isFocused)}${leftGap}${status}${rightGap}${this.border(rightCap, isFocused)}${this.border(BORDER.topRight, isFocused)}`;
 	}
 
 	private makeBottomBorder(width: number, original: string, isFocused: boolean): string {

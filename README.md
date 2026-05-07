@@ -62,7 +62,7 @@ That's the only command — opens a calm settings pane with a home screen and pe
 | | | |
 |---|---|---|
 | 🖊️ | **Rounded editor** | Configurable 2 / 3 / 4 min rows, preserves all pi defaults |
-| 🏷️ | **Project title** | Current folder name on the top-left border |
+| 🏷️ | **Project title** | Current folder name, or a safe `~/...` path when enabled |
 | 📊 | **Inline status** | Model · context · tokens · cost · Git status — top-right |
 | ⚙️ | **`/glance` pane** | General settings, segment order, and per-segment detail settings — Save / Cancel |
 | 💤 | **Dim unfocused** | Surface quiets down when you scroll the chat |
@@ -82,6 +82,16 @@ That's the only command — opens a calm settings pane with a home screen and pe
 - **Tokens** — input / output, total, or cache details.
 - **Model** — provider and thinking labels.
 - **Git** — dirty marker, upstream counts, SHA, and polling.
+
+## Workspace title
+
+Open `/glance`, select **General**, and set `Workspace label`:
+
+- `name` — show only the current directory name. This is the default.
+- `smart` — show more path context on wider terminals.
+- `path` — show a safe `~/...` path when possible.
+
+pi-glance never renders full absolute paths in the title: home paths are shortened to `~/...`, and non-home paths use an ellipsis tail such as `…/work/project`.
 
 ## Git status
 

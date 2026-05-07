@@ -13,6 +13,7 @@ import type {
 	SegmentId,
 	TokensCacheMode,
 	TokensDisplayMode,
+	WorkspaceLabelMode,
 } from "./types.js";
 
 const CONFIG_PATH = join(getAgentDir(), "pi-glance", "config.json");
@@ -30,6 +31,7 @@ const SEGMENT_IDS = new Set<SegmentId>(DEFAULT_SEGMENTS.map((s) => s.id));
 const THEMES = new Set<GlanceThemeName>(["light", "dark"]);
 const ICON_MODES = new Set<IconMode>(["nerd", "plain"]);
 const PROVIDER_MODES = new Set<GlanceConfig["display"]["showProvider"]>(["auto", "always", "never"]);
+const WORKSPACE_LABEL_MODES = new Set<WorkspaceLabelMode>(["name", "smart", "path"]);
 const GIT_SHA_MODES = new Set<GitShaMode>(["off", "detached", "always"]);
 const CONTEXT_DISPLAY_MODES = new Set<ContextDisplayMode>(["percent+tokens", "percent", "tokens"]);
 const CONTEXT_UNKNOWN_MODES = new Set<ContextUnknownMode>(["show", "hide"]);
@@ -49,6 +51,7 @@ export function defaultConfig(): GlanceConfig {
 		display: {
 			adaptive: true,
 			showProvider: "auto",
+			workspaceLabel: "name",
 		},
 		segments: DEFAULT_SEGMENTS.map((s) => ({ ...s })),
 		model: {
@@ -162,6 +165,7 @@ function normalizeConfig(raw: unknown): GlanceConfig {
 		display: {
 			adaptive: parseBool(display.adaptive, defaults.display.adaptive),
 			showProvider: parseStringEnum(display.showProvider, PROVIDER_MODES, defaults.display.showProvider),
+			workspaceLabel: parseStringEnum(display.workspaceLabel, WORKSPACE_LABEL_MODES, defaults.display.workspaceLabel),
 		},
 		segments: normalizeSegments(record.segments),
 		model: {
