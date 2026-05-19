@@ -66,10 +66,11 @@ That's the only command — opens a calm settings pane with a real input-surface
 | 📊 | **Inline status** | Model · context · tokens · cost · Git status — top-right |
 | ⚙️ | **`/glance` pane** | General settings, segment order, and per-segment detail settings in a calm grid |
 | 💤 | **Dim unfocused** | Surface quiets down when you scroll the chat |
-| 🎨 | **Themes** | `light`, `dark`, `catppuccin-latte`, and `catppuccin-mocha` |
+| 🎨 | **Themes** | 10 built-in palettes, from Light/Dark to Catppuccin, Nord, Tokyo Night, Gruvbox, Solarized, Rosé Pine, and One Dark |
 
 ## Notes
 
+- To switch themes, open `/glance` → **General** → `Theme`. Built-ins: Light, Dark, Catppuccin Latte/Mocha, Nord, Tokyo Night, Gruvbox Dark, Solarized Dark, Rosé Pine, and One Dark.
 - Icons default to `plain` so pi-glance works with normal terminal fonts.
 - If you use a Nerd Font, open `/glance` and set `Icons` to `nerd` for richer symbols.
 

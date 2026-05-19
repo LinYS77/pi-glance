@@ -1,5 +1,8 @@
+import type { GlanceThemeName } from "./themes.js";
+
+export type { GlanceThemeName } from "./themes.js";
+
 export type SegmentId = "git" | "model" | "context" | "tokens" | "cost";
-export type GlanceThemeName = "light" | "dark" | "catppuccin-latte" | "catppuccin-mocha";
 export type IconMode = "nerd" | "plain";
 export type WidthMode = "full" | "compact" | "minimal";
 export type GitStatus = "clean" | "dirty" | "conflict" | "unknown";
@@ -127,7 +130,6 @@ interface SegmentPalette {
 }
 
 export interface GlancePalette {
-	name: GlanceThemeName;
 	text: Rgb;
 	dim: Rgb;
 	warn: Rgb;

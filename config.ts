@@ -1,12 +1,12 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { getAgentDir } from "@mariozechner/pi-coding-agent";
+import { GLANCE_THEME_ID_SET } from "./themes.js";
 import type {
 	ContextDisplayMode,
 	ContextUnknownMode,
 	GitShaMode,
 	GlanceConfig,
-	GlanceThemeName,
 	IconMode,
 	ModelThinkingMode,
 	SegmentConfig,
@@ -28,7 +28,6 @@ const DEFAULT_SEGMENTS: SegmentConfig[] = [
 ];
 
 const SEGMENT_IDS = new Set<SegmentId>(DEFAULT_SEGMENTS.map((s) => s.id));
-const THEMES = new Set<GlanceThemeName>(["light", "dark", "catppuccin-latte", "catppuccin-mocha"]);
 const ICON_MODES = new Set<IconMode>(["nerd", "plain"]);
 const PROVIDER_MODES = new Set<GlanceConfig["display"]["showProvider"]>(["auto", "always", "never"]);
 const WORKSPACE_LABEL_MODES = new Set<WorkspaceLabelMode>(["name", "smart", "path"]);
@@ -98,7 +97,7 @@ function parseBool(value: unknown, fallback: boolean): boolean {
 	return typeof value === "boolean" ? value : fallback;
 }
 
-function parseStringEnum<T extends string>(value: unknown, allowed: Set<T>, fallback: T): T {
+function parseStringEnum<T extends string>(value: unknown, allowed: ReadonlySet<T>, fallback: T): T {
 	return typeof value === "string" && allowed.has(value as T) ? (value as T) : fallback;
 }
 
@@ -142,7 +141,7 @@ function normalizeSegments(value: unknown): SegmentConfig[] {
 	return ordered;
 }
 
-function normalizeConfig(raw: unknown): GlanceConfig {
+export function normalizeConfig(raw: unknown): GlanceConfig {
 	const defaults = defaultConfig();
 	if (!raw || typeof raw !== "object") return defaults;
 	const record = raw as Record<string, unknown>;
@@ -157,7 +156,7 @@ function normalizeConfig(raw: unknown): GlanceConfig {
 	return {
 		version: CONFIG_VERSION,
 		enabled: parseBool(record.enabled, defaults.enabled),
-		theme: parseStringEnum(record.theme, THEMES, defaults.theme),
+		theme: parseStringEnum(record.theme, GLANCE_THEME_ID_SET, defaults.theme),
 		icons: parseStringEnum(record.icons, ICON_MODES, defaults.icons),
 		editor: {
 			minContentRows: parseIntInRange(editor.minContentRows, defaults.editor.minContentRows, 2, 4),

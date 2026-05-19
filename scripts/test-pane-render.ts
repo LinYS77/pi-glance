@@ -3,6 +3,7 @@ import { visibleWidth, type Component, type TUI } from "@mariozechner/pi-tui";
 import type { Theme } from "@mariozechner/pi-coding-agent";
 import { defaultConfig } from "../config.js";
 import { showGlancePane } from "../pane.js";
+import { GLANCE_THEMES, themeLabel } from "../themes.js";
 import { testState } from "./helpers.js";
 import type { GlanceConfig, GlanceState } from "../types.js";
 
@@ -96,6 +97,24 @@ function assertLineContainsAll(text: string, fragments: string[], message?: stri
 	assert.ok(found, message ?? `expected one render line to include ${fragments.map((f) => JSON.stringify(f)).join(", ")}`);
 }
 
+function findLineContaining(text: string, fragment: string): string {
+	const line = text.split("\n").find((candidate) => candidate.includes(fragment));
+	assert.ok(line, `expected render to include a line with ${JSON.stringify(fragment)}`);
+	return line;
+}
+
+function assertNoRawThemeIds(text: string, context: string): void {
+	for (const { id } of GLANCE_THEMES) {
+		assert.ok(!text.includes(id), `${context} should not show raw theme id ${id}`);
+	}
+}
+
+function assertThemeRow(text: string, label: string): void {
+	const line = findLineContaining(text, "Theme");
+	assert.ok(line.includes(label), `Theme row should show ${label}`);
+	assertNoRawThemeIds(line, "Theme row");
+}
+
 function helpIndex(lines: string[]): number {
 	const index = lines.findIndex((line) => line.includes("[←→↑↓] move"));
 	assert.notEqual(index, -1, "help line should be rendered");
@@ -121,12 +140,17 @@ const themePane = await makePane();
 press(themePane.component, "\x1b[C");
 press(themePane.component, "\x1b[B");
 press(themePane.component, "\x1b[C");
-press(themePane.component, "\r");
-assertLineContainsAll(plainText(themePane.component), ["Theme", "dark"], "theme should cycle to dark");
-press(themePane.component, "\r");
-assertLineContainsAll(plainText(themePane.component), ["Theme", "catppuccin-latte"], "theme should cycle to Catppuccin Latte");
-press(themePane.component, "\r");
-assertLineContainsAll(plainText(themePane.component), ["Theme", "catppuccin-mocha"], "theme should cycle to Catppuccin Mocha");
+for (let i = 1; i <= GLANCE_THEMES.length; i++) {
+	const expectedTheme = GLANCE_THEMES[i % GLANCE_THEMES.length]!;
+	const expectedLabel = themeLabel(expectedTheme.id);
+	press(themePane.component, "\r");
+	const themeText = plainText(themePane.component);
+	assertThemeRow(themeText, expectedLabel);
+	if (expectedTheme.id !== "light") {
+		assertContains(themeText, `Theme → ${expectedLabel}. Press S to save.`, "theme status should use friendly label");
+		assertNoRawThemeIds(findLineContaining(themeText, "Theme →"), "Theme status");
+	}
+}
 
 const gridPane = await makePane();
 press(gridPane.component, "\x1b[B");

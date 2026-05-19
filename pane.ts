@@ -1,6 +1,7 @@
 import { Key, matchesKey, truncateToWidth, visibleWidth, type Component, type TUI } from "@mariozechner/pi-tui";
 import type { Theme } from "@mariozechner/pi-coding-agent";
 import { cloneConfig, defaultConfig, moveSegment, toggleSegment } from "./config.js";
+import { GLANCE_THEME_IDS, themeLabel } from "./themes.js";
 import { renderInputSurface, renderInputSurfacePreview } from "./renderer.js";
 import { SEGMENT_BY_ID } from "./segments.js";
 import type {
@@ -9,7 +10,6 @@ import type {
 	GitShaMode,
 	GlanceConfig,
 	GlanceState,
-	GlanceThemeName,
 	IconMode,
 	ModelThinkingMode,
 	SegmentId,
@@ -336,8 +336,8 @@ class GlanceConfigPane implements Component {
 			toggleRow("Enabled", this.draft.enabled, "Temporarily disable pi-glance.", () => {
 				this.draft.enabled = !this.draft.enabled;
 			}),
-			cycleRow("Theme", this.draft.theme, "Switch the palette.", () => {
-				this.draft.theme = nextIn(this.draft.theme, ["light", "dark", "catppuccin-latte", "catppuccin-mocha"] as GlanceThemeName[]);
+			cycleRow("Theme", themeLabel(this.draft.theme), "Switch the palette.", () => {
+				this.draft.theme = nextIn(this.draft.theme, GLANCE_THEME_IDS);
 			}),
 			cycleRow("Icons", this.draft.icons, "Plain works without Nerd Font.", () => {
 				this.draft.icons = nextIn(this.draft.icons, ["plain", "nerd"] as IconMode[]);
