@@ -1,5 +1,5 @@
-import type { ReadonlyFooterDataProvider } from "@mariozechner/pi-coding-agent";
-import type { Component } from "@mariozechner/pi-tui";
+import type { ReadonlyFooterDataProvider } from "@earendil-works/pi-coding-agent";
+import type { Component } from "@earendil-works/pi-tui";
 import type { GlanceState } from "./types.js";
 
 export class GlanceFooterBridge implements Component {

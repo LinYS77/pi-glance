@@ -1,5 +1,5 @@
-import type { AssistantMessage } from "@mariozechner/pi-ai";
-import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
+import type { AssistantMessage } from "@earendil-works/pi-ai";
+import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { displayDirectory, shortenModel } from "./format.js";
 import { emptyGitSnapshot } from "./git.js";
 import type { GitSnapshot, GlanceConfig, GlanceState, UsageTotals } from "./types.js";

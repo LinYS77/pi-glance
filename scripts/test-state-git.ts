@@ -2,7 +2,7 @@ import { strict as assert } from "node:assert";
 import { parseGitStatus } from "../git.js";
 import { refreshWorkspace, setGitSnapshot } from "../state.js";
 import { testState } from "./helpers.js";
-import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
+import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 function stateFor(cwd: string) {
 	return testState({ workspace: { name: cwd.split("/").pop() || cwd, path: cwd } });

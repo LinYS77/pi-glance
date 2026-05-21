@@ -1,4 +1,4 @@
-import { truncateToWidth, visibleWidth } from "@mariozechner/pi-tui";
+import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import { formatWorkspaceLabel } from "./format.js";
 import { ICONS, PALETTES, fg } from "./palette.js";
 import { SEGMENT_BY_ID, renderSegment } from "./segments.js";

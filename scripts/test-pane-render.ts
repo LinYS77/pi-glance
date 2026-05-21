@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert";
-import { visibleWidth, type Component, type TUI } from "@mariozechner/pi-tui";
-import type { Theme } from "@mariozechner/pi-coding-agent";
+import { visibleWidth, type Component, type TUI } from "@earendil-works/pi-tui";
+import type { Theme } from "@earendil-works/pi-coding-agent";
 import { defaultConfig } from "../config.js";
 import { showGlancePane } from "../pane.js";
 import { GLANCE_THEMES, themeLabel } from "../themes.js";

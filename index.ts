@@ -1,4 +1,4 @@
-import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { loadConfig, saveConfig } from "./config.js";
 import { GlanceEditor } from "./editor.js";
 import { GlanceFooterBridge } from "./footer-bridge.js";

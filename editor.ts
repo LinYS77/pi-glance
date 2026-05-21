@@ -1,5 +1,5 @@
-import { CustomEditor, type KeybindingsManager } from "@mariozechner/pi-coding-agent";
-import { truncateToWidth, visibleWidth, type EditorOptions, type EditorTheme, type TUI } from "@mariozechner/pi-tui";
+import { CustomEditor, type KeybindingsManager } from "@earendil-works/pi-coding-agent";
+import { truncateToWidth, visibleWidth, type EditorOptions, type EditorTheme, type TUI } from "@earendil-works/pi-tui";
 import { PALETTES, fg } from "./palette.js";
 import { renderGlanceLine } from "./renderer.js";
 import { formatWorkspaceLabel, stripControls } from "./format.js";

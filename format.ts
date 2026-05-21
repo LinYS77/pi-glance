@@ -1,6 +1,6 @@
 import { homedir } from "node:os";
 import { basename } from "node:path";
-import { visibleWidth } from "@mariozechner/pi-tui";
+import { visibleWidth } from "@earendil-works/pi-tui";
 import type { WorkspaceLabelMode } from "./types.js";
 
 const SMART_NAME_MAX_SURFACE_WIDTH = 83;

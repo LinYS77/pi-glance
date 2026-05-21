@@ -1,5 +1,5 @@
-import { Key, matchesKey, truncateToWidth, visibleWidth, type Component, type TUI } from "@mariozechner/pi-tui";
-import type { Theme } from "@mariozechner/pi-coding-agent";
+import { Key, matchesKey, truncateToWidth, visibleWidth, type Component, type TUI } from "@earendil-works/pi-tui";
+import type { Theme } from "@earendil-works/pi-coding-agent";
 import { cloneConfig, defaultConfig, moveSegment, toggleSegment } from "./config.js";
 import { GLANCE_THEME_IDS, themeLabel } from "./themes.js";
 import { renderInputSurface, renderInputSurfacePreview } from "./renderer.js";
