@@ -119,28 +119,32 @@ function plainLine(parts: string[], width: number): string {
 }
 
 function makePaneLayout(width: number): PaneLayout {
-	const contentWidth = Math.max(PANE_SPACING.minContentWidth, width - PANE_SPACING.contentInset);
+	const outerPaddingWidth = width < 72 ? 1 : PANE_SPACING.outerPadding;
+	const contentWidth = Math.max(PANE_SPACING.minContentWidth, width - outerPaddingWidth * 2);
 	const categoryWidth = PANE_SPACING.categoryWidth;
-	const columnGapWidth = PANE_SPACING.columnGap;
+	const columnGapWidth = width < 72 ? 2 : PANE_SPACING.columnGap;
 	const asideFrameWidth = PANE_SPACING.asideGap + visibleWidth(PANE_SPACING.asideSeparator) + 1;
 	const settingLabelWidth = PANE_SPACING.settingLabelWidth;
-	const valueRoom = contentWidth - categoryWidth - columnGapWidth - settingLabelWidth - columnGapWidth;
+	const labelWidthWithCursor = settingLabelWidth + 2;
+	const valueRoom = contentWidth - categoryWidth - columnGapWidth - labelWidthWithCursor - columnGapWidth;
 	const valueWidth = Math.max(PANE_SPACING.minValueWidth, Math.min(PANE_SPACING.valueWidth, valueRoom));
-	const settingsWidth = settingLabelWidth + columnGapWidth + valueWidth;
+	const settingsWidth = labelWidthWithCursor + columnGapWidth + valueWidth;
 	const coreWidth = categoryWidth + columnGapWidth + settingsWidth;
 	const asideRoom = contentWidth - coreWidth - asideFrameWidth;
 	const showAside = asideRoom >= PANE_SPACING.minAsideWidth;
-	const asideWidth = showAside ? Math.min(PANE_SPACING.asideWidth, asideRoom) : 0;
+	const maxAsideWidth = width >= 120 ? 48 : PANE_SPACING.asideWidth;
+	const asideWidth = showAside ? Math.min(maxAsideWidth, asideRoom) : 0;
+
 	return {
 		width,
 		contentWidth,
-		outerPadding: " ".repeat(PANE_SPACING.outerPadding),
+		outerPadding: " ".repeat(outerPaddingWidth),
 		categoryWidth,
 		settingLabelWidth,
 		valueWidth,
 		settingsWidth,
 		asideWidth,
-		columnGap: " ".repeat(PANE_SPACING.columnGap),
+		columnGap: " ".repeat(columnGapWidth),
 		asideGap: " ".repeat(PANE_SPACING.asideGap),
 		asideSeparator: PANE_SPACING.asideSeparator,
 		showAside,
@@ -253,7 +257,7 @@ class GlanceConfigPane implements Component {
 		return !sameConfig(this.draft, this.initial);
 	}
 
-	private getViewModel(): GlancePaneViewModel {
+	private getViewModel(width = this.lastRenderedWidth): GlancePaneViewModel {
 		const categories = this.getCategories();
 		const selectedCategory = categories[this.catIndex];
 		const settings = selectedCategory ? this.getSettings(selectedCategory.id) : [];
@@ -281,26 +285,50 @@ class GlanceConfigPane implements Component {
 				valueHasFocus: this.focus === "values",
 			})),
 			selectedHint: settings[this.setIndex]?.hint,
-			help: this.helpShortcuts(),
+			help: this.helpShortcuts(width),
 		};
 	}
 
-	private helpShortcuts(): HelpShortcut[] {
+	private helpShortcuts(width = this.lastRenderedWidth): HelpShortcut[] {
 		const stable: HelpShortcut[] = [
 			{ key: "←→↑↓", label: "move" },
 			{ key: "S", label: "save" },
 			{ key: "R", label: "reset" },
 		];
 
+		const isNarrow = width < 72;
+
 		switch (this.focus) {
 			case "categories":
+				if (isNarrow) {
+					return [
+						{ key: "S", label: "save" },
+						{ key: "J/K", label: "switch" },
+						{ key: "Esc", label: "cancel" },
+					];
+				}
 				return [...stable, { key: "J/K", label: "switch" }, { key: "Esc", label: "cancel" }];
 			case "settings":
+				if (isNarrow) {
+					return [
+						{ key: "S", label: "save" },
+						{ key: "Esc", label: "back" },
+					];
+				}
 				return [...stable, { key: "Esc", label: "back" }];
 			case "values":
+				if (isNarrow) {
+					return [
+						{ key: "S", label: "save" },
+						{ key: "Enter", label: "change" },
+						{ key: "Esc", label: "back" },
+					];
+				}
 				return [...stable, { key: "Enter", label: "change" }, { key: "Esc", label: "back" }];
 		}
 	}
+
+	private lastRenderedWidth = 96;
 
 	private getCategories(): Category[] {
 		return [
@@ -580,7 +608,10 @@ class GlanceConfigPane implements Component {
 			labelTone = colors.dim;
 		}
 
-		const cursor = cat.selected && cat.hasFocus ? colors.accent("› ") : "  ";
+		let cursor = "  ";
+		if (cat.selected) {
+			cursor = cat.hasFocus ? colors.accent("» ") : colors.dim("› ");
+		}
 		return `${cursor}${labelTone(cat.label)}`;
 	}
 
@@ -591,20 +622,25 @@ class GlanceConfigPane implements Component {
 	private renderSettingValue(row: SettingViewModel, colors: PaneColors): string {
 		if (row.kind === "info") return colors.dim(row.value);
 		const valueTone = row.selected && row.valueHasFocus ? colors.accent : row.value === "on" ? colors.success : row.value === "off" ? colors.dim : colors.muted;
-		return valueTone(row.value);
+		let displayValue = row.value;
+		if (row.selected && row.valueHasFocus) {
+			displayValue = `[ ${row.value} ]`;
+		}
+		return valueTone(displayValue);
 	}
 
 	private renderSettingRow(row: SettingViewModel, layout: PaneLayout, colors: PaneColors): string {
 		let labelTone = colors.muted;
 
-		if (row.selected && row.labelHasFocus) {
-			labelTone = colors.accent;
+		if (row.selected) {
+			labelTone = row.labelHasFocus ? colors.accent : colors.muted;
 		} else if (row.kind === "info") {
 			labelTone = colors.dim;
 		}
 
 		const label = truncateToWidth(row.label, layout.settingLabelWidth, "…");
-		const paddedLabel = padRightAnsi(labelTone(label), layout.settingLabelWidth);
+		const cursor = row.selected ? (row.labelHasFocus ? colors.accent("» ") : colors.dim("› ")) : "  ";
+		const paddedLabel = padRightAnsi(`${cursor}${labelTone(label)}`, layout.settingLabelWidth + 2);
 		const gap = row.selected && row.valueHasFocus ? focusGap(layout.columnGap, colors) : layout.columnGap;
 		const valueStr = this.renderSettingValue(row, colors);
 		const value = truncateToWidth(valueStr, layout.valueWidth, "…");
@@ -622,7 +658,7 @@ class GlanceConfigPane implements Component {
 	}
 
 	private renderAsidePane(model: GlancePaneViewModel, layout: PaneLayout, colors: PaneColors): string[] {
-		const hint = model.selectedHint ? truncateToWidth(model.selectedHint, layout.asideWidth, "…") : "";
+		const hint = model.selectedHint ? truncateToWidth(model.selectedHint, layout.asideWidth - 2, "…") : "";
 		return [colors.muted(model.settingsTitle), hint ? colors.dim(`“${hint}”`) : ""];
 	}
 
@@ -645,6 +681,11 @@ class GlanceConfigPane implements Component {
 
 	private renderSettings(lines: string[], model: GlancePaneViewModel, layout: PaneLayout, colors: PaneColors): void {
 		this.renderSettingsColumns(lines, model, layout, colors);
+		if (!layout.showAside && model.selectedHint) {
+			const hint = truncateToWidth(model.selectedHint, layout.contentWidth, "…");
+			lines.push("");
+			lines.push(paneLine(layout, [colors.dim(`“${hint}”`)]));
+		}
 	}
 
 	private renderFooter(lines: string[], model: GlancePaneViewModel, layout: PaneLayout, colors: PaneColors): void {
@@ -654,9 +695,10 @@ class GlanceConfigPane implements Component {
 	}
 
 	render(width: number): string[] {
+		this.lastRenderedWidth = width;
 		const colors = makePaneColors(this.theme);
 		const layout = makePaneLayout(width);
-		const model = this.getViewModel();
+		const model = this.getViewModel(width);
 		const lines: string[] = [];
 
 		if (model.status) lines.push(paneLine(layout, [colors.dim(model.status)]));

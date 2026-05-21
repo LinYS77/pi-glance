@@ -127,7 +127,7 @@ assertContains(initial, "✓ Saved", "initial pane should be clean");
 assertContains(initial, "Ask pi to improve the input surface...", "preview should render");
 assertNotContains(initial, "PREVIEW", "preview label should stay removed");
 assertContains(initial, "Enabled", "settings section should render");
-assertContains(initial, "› General", "general category should be selected initially");
+assertContains(initial, "» General", "general category should be selected initially");
 assertContains(initial, "Git", "git category should render");
 assertContains(initial, "Tokens", "tokens category should render");
 assertContains(initial, "[←→↑↓] move  ·  [S] save  ·  [R] reset", "stable help shortcuts should stay first");
@@ -155,17 +155,17 @@ for (let i = 1; i <= GLANCE_THEMES.length; i++) {
 const gridPane = await makePane();
 press(gridPane.component, "\x1b[B");
 press(gridPane.component, "\x1b[C");
-assertContains(plainText(gridPane.component), "› Dirty marker", "right arrow should move to the same visual row in the setting column");
+assertContains(plainText(gridPane.component), "» Dirty marker", "right arrow should move to the same visual row in the setting column");
 press(gridPane.component, "\x1b[D");
-assertContains(plainText(gridPane.component), "› Git", "left arrow should return to the same visual row in the category column");
+assertContains(plainText(gridPane.component), "» Git", "left arrow should return to the same visual row in the category column");
 
 const gridSettingPane = await makePane();
 press(gridSettingPane.component, "\x1b[C");
 press(gridSettingPane.component, "\x1b[B");
 press(gridSettingPane.component, "\x1b[B");
-assertContains(plainText(gridSettingPane.component), "› Icons", "down arrow should move within the setting column");
+assertContains(plainText(gridSettingPane.component), "» Icons", "down arrow should move within the setting column");
 press(gridSettingPane.component, "\x1b[D");
-assertContains(plainText(gridSettingPane.component), "› Context", "left arrow should move to the category on the same visual row");
+assertContains(plainText(gridSettingPane.component), "» Context", "left arrow should move to the category on the same visual row");
 
 const contextPane = await makePane();
 press(contextPane.component, "\x1b[B");
@@ -334,10 +334,37 @@ press(backPane.component, "\x1b[C");
 press(backPane.component, "\x1b[D");
 assertContains(plainText(backPane.component), "[J/K] switch", "left arrow should return from settings to categories");
 
-for (const width of [72, 96, 120, 160]) {
+// Test selection markers and wrappers across category/settings/value focus
+const selPane = await makePane();
+// Focus starts on general category
+const selText1 = plainText(selPane.component);
+assertContains(selText1, "» General", "active category column has focused category marked with '»'");
+assertContains(selText1, "  Git", "inactive categories have spaces");
+
+// Move to settings column (the label 'Enabled')
+press(selPane.component, "\x1b[C");
+const selText2 = plainText(selPane.component);
+assertContains(selText2, "› General", "inactive selected category has '›' marker");
+assertContains(selText2, "» Enabled", "active selected setting has '»' marker");
+
+// Move to values column (the value 'on')
+press(selPane.component, "\x1b[C");
+const selText3 = plainText(selPane.component);
+assertContains(selText3, "› General", "inactive selected category still has '›' marker");
+assertContains(selText3, "› Enabled", "inactive selected setting row has '›' marker");
+assertContains(selText3, "[ on ]", "active focused value has lightweight wrapper '[ value ]'");
+
+for (const width of [56, 64, 72, 96, 120, 160]) {
 	const widthPane = await makePane();
 	const lines = widthPane.component.render(width);
 	assert.ok(lines.length > 0, `render should produce lines at width ${width}`);
+	const fullText = lines.map(stripAnsi).join("\n");
+	if (width < 96) {
+		assertContains(fullText, "“Temporarily disable pi-glance.”", `narrow width ${width} should render inline hint`);
+	} else {
+		assert.ok(fullText.includes("Temporarily disable"), `standard width ${width} should render hint`);
+	}
+
 	for (const line of lines) {
 		assert.ok(visibleWidth(line) <= width, `line should fit width ${width}: ${stripAnsi(line)}`);
 	}

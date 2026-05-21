@@ -165,6 +165,13 @@ export default function piGlance(pi: ExtensionAPI): void {
 		renderNow();
 	});
 
+	pi.on("thinking_level_select", async (_event, ctx) => {
+		await ensureConfig();
+		ensureState(ctx);
+		refreshThinkingLevel(ctx);
+		renderNow();
+	});
+
 	pi.on("turn_start", async (_event, ctx) => {
 		await ensureConfig();
 		ensureState(ctx);
