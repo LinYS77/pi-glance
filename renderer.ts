@@ -1,6 +1,14 @@
 import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
-import { formatWorkspaceLabel } from "./format.js";
 import { ICONS, PALETTES, fg } from "./palette.js";
+import {
+	planSurfaceBottomFrame,
+	planSurfaceRow,
+	planSurfaceStatusBudget,
+	planSurfaceTopFrame,
+	planWorkspaceTitle,
+	renderSurfaceChunks,
+	surfaceMetrics,
+} from "./surface-layout.js";
 import { SEGMENT_BY_ID, renderSegment } from "./segments.js";
 import type {
 	GlanceConfig,
@@ -122,10 +130,6 @@ function dimColor(config: GlanceConfig, text: string): string {
 	return fg(palette.dim, text);
 }
 
-function padPlain(text: string, width: number): string {
-	return `${text}${" ".repeat(Math.max(0, width - visibleWidth(text)))}`;
-}
-
 export function renderInputSurfacePreview(config: GlanceConfig, width: number, options: InputSurfaceRenderOptions = {}): string[] {
 	const state: GlanceState = {
 		workspace: { name: "pi-glance", path: "/Users/winnie/projects/pi-glance" },
@@ -160,37 +164,51 @@ export function renderInputSurface(
 	width: number,
 	options: InputSurfaceRenderOptions = {},
 ): string[] {
-	const safeWidth = Math.max(4, width);
-	const innerWidth = Math.max(0, safeWidth - 2);
+	const { safeWidth, innerWidth } = surfaceMetrics(width);
 	const minRows = Math.max(2, Math.min(4, config.editor.minContentRows));
 	const contentLines = options.contentLines ?? [""];
 	const rows = Math.max(minRows, contentLines.length);
-	const maxTitleWidth = Math.max(1, Math.min(48, Math.floor(innerWidth * 0.42)));
-	const workspaceLabel = formatWorkspaceLabel(state.workspace.path, state.workspace.name, config.display.workspaceLabel, Math.max(1, maxTitleWidth - 2), safeWidth);
-	const rawTitle = options.showTitle === false ? "" : ` ${workspaceLabel} `;
-	const title = rawTitle ? truncateToWidth(rawTitle, maxTitleWidth, "…") : "";
-	const statusBudget = Math.max(0, innerWidth - (title ? visibleWidth(title) + 3 : 1));
+	const title = planWorkspaceTitle({
+		workspacePath: state.workspace.path,
+		workspaceName: state.workspace.name,
+		mode: config.display.workspaceLabel,
+		innerWidth,
+		surfaceWidth: safeWidth,
+		showTitle: options.showTitle,
+	});
+	const statusBudget = planSurfaceStatusBudget(innerWidth, title.width);
 	const status = renderGlanceLine(state, config, statusBudget, state.providers.availableCount);
-	const statusWidth = visibleWidth(status);
-	const leftTitle = title ? `${borderColor(config, "─")}${titleColor(config, title)}` : borderColor(config, "─");
-	const leftTitleWidth = visibleWidth(leftTitle);
-	const gap = status ? " " : "";
-	const rightGap = status ? " " : "";
-	const rightCap = status ? borderColor(config, "─") : "";
-	const fillerWidth = Math.max(
-		0,
-		innerWidth - leftTitleWidth - visibleWidth(gap) - statusWidth - visibleWidth(rightGap) - visibleWidth(rightCap),
-	);
-	const top = `${borderColor(config, "╭")}${leftTitle}${borderColor(config, "─".repeat(fillerWidth))}${gap}${status}${rightGap}${rightCap}${borderColor(config, "╮")}`;
+	const top = renderSurfaceChunks(planSurfaceTopFrame({ width: safeWidth, left: title, status }).chunks, {
+		border: (text) => borderColor(config, text),
+		title: (text) => titleColor(config, text),
+		status: (text) => text,
+		text: (text) => text,
+		dim: (text) => dimColor(config, text),
+	});
 	const lines = [truncateToWidth(top, safeWidth, borderColor(config, "…"))];
 	for (let i = 0; i < rows; i++) {
 		const raw = contentLines[i] ?? "";
-		const prefix = i === 0 && options.focused ? dimColor(config, "› ") : "  ";
-		const contentBudget = Math.max(0, innerWidth - visibleWidth(prefix));
-		const content = truncateToWidth(raw, contentBudget, dimColor(config, "…"));
-		const padded = padPlain(`${prefix}${textColor(config, content)}`, innerWidth);
-		lines.push(`${borderColor(config, "│")}${padded}${borderColor(config, "│")}`);
+		const focusedPrefix = i === 0 && options.focused;
+		const row = planSurfaceRow({
+			width: safeWidth,
+			text: raw,
+			prefix: focusedPrefix ? "› " : "  ",
+			ellipsis: dimColor(config, "…"),
+			prefixRole: focusedPrefix ? "dim" : "text",
+		});
+		lines.push(
+			renderSurfaceChunks(row.chunks, {
+				border: (text) => borderColor(config, text),
+				content: (text) => textColor(config, text),
+				dim: (text) => dimColor(config, text),
+				text: (text) => text,
+			}),
+		);
 	}
-	lines.push(`${borderColor(config, "╰")}${borderColor(config, "─".repeat(innerWidth))}${borderColor(config, "╯")}`);
+	lines.push(
+		renderSurfaceChunks(planSurfaceBottomFrame({ width: safeWidth }).chunks, {
+			border: (text) => borderColor(config, text),
+		}),
+	);
 	return lines;
 }

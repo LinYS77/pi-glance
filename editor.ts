@@ -1,25 +1,22 @@
 import { CustomEditor, type KeybindingsManager } from "@earendil-works/pi-coding-agent";
 import { truncateToWidth, visibleWidth, type EditorOptions, type EditorTheme, type TUI } from "@earendil-works/pi-tui";
+import { stripControls } from "./format.js";
 import { PALETTES, fg } from "./palette.js";
 import { renderGlanceLine } from "./renderer.js";
-import { formatWorkspaceLabel, stripControls } from "./format.js";
+import {
+	formatSurfaceScrollIndicator,
+	planSurfaceBottomFrame,
+	planSurfaceRow,
+	planSurfaceStatusBudget,
+	planSurfaceTopFrame,
+	planWorkspaceTitle,
+	renderSurfaceChunks,
+	safeSurfaceWidth,
+	surfaceMetrics,
+	SURFACE_AUTOCOMPLETE_INDENT,
+	SURFACE_CONTENT_PADDING_X,
+} from "./surface-layout.js";
 import type { GlanceConfig, GlanceState } from "./types.js";
-
-const CONTENT_PADDING_X = 1;
-const AUTOCOMPLETE_INDENT = 1 + CONTENT_PADDING_X;
-
-const BORDER = {
-	topLeft: "╭",
-	topRight: "╮",
-	bottomLeft: "╰",
-	bottomRight: "╯",
-	vertical: "│",
-	horizontal: "─",
-};
-
-function ansiPadRight(text: string, width: number): string {
-	return `${text}${" ".repeat(Math.max(0, width - visibleWidth(text)))}`;
-}
 
 function stripBorderColor(line: string, borderColor: (text: string) => string): string {
 	const sample = borderColor("─");
@@ -51,13 +48,8 @@ function normalizeRenderedLine(line: string, width: number): string {
 }
 
 function indentAutocompleteLine(line: string, width: number): string {
-	const indent = " ".repeat(Math.min(AUTOCOMPLETE_INDENT, Math.max(0, width - 1)));
+	const indent = " ".repeat(Math.min(SURFACE_AUTOCOMPLETE_INDENT, Math.max(0, width - 1)));
 	return normalizeRenderedLine(`${indent}${line}`, width);
-}
-
-interface TitleLayout {
-	line: string;
-	width: number;
 }
 
 export class GlanceEditor extends CustomEditor {
@@ -115,39 +107,22 @@ export class GlanceEditor extends CustomEditor {
 		return fg(isFocused ? palette.title : palette.dim, text);
 	}
 
-	private titleLayout(width: number, innerWidth: number, original: string, isFocused: boolean): TitleLayout {
+	private topLeftPlan(width: number, innerWidth: number, original: string) {
 		const scrollIndicator = this.extractScrollIndicator(original, width);
 		if (scrollIndicator) {
-			return {
-				line: this.border(scrollIndicator, isFocused),
-				width: visibleWidth(scrollIndicator),
-			};
-		}
-
-		if (innerWidth < 16) {
-			return {
-				line: this.border(BORDER.horizontal, isFocused),
-				width: visibleWidth(BORDER.horizontal),
-			};
+			const chunks = [{ role: "border" as const, text: scrollIndicator }];
+			return { chunks, width: visibleWidth(scrollIndicator) };
 		}
 
 		const config = this.getConfig();
 		const state = this.getState();
-		const maxTitleWidth = Math.max(1, Math.min(48, Math.floor(innerWidth * 0.42)));
-		const workspaceName = formatWorkspaceLabel(
-			state.workspace.path,
-			state.workspace.name || "workspace",
-			config.display.workspaceLabel,
-			Math.max(1, maxTitleWidth - 2),
-			width,
-		);
-		const rawTitle = ` ${workspaceName} `;
-		const titleText = truncateToWidth(rawTitle, maxTitleWidth, "…");
-		const line =
-			innerWidth >= 20
-				? `${this.border(BORDER.horizontal, isFocused)}${this.title(rawTitle, isFocused)}`
-				: `${this.border(BORDER.horizontal, isFocused)}${this.title(titleText, isFocused)}`;
-		return { line, width: visibleWidth(line) };
+		return planWorkspaceTitle({
+			workspacePath: state.workspace.path,
+			workspaceName: state.workspace.name,
+			mode: config.display.workspaceLabel,
+			innerWidth,
+			surfaceWidth: width,
+		});
 	}
 
 	private dimStatus(status: string, isFocused: boolean, config: GlanceConfig): string {
@@ -157,46 +132,47 @@ export class GlanceEditor extends CustomEditor {
 
 	private makeTopBorder(width: number, original: string, isFocused: boolean): string {
 		const config = this.getConfig();
-		const innerWidth = Math.max(0, width - 2);
-		const title = this.titleLayout(width, innerWidth, original, isFocused);
-		const status = this.dimStatus(this.renderStatus(Math.max(0, innerWidth - title.width - 3)), isFocused, config);
-		const statusWidth = visibleWidth(status);
-		const leftGap = status ? " " : "";
-		const rightGap = status ? " " : "";
-		const rightCap = status ? BORDER.horizontal : "";
-		const fillerWidth = Math.max(
-			0,
-			innerWidth - title.width - visibleWidth(leftGap) - statusWidth - visibleWidth(rightGap) - visibleWidth(rightCap),
-		);
-
-		return `${this.border(BORDER.topLeft, isFocused)}${title.line}${this.border(BORDER.horizontal.repeat(fillerWidth), isFocused)}${leftGap}${status}${rightGap}${this.border(rightCap, isFocused)}${this.border(BORDER.topRight, isFocused)}`;
+		const { safeWidth, innerWidth } = surfaceMetrics(width);
+		const left = this.topLeftPlan(safeWidth, innerWidth, original);
+		const statusBudget = planSurfaceStatusBudget(innerWidth, left.width);
+		const status = this.dimStatus(this.renderStatus(statusBudget), isFocused, config);
+		return renderSurfaceChunks(planSurfaceTopFrame({ width: safeWidth, left, status }).chunks, {
+			border: (text) => this.border(text, isFocused),
+			title: (text) => this.title(text, isFocused),
+			status: (text) => text,
+			text: (text) => text,
+			dim: (text) => this.border(text, isFocused),
+		});
 	}
 
 	private makeBottomBorder(width: number, original: string, isFocused: boolean): string {
-		const indicator = this.extractScrollIndicator(original, width);
-		if (!indicator) {
-			return `${this.border(BORDER.bottomLeft, isFocused)}${this.border(BORDER.horizontal.repeat(Math.max(0, width - 2)), isFocused)}${this.border(BORDER.bottomRight, isFocused)}`;
-		}
-		const innerWidth = Math.max(0, width - 2);
-		const indicatorWidth = visibleWidth(indicator);
-		const fillerWidth = Math.max(0, innerWidth - indicatorWidth);
-		return `${this.border(BORDER.bottomLeft, isFocused)}${this.border(indicator, isFocused)}${this.border(BORDER.horizontal.repeat(fillerWidth), isFocused)}${this.border(BORDER.bottomRight, isFocused)}`;
+		return renderSurfaceChunks(
+			planSurfaceBottomFrame({ width, scrollIndicator: this.extractScrollIndicator(original, width) }).chunks,
+			{
+				border: (text) => this.border(text, isFocused),
+			},
+		);
 	}
 
 	private extractScrollIndicator(line: string, width: number): string | undefined {
-		const plain = stripBorderColor(line, this.borderColor);
-		const match = plain.match(/(?:↑|↓) \d+ more/);
-		if (!match) return undefined;
-		const indicator = `${BORDER.horizontal.repeat(3)} ${match[0]} `;
-		return truncateToWidth(indicator, Math.max(0, width - 2), "");
+		return formatSurfaceScrollIndicator(stripBorderColor(line, this.borderColor), width);
 	}
 
 	private wrapContentLine(line: string, width: number, isFocused: boolean): string {
-		const innerWidth = Math.max(0, width - 2);
-		const contentWidth = Math.max(1, innerWidth - CONTENT_PADDING_X * 2);
-		const content = normalizeRenderedLine(line, contentWidth);
-		const padded = `${" ".repeat(CONTENT_PADDING_X)}${content}${" ".repeat(CONTENT_PADDING_X)}`;
-		return `${this.border(BORDER.vertical, isFocused)}${ansiPadRight(padded, innerWidth)}${this.border(BORDER.vertical, isFocused)}`;
+		return renderSurfaceChunks(
+			planSurfaceRow({
+				width,
+				text: line,
+				paddingX: SURFACE_CONTENT_PADDING_X,
+				reserveRightPadding: true,
+				ellipsis: "",
+			}).chunks,
+			{
+				border: (text) => this.border(text, isFocused),
+				content: (text) => text,
+				text: (text) => text,
+			},
+		);
 	}
 
 	render(width: number): string[] {
@@ -205,8 +181,8 @@ export class GlanceEditor extends CustomEditor {
 			return super.render(width);
 		}
 
-		const safeWidth = Math.max(4, width);
-		const renderWidth = Math.max(1, safeWidth - 2 - CONTENT_PADDING_X * 2);
+		const safeWidth = safeSurfaceWidth(width);
+		const renderWidth = Math.max(1, safeWidth - 2 - SURFACE_CONTENT_PADDING_X * 2);
 		const lines = super.render(renderWidth);
 		if (lines.length < 2) return lines;
 

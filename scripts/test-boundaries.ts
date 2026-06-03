@@ -8,7 +8,8 @@ const ALLOWED_PI_IMPORTS = new Set([
 	"@earendil-works/pi-coding-agent",
 	"@earendil-works/pi-tui",
 ]);
-const RENDER_MODULES = new Set(["editor.ts", "renderer.ts", "pane.ts", "segments.ts"]);
+const RENDER_MODULES = new Set(["editor.ts", "renderer.ts", "pane.ts", "segments.ts", "surface-layout.ts"]);
+const SURFACE_LAYOUT_MODULE = "surface-layout.ts";
 const GUARD_SCRIPT = join("scripts", "test-boundaries.ts");
 const LEGACY_NAMESPACE = ["@mariozechner", ""].join("/");
 
@@ -93,6 +94,19 @@ function assertNoCorePatching(files: SourceFile[]): void {
 	}
 }
 
+function assertSurfaceLayoutSeamImports(files: SourceFile[]): void {
+	const surfaceLayout = files.find((candidate) => basename(candidate.path) === SURFACE_LAYOUT_MODULE);
+	if (!surfaceLayout) return;
+	const forbiddenModulePattern = /(?:^|\/)(?:renderer|editor|pane)(?:\.js)?$/;
+	const importPattern = /(?:import|export)\s+(?:[^"'`]*?\s+from\s+)?["']([^"']+)["']/g;
+	for (const match of surfaceLayout.text.matchAll(importPattern)) {
+		const specifier = match[1]!;
+		if (forbiddenModulePattern.test(specifier)) {
+			fail(`${surfaceLayout.path}: surface-layout seam must not import ${specifier}`);
+		}
+	}
+}
+
 function assertRenderModulesHaveNoIo(files: SourceFile[]): void {
 	const forbiddenImports = new Set([
 		"fs",
@@ -154,6 +168,7 @@ assertNoLegacyNamespace(sourceFiles);
 assertNoLegacyPiPackages(packageFiles);
 assertPublicPiImports(sourceFiles);
 assertNoCorePatching(sourceFiles);
+assertSurfaceLayoutSeamImports(sourceFiles);
 assertRenderModulesHaveNoIo(sourceFiles);
 
 console.log("✓ public import and render-boundary guard checks passed");
