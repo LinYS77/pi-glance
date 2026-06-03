@@ -17,6 +17,7 @@ import type {
 } from "./types.js";
 
 const CONFIG_PATH = join(getAgentDir(), "pi-glance", "config.json");
+// CONFIG_VERSION is the on-disk config schema version, not the npm package version.
 const CONFIG_VERSION = 2 as const;
 
 const DEFAULT_SEGMENTS: SegmentConfig[] = [
@@ -111,6 +112,10 @@ function parseIntAtLeast(value: unknown, fallback: number, min: number): number 
 	return Math.max(min, Math.floor(value));
 }
 
+// Preserve known segment order/enabled flags for configs that already contain the
+// current segment model, and append missing default segments for old configs.
+// If a segment list is too old/ambiguous (currently: no git segment), fall back
+// to the curated default order rather than guessing.
 function normalizeSegments(value: unknown): SegmentConfig[] {
 	const defaults = DEFAULT_SEGMENTS.map((s) => ({ ...s }));
 	const byId = new Map<SegmentId, SegmentConfig>(defaults.map((s) => [s.id, s]));
@@ -141,6 +146,10 @@ function normalizeSegments(value: unknown): SegmentConfig[] {
 	return ordered;
 }
 
+// normalizeConfig() is the migration/validation boundary: preserve valid known
+// user values, fill missing/new fields from defaults, clamp numeric bounds, and
+// drop invalid/unknown values. Do not bump CONFIG_VERSION for comments/tests or
+// product-copy-only releases.
 export function normalizeConfig(raw: unknown): GlanceConfig {
 	const defaults = defaultConfig();
 	if (!raw || typeof raw !== "object") return defaults;

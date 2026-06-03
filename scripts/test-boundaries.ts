@@ -10,6 +10,7 @@ const ALLOWED_PI_IMPORTS = new Set([
 ]);
 const RENDER_MODULES = new Set(["editor.ts", "renderer.ts", "pane.ts", "segments.ts", "surface-layout.ts"]);
 const SURFACE_LAYOUT_MODULE = "surface-layout.ts";
+const SETTINGS_CATALOG_MODULE = "settings-catalog.ts";
 const GUARD_SCRIPT = join("scripts", "test-boundaries.ts");
 const LEGACY_NAMESPACE = ["@mariozechner", ""].join("/");
 
@@ -107,6 +108,19 @@ function assertSurfaceLayoutSeamImports(files: SourceFile[]): void {
 	}
 }
 
+function assertSettingsCatalogSeamImports(files: SourceFile[]): void {
+	const settingsCatalog = files.find((candidate) => basename(candidate.path) === SETTINGS_CATALOG_MODULE);
+	if (!settingsCatalog) return;
+	const forbiddenModulePattern = /(?:^|\/)(?:renderer|editor|pane|surface-layout)(?:\.js)?$/;
+	const importPattern = /(?:import|export)\s+(?:[^"'`]*?\s+from\s+)?["']([^"']+)["']/g;
+	for (const match of settingsCatalog.text.matchAll(importPattern)) {
+		const specifier = match[1]!;
+		if (forbiddenModulePattern.test(specifier) || specifier.startsWith("@earendil-works/pi-")) {
+			fail(`${settingsCatalog.path}: settings-catalog seam must not import runtime/rendering module ${specifier}`);
+		}
+	}
+}
+
 function assertRenderModulesHaveNoIo(files: SourceFile[]): void {
 	const forbiddenImports = new Set([
 		"fs",
@@ -147,7 +161,7 @@ function assertRenderModulesHaveNoIo(files: SourceFile[]): void {
 		[/\bcreateWriteStream\s*\(/, "createWriteStream"],
 	];
 
-	for (const file of files.filter((candidate) => RENDER_MODULES.has(basename(candidate.path)))) {
+	for (const file of files.filter((candidate) => RENDER_MODULES.has(basename(candidate.path)) || basename(candidate.path) === SETTINGS_CATALOG_MODULE)) {
 		for (const match of file.text.matchAll(importPattern)) {
 			const specifier = match[1]!;
 			if (forbiddenImports.has(specifier)) fail(`${file.path}: render module must not import IO/network/process module ${specifier}`);
@@ -169,6 +183,7 @@ assertNoLegacyPiPackages(packageFiles);
 assertPublicPiImports(sourceFiles);
 assertNoCorePatching(sourceFiles);
 assertSurfaceLayoutSeamImports(sourceFiles);
+assertSettingsCatalogSeamImports(sourceFiles);
 assertRenderModulesHaveNoIo(sourceFiles);
 
 console.log("✓ public import and render-boundary guard checks passed");

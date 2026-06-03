@@ -1,30 +1,13 @@
 import { Key, matchesKey, truncateToWidth, visibleWidth, type Component, type TUI } from "@earendil-works/pi-tui";
 import type { Theme } from "@earendil-works/pi-coding-agent";
-import { cloneConfig, defaultConfig, moveSegment, toggleSegment } from "./config.js";
-import { GLANCE_THEME_IDS, themeLabel } from "./themes.js";
+import { cloneConfig, defaultConfig, moveSegment } from "./config.js";
 import { renderInputSurface, renderInputSurfacePreview } from "./renderer.js";
-import { SEGMENT_BY_ID } from "./segments.js";
-import type {
-	ContextDisplayMode,
-	ContextUnknownMode,
-	GitShaMode,
-	GlanceConfig,
-	GlanceState,
-	IconMode,
-	ModelThinkingMode,
-	SegmentId,
-	TokensCacheMode,
-	TokensDisplayMode,
-	WorkspaceLabelMode,
-} from "./types.js";
+import { getSettingsCategories, getSettingsRows, type SettingsCategory, type SettingsCategoryId, type SettingsRow } from "./settings-catalog.js";
+import type { GlanceConfig, GlanceState } from "./types.js";
 
 type PaneFocus = "categories" | "settings" | "values";
-type CategoryId = "general" | SegmentId;
-type Category = { id: CategoryId; label: string };
 type PaneResult = { action: "save"; config: GlanceConfig } | { action: "cancel" };
 type Done = (result: PaneResult) => void;
-type SettingKind = "toggle" | "cycle" | "info";
-type SettingRow = { label: string; value: string; hint?: string; kind: SettingKind; mutate?: () => void };
 type Tone = (text: string) => string;
 
 interface PaneColors {
@@ -52,13 +35,12 @@ interface PaneLayout {
 
 type HelpShortcut = { key: string; label: string };
 
-type CategoryViewModel = Category & {
+type CategoryViewModel = SettingsCategory & {
 	selected: boolean;
 	hasFocus: boolean;
-	enabled?: boolean;
 };
 
-type SettingViewModel = Omit<SettingRow, "mutate"> & {
+type SettingViewModel = Omit<SettingsRow, "id" | "apply"> & {
 	selected: boolean;
 	labelHasFocus: boolean;
 	valueHasFocus: boolean;
@@ -68,7 +50,7 @@ interface GlancePaneViewModel {
 	dirty: boolean;
 	status: string;
 	categories: CategoryViewModel[];
-	selectedCategory?: Category;
+	selectedCategory?: SettingsCategory;
 	settingsTitle: string;
 	settings: SettingViewModel[];
 	selectedHint?: string;
@@ -91,28 +73,6 @@ const PANE_SPACING = {
 	minContentWidth: 10,
 	asideSeparator: "│",
 } as const;
-
-const POLL_INTERVALS = [2000, 5000, 10000, 30000] as const;
-const CONTEXT_DISPLAY_LABELS: Record<ContextDisplayMode, string> = {
-	"percent+tokens": "percent / tokens",
-	percent: "percent",
-	tokens: "tokens",
-};
-const TOKENS_DISPLAY_LABELS: Record<TokensDisplayMode, string> = {
-	"input-output": "input / output",
-	total: "total",
-};
-const WORKSPACE_LABEL_MODES: WorkspaceLabelMode[] = ["name", "smart", "path"];
-
-function nextIn<T extends string>(current: T, values: readonly T[]): T {
-	const index = values.indexOf(current);
-	return values[(index + 1) % values.length] ?? values[0]!;
-}
-
-function nextNumber<T extends number>(current: number, values: readonly T[]): T {
-	const index = values.indexOf(current as T);
-	return values[(index + 1) % values.length] ?? values[0]!;
-}
 
 function plainLine(parts: string[], width: number): string {
 	return truncateToWidth(parts.join(""), width, "…");
@@ -199,39 +159,6 @@ function focusGap(gap: string, colors: PaneColors): string {
 	return `${" ".repeat(Math.max(0, gapWidth - 2))}${colors.accent("› ")}`;
 }
 
-function onOff(value: boolean): string {
-	return value ? "on" : "off";
-}
-
-function segmentLabel(id: SegmentId): string {
-	return SEGMENT_BY_ID.get(id)?.label ?? id;
-}
-
-function formatPolling(ms: number): string {
-	if (ms % 1000 === 0) return `${ms / 1000}s`;
-	return `${ms}ms`;
-}
-
-function contextDisplayLabel(mode: ContextDisplayMode): string {
-	return CONTEXT_DISPLAY_LABELS[mode];
-}
-
-function tokensDisplayLabel(mode: TokensDisplayMode): string {
-	return TOKENS_DISPLAY_LABELS[mode];
-}
-
-function toggleRow(label: string, value: boolean, hint: string, mutate: () => void): SettingRow {
-	return { label, value: onOff(value), hint, kind: "toggle", mutate };
-}
-
-function cycleRow(label: string, value: string, hint: string, mutate: () => void): SettingRow {
-	return { label, value, hint, kind: "cycle", mutate };
-}
-
-function infoRow(label: string, value: string, hint: string): SettingRow {
-	return { label, value, hint, kind: "info" };
-}
-
 class GlanceConfigPane implements Component {
 	private readonly initial: GlanceConfig;
 	private draft: GlanceConfig;
@@ -264,15 +191,11 @@ class GlanceConfigPane implements Component {
 		return {
 			dirty: this.isDirty(),
 			status: this.status,
-			categories: categories.map((cat, index) => {
-				const segment = cat.id === "general" ? undefined : this.draft.segments.find((s) => s.id === cat.id);
-				return {
-					...cat,
-					selected: index === this.catIndex,
-					hasFocus: this.focus === "categories",
-					enabled: segment?.enabled,
-				};
-			}),
+			categories: categories.map((cat, index) => ({
+				...cat,
+				selected: index === this.catIndex,
+				hasFocus: this.focus === "categories",
+			})),
 			selectedCategory,
 			settingsTitle: selectedCategory ? (selectedCategory.id === "general" ? "General" : selectedCategory.label) : "",
 			settings: settings.map((row, index) => ({
@@ -330,125 +253,12 @@ class GlanceConfigPane implements Component {
 
 	private lastRenderedWidth = 96;
 
-	private getCategories(): Category[] {
-		return [
-			{ id: "general", label: "General" },
-			...this.draft.segments.map((segment) => ({
-				id: segment.id,
-				label: segmentLabel(segment.id),
-			})),
-		];
+	private getCategories(): SettingsCategory[] {
+		return getSettingsCategories(this.draft);
 	}
 
-	private getSettings(id: CategoryId): SettingRow[] {
-		switch (id) {
-			case "general":
-				return this.generalRows();
-			case "git":
-				return this.gitRows();
-			case "context":
-				return this.contextRows();
-			case "cost":
-				return this.costRows();
-			case "tokens":
-				return this.tokensRows();
-			case "model":
-				return this.modelRows();
-			default:
-				return [];
-		}
-	}
-
-	private generalRows(): SettingRow[] {
-		return [
-			toggleRow("Enabled", this.draft.enabled, "Temporarily disable pi-glance.", () => {
-				this.draft.enabled = !this.draft.enabled;
-			}),
-			cycleRow("Theme", themeLabel(this.draft.theme), "Switch the palette.", () => {
-				this.draft.theme = nextIn(this.draft.theme, GLANCE_THEME_IDS);
-			}),
-			cycleRow("Icons", this.draft.icons, "Plain works without Nerd Font.", () => {
-				this.draft.icons = nextIn(this.draft.icons, ["plain", "nerd"] as IconMode[]);
-			}),
-			cycleRow("Min input rows", `${this.draft.editor.minContentRows}`, "Set the resting editor height.", () => {
-				this.draft.editor.minContentRows = nextNumber(this.draft.editor.minContentRows, [2, 3, 4] as const);
-			}),
-			toggleRow("Adaptive width", this.draft.display.adaptive, "Drop later segments first.", () => {
-				this.draft.display.adaptive = !this.draft.display.adaptive;
-			}),
-			cycleRow("Workspace label", this.draft.display.workspaceLabel, "Use ~/ path when space allows.", () => {
-				this.draft.display.workspaceLabel = nextIn(this.draft.display.workspaceLabel, WORKSPACE_LABEL_MODES);
-			}),
-		];
-	}
-
-	private contextRows(): SettingRow[] {
-		return this.segmentRows("context", [
-			cycleRow("Display", contextDisplayLabel(this.draft.context.display), "Choose percent, tokens, or both.", () => {
-				this.draft.context.display = nextIn(this.draft.context.display, ["percent+tokens", "percent", "tokens"] as ContextDisplayMode[]);
-			}),
-			cycleRow("Unknown", this.draft.context.unknown, "Hide when usage is unknown.", () => {
-				this.draft.context.unknown = nextIn(this.draft.context.unknown, ["show", "hide"] as ContextUnknownMode[]);
-			}),
-		]);
-	}
-
-	private costRows(): SettingRow[] {
-		return this.segmentRows("cost", [
-			toggleRow("Hide zero", this.draft.cost.hideZero, "Hide until cost is non-zero.", () => {
-				this.draft.cost.hideZero = !this.draft.cost.hideZero;
-			}),
-			infoRow("Display", "compact USD", "Compact session cost."),
-		]);
-	}
-
-	private tokensRows(): SettingRow[] {
-		return this.segmentRows("tokens", [
-			cycleRow("Display", tokensDisplayLabel(this.draft.tokens.display), "Choose input/output or total.", () => {
-				this.draft.tokens.display = nextIn(this.draft.tokens.display, ["input-output", "total"] as TokensDisplayMode[]);
-			}),
-			cycleRow("Cache", this.draft.tokens.cache, "Show or hide cache details.", () => {
-				this.draft.tokens.cache = nextIn(this.draft.tokens.cache, ["auto", "show", "hide"] as TokensCacheMode[]);
-			}),
-		]);
-	}
-
-	private modelRows(): SettingRow[] {
-		return this.segmentRows("model", [
-			cycleRow("Provider label", this.draft.display.showProvider, "Show provider name.", () => {
-				this.draft.display.showProvider = nextIn(this.draft.display.showProvider, ["auto", "always", "never"] as const);
-			}),
-			cycleRow("Thinking label", this.draft.model.showThinking, "Show thinking level.", () => {
-				this.draft.model.showThinking = nextIn(this.draft.model.showThinking, ["auto", "always", "never"] as ModelThinkingMode[]);
-			}),
-		]);
-	}
-
-	private gitRows(): SettingRow[] {
-		return this.segmentRows("git", [
-			toggleRow("Dirty marker", this.draft.git.showDirty, "Conflicts always stay visible.", () => {
-				this.draft.git.showDirty = !this.draft.git.showDirty;
-			}),
-			toggleRow("Ahead / behind", this.draft.git.showAheadBehind, "Show upstream counts.", () => {
-				this.draft.git.showAheadBehind = !this.draft.git.showAheadBehind;
-			}),
-			cycleRow("SHA", this.draft.git.shaMode, "Keep branches quiet unless enabled.", () => {
-				this.draft.git.shaMode = nextIn(this.draft.git.shaMode, ["off", "detached", "always"] as GitShaMode[]);
-			}),
-			cycleRow("Polling", formatPolling(this.draft.git.pollIntervalMs), "Check external Git changes.", () => {
-				this.draft.git.pollIntervalMs = nextNumber(this.draft.git.pollIntervalMs, POLL_INTERVALS);
-			}),
-		]);
-	}
-
-	private segmentRows(id: SegmentId, rows: SettingRow[]): SettingRow[] {
-		const segment = this.draft.segments.find((s) => s.id === id);
-		return [
-			toggleRow("Enabled", Boolean(segment?.enabled), "Show or hide this segment.", () => {
-				this.draft = toggleSegment(this.draft, id);
-			}),
-			...rows,
-		];
+	private getSettings(id: SettingsCategoryId): SettingsRow[] {
+		return getSettingsRows(this.draft, id);
 	}
 
 	private activateCurrent(): void {
@@ -458,12 +268,12 @@ class GlanceConfigPane implements Component {
 		const row = settings[this.setIndex];
 		if (!row) return;
 
-		if (!row.mutate) {
+		if (!row.apply) {
 			this.status = row.hint ?? `${row.label} is informational.`;
 			return;
 		}
 
-		row.mutate();
+		this.draft = row.apply(this.draft);
 		const next = this.getSettings(cat.id)[this.setIndex];
 		this.status = `${row.label} → ${next?.value ?? "updated"}. Press S to save.`;
 	}

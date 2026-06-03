@@ -1,3 +1,4 @@
+// Curated user-facing theme order; this is intentionally not a theme marketplace.
 export const GLANCE_THEMES = [
 	{ id: "light", label: "Light" },
 	{ id: "dark", label: "Dark" },

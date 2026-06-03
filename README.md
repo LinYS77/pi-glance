@@ -31,7 +31,7 @@ git clone https://github.com/LinYS77/pi-glance.git ~/.pi/agent/extensions/pi-gla
 
 Then restart pi or run `/reload`.
 
-Compatibility: pi-glance v0.3.1 targets current Pi packages under `@earendil-works/*` and the Node runtime supported by current Pi. If your Pi installation still exposes the older package namespace or runs on Node 20, pin `pi-glance@0.3.0` or upgrade Pi before updating pi-glance.
+Compatibility: current pi-glance releases target Pi packages under `@earendil-works/*` and the Node runtime supported by current Pi. If your Pi installation still exposes the older package namespace or runs on Node 20, pin `pi-glance@0.3.0` or upgrade Pi before updating pi-glance.
 
 For development/testing:
 
@@ -74,7 +74,9 @@ That's the only command — opens a calm settings pane with a real input-surface
 
 - To switch themes, open `/glance` → **General** → `Theme`. Built-ins: Light, Dark, Catppuccin Latte/Mocha, Nord, Tokyo Night, Gruvbox Dark, Solarized Dark, Rosé Pine, and One Dark.
 - Icons default to `plain` so pi-glance works with normal terminal fonts.
-- If you use a Nerd Font, open `/glance` and set `Icons` to `nerd` for richer symbols.
+- `nerd` icons are opt-in: open `/glance` → **General** → `Icons` and choose `nerd` for richer symbols.
+- Nerd icons need a Nerd Font or Symbols Nerd Font fallback. If icons look like boxes, choose `plain`.
+- pi-glance does not auto-detect, install, or bundle terminal fonts.
 
 ## Segment details
 

@@ -103,6 +103,12 @@ function findLineContaining(text: string, fragment: string): string {
 	return line;
 }
 
+function findLineIndexContaining(lines: string[], fragment: string): number {
+	const index = lines.findIndex((candidate) => candidate.includes(fragment));
+	assert.notEqual(index, -1, `expected render to include a line with ${JSON.stringify(fragment)}`);
+	return index;
+}
+
 function assertNoRawThemeIds(text: string, context: string): void {
 	for (const { id } of GLANCE_THEMES) {
 		assert.ok(!text.includes(id), `${context} should not show raw theme id ${id}`);
@@ -163,9 +169,37 @@ const gridSettingPane = await makePane();
 press(gridSettingPane.component, "\x1b[C");
 press(gridSettingPane.component, "\x1b[B");
 press(gridSettingPane.component, "\x1b[B");
-assertContains(plainText(gridSettingPane.component), "» Icons", "down arrow should move within the setting column");
+const iconsSelectedText = plainText(gridSettingPane.component);
+assertContains(iconsSelectedText, "» Icons", "down arrow should move within the setting column");
+assertContains(iconsSelectedText, "Nerd icons need", "Icons row hint should mention Nerd Font fallback guidance");
 press(gridSettingPane.component, "\x1b[D");
 assertContains(plainText(gridSettingPane.component), "» Context", "left arrow should move to the category on the same visual row");
+
+const reorderPane = await makePane();
+press(reorderPane.component, "\x1b[B");
+press(reorderPane.component, "j");
+const reorderedLines = plainRender(reorderPane.component);
+assertContains(reorderedLines.join("\n"), "Segment order updated. Press S to save.", "J should reorder a segment in the category column");
+assertContains(reorderedLines.join("\n"), "● Unsaved changes", "segment reorder should dirty the draft");
+assert.ok(
+	findLineIndexContaining(reorderedLines, "  Context") < findLineIndexContaining(reorderedLines, "» Git"),
+	"J should move Git below Context",
+);
+press(reorderPane.component, "k");
+const restoredOrderLines = plainRender(reorderPane.component);
+assert.ok(
+	findLineIndexContaining(restoredOrderLines, "» Git") < findLineIndexContaining(restoredOrderLines, "  Context"),
+	"K should move Git back above Context",
+);
+
+const settingsJPane = await makePane();
+press(settingsJPane.component, "\x1b[B");
+press(settingsJPane.component, "\x1b[C");
+const beforeSettingsJ = plainText(settingsJPane.component);
+const beforeSettingsJRenders = settingsJPane.renders();
+press(settingsJPane.component, "j");
+assert.equal(plainText(settingsJPane.component), beforeSettingsJ, "J should not reorder outside the category column");
+assert.equal(settingsJPane.renders(), beforeSettingsJRenders, "J outside the category column should not request a render");
 
 const contextPane = await makePane();
 press(contextPane.component, "\x1b[B");
@@ -207,6 +241,18 @@ press(costPane.component, "\r");
 const costChanged = plainText(costPane.component);
 assertLineContainsAll(costChanged, ["Hide zero", "on"], "enter should toggle cost hide zero");
 assertContains(costChanged, "Hide until cost is non-zero.", "cost hide zero hint should render");
+
+const costInfoPane = await makePane();
+press(costInfoPane.component, "\x1b[B");
+press(costInfoPane.component, "\x1b[B");
+press(costInfoPane.component, "\x1b[B");
+press(costInfoPane.component, "\x1b[C");
+press(costInfoPane.component, "\x1b[C");
+press(costInfoPane.component, "\r");
+const costInfoLines = plainRender(costInfoPane.component);
+assertContains(costInfoLines[0] ?? "", "Compact session cost.", "info row enter should show its hint as status");
+assertContains(costInfoLines.join("\n"), "✓ Saved", "info row enter should not dirty the draft");
+assertNotContains(costInfoLines.join("\n"), "● Unsaved changes", "info row enter should not create unsaved changes");
 
 const tokensPane = await makePane();
 press(tokensPane.component, "\x1b[B");
@@ -270,6 +316,16 @@ assertLineContainsAll(plainText(generalHintPane.component), ["Workspace label", 
 press(generalHintPane.component, "\x1b[C");
 press(generalHintPane.component, "\r");
 assertLineContainsAll(plainText(generalHintPane.component), ["Workspace label", "smart"], "enter should cycle workspace label in value column");
+
+const gitEnabledPane = await makePane();
+press(gitEnabledPane.component, "\x1b[B");
+press(gitEnabledPane.component, "\x1b[C");
+press(gitEnabledPane.component, "\x1b[A");
+press(gitEnabledPane.component, "\x1b[C");
+press(gitEnabledPane.component, "\r");
+const gitEnabledChanged = plainText(gitEnabledPane.component);
+assertLineContainsAll(gitEnabledChanged, ["Enabled", "off"], "enter should toggle a segment enabled row from the catalog");
+assertContains(gitEnabledChanged, "Enabled → off. Press S to save.", "segment enabled status should use the updated friendly value");
 
 const gitPane = await makePane();
 press(gitPane.component, "\x1b[B");
