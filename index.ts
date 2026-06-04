@@ -1,5 +1,5 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { loadConfig, saveConfig } from "./config.js";
+import { loadConfig, loadConfigSync, saveConfig } from "./config.js";
 import { GlanceEditor } from "./editor.js";
 import { GlanceFooterBridge } from "./footer-bridge.js";
 import { GitRefresher } from "./git.js";
@@ -148,8 +148,8 @@ export default function piGlance(pi: ExtensionAPI): void {
 		},
 	});
 
-	pi.on("session_start", async (_event, ctx) => {
-		config = await loadConfig();
+	pi.on("session_start", (_event, ctx) => {
+		config = loadConfigSync();
 		state = createInitialState(ctx, config, pi.getThinkingLevel());
 		installInputSurface(ctx);
 	});

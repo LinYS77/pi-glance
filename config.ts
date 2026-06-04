@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
@@ -207,6 +208,15 @@ export function normalizeConfig(raw: unknown): GlanceConfig {
 			cache: parseStringEnum(tokens.cache, TOKENS_CACHE_MODES, defaults.tokens.cache),
 		},
 	};
+}
+
+export function loadConfigSync(): GlanceConfig {
+	try {
+		const text = readFileSync(CONFIG_PATH, "utf8");
+		return normalizeConfig(JSON.parse(text));
+	} catch {
+		return defaultConfig();
+	}
 }
 
 export async function loadConfig(): Promise<GlanceConfig> {
