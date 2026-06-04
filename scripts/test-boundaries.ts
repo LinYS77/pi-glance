@@ -9,7 +9,10 @@ const ALLOWED_PI_IMPORTS = new Set([
 	"@earendil-works/pi-tui",
 ]);
 const RENDER_MODULES = new Set(["editor.ts", "renderer.ts", "pane.ts", "segments.ts", "surface-layout.ts"]);
+const INDEX_MODULE = "index.ts";
 const PURE_CONFIG_OPTIONS_MODULE = "config-options.ts";
+const RUNTIME_SNAPSHOT_MODULE = "runtime-snapshot.ts";
+const STATE_MODULE = "state.ts";
 const SURFACE_LAYOUT_MODULE = "surface-layout.ts";
 const SETTINGS_CATALOG_MODULE = "settings-catalog.ts";
 const GUARD_SCRIPT = join("scripts", "test-boundaries.ts");
@@ -176,6 +179,50 @@ function assertRenderModulesHaveNoIo(files: SourceFile[]): void {
 	}
 }
 
+function assertRuntimeSnapshotAdapterSeam(files: SourceFile[]): void {
+	const runtimeSnapshot = files.find((candidate) => basename(candidate.path) === RUNTIME_SNAPSHOT_MODULE);
+	assert.ok(runtimeSnapshot, "runtime-snapshot.ts state input adapter seam should exist");
+
+	const forbiddenRenderModulePattern = /(?:^|\/)(?:editor|renderer|pane|segments|surface-layout)(?:\.js)?$/;
+	const importPattern = /import\s+(type\s+)?(?:[^"'`]*?\s+from\s+)?["']([^"']+)["']/g;
+	for (const match of runtimeSnapshot.text.matchAll(importPattern)) {
+		const isTypeOnly = match[1] === "type ";
+		const specifier = match[2]!;
+		if (specifier.startsWith("@earendil-works/pi-")) {
+			if (specifier !== "@earendil-works/pi-coding-agent") fail(`${runtimeSnapshot.path}: runtime-snapshot may only import public pi coding-agent types, not ${specifier}`);
+			if (!isTypeOnly) fail(`${runtimeSnapshot.path}: pi coding-agent import must be type-only`);
+			continue;
+		}
+		if (IO_NETWORK_PROCESS_IMPORTS.has(specifier)) fail(`${runtimeSnapshot.path}: runtime-snapshot must not import IO/network/process module ${specifier}`);
+		if (forbiddenRenderModulePattern.test(specifier)) fail(`${runtimeSnapshot.path}: runtime-snapshot must not import render module ${specifier}`);
+	}
+}
+
+function assertStateModulePiFree(files: SourceFile[]): void {
+	const state = files.find((candidate) => basename(candidate.path) === STATE_MODULE);
+	assert.ok(state, "state.ts should exist");
+
+	const importPattern = /(?:import|export)\s+(?:[^"'`]*?\s+from\s+)?["']([^"']+)["']/g;
+	for (const match of state.text.matchAll(importPattern)) {
+		const specifier = match[1]!;
+		if (specifier.startsWith("@earendil-works/pi-")) fail(`${state.path}: state module must not import pi package ${specifier}`);
+	}
+}
+
+function assertIndexThinWiring(files: SourceFile[]): void {
+	const index = files.find((candidate) => basename(candidate.path) === INDEX_MODULE);
+	assert.ok(index, "index.ts should exist");
+
+	const allowedSpecifiers = new Set(["@earendil-works/pi-coding-agent", "./config.js", "./pane.js", "./runtime.js"]);
+	const importPattern = /import\s+(type\s+)?(?:[^"'`]*?\s+from\s+)?["']([^"']+)["']/g;
+	for (const match of index.text.matchAll(importPattern)) {
+		const isTypeOnly = match[1] === "type ";
+		const specifier = match[2]!;
+		if (!allowedSpecifiers.has(specifier)) fail(`${index.path}: thin extension wiring must not import ${specifier}`);
+		if (specifier === "@earendil-works/pi-coding-agent" && !isTypeOnly) fail(`${index.path}: pi coding-agent import must be type-only`);
+	}
+}
+
 function assertConfigOptionsPureModule(files: SourceFile[]): void {
 	const configOptions = files.find((candidate) => basename(candidate.path) === PURE_CONFIG_OPTIONS_MODULE);
 	assert.ok(configOptions, "config-options.ts pure option source should exist");
@@ -209,6 +256,9 @@ assertNoCorePatching(sourceFiles);
 assertSurfaceLayoutSeamImports(sourceFiles);
 assertSettingsCatalogSeamImports(sourceFiles);
 assertRenderModulesHaveNoIo(sourceFiles);
+assertRuntimeSnapshotAdapterSeam(sourceFiles);
+assertStateModulePiFree(sourceFiles);
+assertIndexThinWiring(sourceFiles);
 assertConfigOptionsPureModule(sourceFiles);
 
 console.log("✓ public import and render-boundary guard checks passed");

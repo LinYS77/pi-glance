@@ -1,236 +1,31 @@
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { loadConfig, loadConfigSync, saveConfig } from "./config.js";
-import { GlanceEditor } from "./editor.js";
-import { GlanceFooterBridge } from "./footer-bridge.js";
-import { GitRefresher } from "./git.js";
 import { showGlancePane } from "./pane.js";
-import {
-	clearContextUsage,
-	computeUsageTotals,
-	createInitialState,
-	refreshContextUsage,
-	refreshModel,
-	refreshWorkspace,
-	setGitSnapshot,
-	setUsageTotals,
-} from "./state.js";
-import type { GlanceConfig, GlanceState } from "./types.js";
+import { createGlanceRuntime } from "./runtime.js";
 
 export default function piGlance(pi: ExtensionAPI): void {
-	let config: GlanceConfig | undefined;
-	let state: GlanceState | undefined;
-	let footerBridge: GlanceFooterBridge | undefined;
-	let gitRefresher: GitRefresher | undefined;
-	let requestRender: (() => void) | undefined;
-
-	async function ensureConfig(): Promise<GlanceConfig> {
-		config ??= await loadConfig();
-		return config;
-	}
-
-	function getConfig(): GlanceConfig {
-		if (!config) throw new Error("pi-glance config not loaded");
-		return config;
-	}
-
-	function ensureState(ctx: ExtensionContext): GlanceState {
-		if (!state) {
-			state = createInitialState(ctx, getConfig(), pi.getThinkingLevel());
-		}
-		return state;
-	}
-
-	function renderNow(): void {
-		footerBridge?.invalidate();
-		requestRender?.();
-	}
-
-	function ensureGitRefresher(): GitRefresher {
-		gitRefresher ??= new GitRefresher(
-			() => getConfig().git,
-			() => state?.workspace.path,
-			(cwd, snapshot) => {
-				if (state && setGitSnapshot(state, cwd, snapshot)) renderNow();
-			},
-		);
-		return gitRefresher;
-	}
-
-	function scheduleGitRefresh(immediate = false): void {
-		gitRefresher?.schedule(immediate);
-	}
-
-	function refreshReliableSnapshot(ctx: ExtensionContext, options: { model?: boolean; git?: boolean } = {}): void {
-		if (!state) return;
-		const workspaceChanged = refreshWorkspace(state, ctx);
-		if (options.model) refreshModel(state, ctx, getConfig(), pi.getThinkingLevel());
-		setUsageTotals(state, computeUsageTotals(ctx));
-		refreshContextUsage(state, ctx);
-		if (options.git || workspaceChanged) scheduleGitRefresh(options.git || workspaceChanged);
-	}
-
-	function refreshThinkingLevel(ctx: ExtensionContext): void {
-		if (!state) return;
-		refreshModel(state, ctx, getConfig(), pi.getThinkingLevel());
-	}
-
-	function clearBridge(): void {
-		footerBridge?.dispose();
-		footerBridge = undefined;
-	}
-
-	function clearGitRefresher(): void {
-		gitRefresher?.dispose();
-		gitRefresher = undefined;
-	}
-
-	function clearUI(ctx: ExtensionContext): void {
-		if (!ctx.hasUI) return;
-		clearBridge();
-		clearGitRefresher();
-		ctx.ui.setEditorComponent(undefined);
-		ctx.ui.setFooter(undefined);
-		requestRender = undefined;
-	}
-
-	function installInputSurface(ctx: ExtensionContext): void {
-		if (!ctx.hasUI) return;
-		ensureState(ctx);
-		const activeConfig = getConfig();
-		if (!activeConfig.enabled) {
-			clearUI(ctx);
-			return;
-		}
-
-		ensureGitRefresher().schedule(true);
-		clearBridge();
-		ctx.ui.setFooter((tui, _theme, footerData) => {
-			requestRender = () => tui.requestRender();
-			footerBridge = new GlanceFooterBridge(() => state ?? ensureState(ctx), footerData);
-			return footerBridge;
-		});
-
-		ctx.ui.setEditorComponent((tui, theme, keybindings) => {
-			requestRender = () => tui.requestRender();
-			return new GlanceEditor(
-				tui,
-				theme,
-				keybindings,
-				() => state ?? ensureState(ctx),
-				() => getConfig(),
-				() => {
-					refreshThinkingLevel(ctx);
-					renderNow();
-				},
-			);
-		});
-	}
+	const runtime = createGlanceRuntime({
+		getThinkingLevel: () => pi.getThinkingLevel(),
+		loadConfigSync,
+		loadConfig,
+		saveConfig,
+		showPane: showGlancePane,
+	});
 
 	pi.registerCommand("glance", {
 		description: "Open pi-glance configuration pane",
-		handler: async (_args, ctx) => {
-			const current = await ensureConfig();
-			ensureState(ctx);
-			const result = await showGlancePane(current, ctx, state);
-			if (result.action === "cancel") {
-				ctx.ui.notify("pi-glance configuration cancelled", "info");
-				return;
-			}
-
-			const nextConfig = result.config;
-			try {
-				await saveConfig(nextConfig);
-			} catch {
-				ctx.ui.notify("pi-glance configuration save failed; keeping previous configuration", "error");
-				return;
-			}
-
-			config = nextConfig;
-			if (state) {
-				refreshReliableSnapshot(ctx, { model: true, git: true });
-			}
-			installInputSurface(ctx);
-			renderNow();
-			ctx.ui.notify("pi-glance configuration saved", "info");
-		},
+		handler: runtime.commands.openPane,
 	});
 
-	pi.on("session_start", (_event, ctx) => {
-		config = loadConfigSync();
-		state = createInitialState(ctx, config, pi.getThinkingLevel());
-		installInputSurface(ctx);
-	});
-
-	pi.on("session_shutdown", async (_event, ctx) => {
-		clearUI(ctx);
-	});
-
-	pi.on("model_select", async (_event, ctx) => {
-		await ensureConfig();
-		ensureState(ctx);
-		refreshReliableSnapshot(ctx, { model: true, git: true });
-		renderNow();
-	});
-
-	pi.on("thinking_level_select", async (_event, ctx) => {
-		await ensureConfig();
-		ensureState(ctx);
-		refreshThinkingLevel(ctx);
-		renderNow();
-	});
-
-	pi.on("turn_start", async (_event, ctx) => {
-		await ensureConfig();
-		ensureState(ctx);
-		refreshReliableSnapshot(ctx, { model: true });
-		renderNow();
-	});
-
-	pi.on("tool_execution_end", async (_event, ctx) => {
-		await ensureConfig();
-		ensureState(ctx);
-		refreshReliableSnapshot(ctx, { git: true });
-		renderNow();
-	});
-
-	pi.on("session_tree", async (_event, ctx) => {
-		await ensureConfig();
-		ensureState(ctx);
-		refreshReliableSnapshot(ctx, { model: true, git: true });
-		renderNow();
-	});
-
-	pi.on("session_compact", async (_event, ctx) => {
-		await ensureConfig();
-		ensureState(ctx);
-		refreshWorkspace(state!, ctx);
-		refreshModel(state!, ctx, getConfig(), pi.getThinkingLevel());
-		setUsageTotals(state!, computeUsageTotals(ctx));
-		clearContextUsage(state!, ctx);
-		scheduleGitRefresh(true);
-		renderNow();
-	});
-
-	pi.on("message_end", async (event, ctx) => {
-		await ensureConfig();
-		ensureState(ctx);
-		if (event.message.role === "assistant") {
-			refreshReliableSnapshot(ctx);
-			renderNow();
-		}
-	});
-
-	pi.on("turn_end", async (_event, ctx) => {
-		await ensureConfig();
-		ensureState(ctx);
-		refreshReliableSnapshot(ctx);
-		renderNow();
-	});
-
-	pi.on("agent_end", async (_event, ctx) => {
-		await ensureConfig();
-		ensureState(ctx);
-		refreshReliableSnapshot(ctx);
-		renderNow();
-	});
+	pi.on("session_start", runtime.events.sessionStart);
+	pi.on("session_shutdown", runtime.events.sessionShutdown);
+	pi.on("model_select", runtime.events.modelSelect);
+	pi.on("thinking_level_select", runtime.events.thinkingLevelSelect);
+	pi.on("turn_start", runtime.events.turnStart);
+	pi.on("tool_execution_end", runtime.events.toolExecutionEnd);
+	pi.on("session_tree", runtime.events.sessionTree);
+	pi.on("session_compact", runtime.events.sessionCompact);
+	pi.on("message_end", runtime.events.messageEnd);
+	pi.on("turn_end", runtime.events.turnEnd);
+	pi.on("agent_end", runtime.events.agentEnd);
 }
