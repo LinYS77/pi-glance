@@ -2,6 +2,17 @@ import { readFileSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
+import {
+	CONTEXT_DISPLAY_MODE_VALUES,
+	CONTEXT_UNKNOWN_MODE_VALUES,
+	GIT_SHA_MODE_VALUES,
+	ICON_MODE_VALUES,
+	MODEL_THINKING_MODE_VALUES,
+	PROVIDER_DISPLAY_MODE_VALUES,
+	TOKENS_CACHE_MODE_VALUES,
+	TOKENS_DISPLAY_MODE_VALUES,
+	WORKSPACE_LABEL_MODE_VALUES,
+} from "./config-options.js";
 import { GLANCE_THEME_ID_SET } from "./themes.js";
 import type {
 	ContextDisplayMode,
@@ -30,15 +41,15 @@ const DEFAULT_SEGMENTS: SegmentConfig[] = [
 ];
 
 const SEGMENT_IDS = new Set<SegmentId>(DEFAULT_SEGMENTS.map((s) => s.id));
-const ICON_MODES = new Set<IconMode>(["nerd", "plain"]);
-const PROVIDER_MODES = new Set<GlanceConfig["display"]["showProvider"]>(["auto", "always", "never"]);
-const WORKSPACE_LABEL_MODES = new Set<WorkspaceLabelMode>(["name", "smart", "path"]);
-const GIT_SHA_MODES = new Set<GitShaMode>(["off", "detached", "always"]);
-const CONTEXT_DISPLAY_MODES = new Set<ContextDisplayMode>(["percent+tokens", "percent", "tokens"]);
-const CONTEXT_UNKNOWN_MODES = new Set<ContextUnknownMode>(["show", "hide"]);
-const TOKENS_DISPLAY_MODES = new Set<TokensDisplayMode>(["input-output", "total"]);
-const TOKENS_CACHE_MODES = new Set<TokensCacheMode>(["auto", "show", "hide"]);
-const MODEL_THINKING_MODES = new Set<ModelThinkingMode>(["auto", "always", "never"]);
+const ICON_MODES = new Set<IconMode>(ICON_MODE_VALUES);
+const PROVIDER_MODES = new Set<GlanceConfig["display"]["showProvider"]>(PROVIDER_DISPLAY_MODE_VALUES);
+const WORKSPACE_LABEL_MODES = new Set<WorkspaceLabelMode>(WORKSPACE_LABEL_MODE_VALUES);
+const GIT_SHA_MODES = new Set<GitShaMode>(GIT_SHA_MODE_VALUES);
+const CONTEXT_DISPLAY_MODES = new Set<ContextDisplayMode>(CONTEXT_DISPLAY_MODE_VALUES);
+const CONTEXT_UNKNOWN_MODES = new Set<ContextUnknownMode>(CONTEXT_UNKNOWN_MODE_VALUES);
+const TOKENS_DISPLAY_MODES = new Set<TokensDisplayMode>(TOKENS_DISPLAY_MODE_VALUES);
+const TOKENS_CACHE_MODES = new Set<TokensCacheMode>(TOKENS_CACHE_MODE_VALUES);
+const MODEL_THINKING_MODES = new Set<ModelThinkingMode>(MODEL_THINKING_MODE_VALUES);
 
 export function defaultConfig(): GlanceConfig {
 	return {
@@ -210,10 +221,18 @@ export function normalizeConfig(raw: unknown): GlanceConfig {
 	};
 }
 
+export function configFromText(text: string): GlanceConfig {
+	return normalizeConfig(JSON.parse(text));
+}
+
+export function configToText(config: GlanceConfig): string {
+	return `${JSON.stringify(normalizeConfig(config), null, "\t")}\n`;
+}
+
 export function loadConfigSync(): GlanceConfig {
 	try {
 		const text = readFileSync(CONFIG_PATH, "utf8");
-		return normalizeConfig(JSON.parse(text));
+		return configFromText(text);
 	} catch {
 		return defaultConfig();
 	}
@@ -222,7 +241,7 @@ export function loadConfigSync(): GlanceConfig {
 export async function loadConfig(): Promise<GlanceConfig> {
 	try {
 		const text = await readFile(CONFIG_PATH, "utf8");
-		return normalizeConfig(JSON.parse(text));
+		return configFromText(text);
 	} catch {
 		return defaultConfig();
 	}
@@ -230,7 +249,7 @@ export async function loadConfig(): Promise<GlanceConfig> {
 
 export async function saveConfig(config: GlanceConfig): Promise<void> {
 	await mkdir(dirname(CONFIG_PATH), { recursive: true });
-	await writeFile(CONFIG_PATH, `${JSON.stringify(normalizeConfig(config), null, "\t")}\n`, "utf8");
+	await writeFile(CONFIG_PATH, configToText(config), "utf8");
 }
 
 export function moveSegment(config: GlanceConfig, id: SegmentId, direction: -1 | 1): GlanceConfig {

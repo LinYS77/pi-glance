@@ -1,4 +1,15 @@
 import { cloneConfig, toggleSegment } from "./config.js";
+import {
+	CONTEXT_DISPLAY_MODE_VALUES,
+	CONTEXT_UNKNOWN_MODE_VALUES,
+	GIT_SHA_MODE_VALUES,
+	ICON_MODE_VALUES,
+	MODEL_THINKING_MODE_VALUES,
+	PROVIDER_DISPLAY_MODE_VALUES,
+	TOKENS_CACHE_MODE_VALUES,
+	TOKENS_DISPLAY_MODE_VALUES,
+	WORKSPACE_LABEL_MODE_VALUES,
+} from "./config-options.js";
 import { SEGMENT_BY_ID } from "./segments.js";
 import { GLANCE_THEME_IDS, themeLabel } from "./themes.js";
 import type { GlanceConfig, SegmentId } from "./types.js";
@@ -22,16 +33,7 @@ export interface SettingsRow {
 }
 
 const POLL_INTERVALS = [2000, 5000, 10000, 30000] as const;
-const ICON_MODES = ["plain", "nerd"] as const;
 const MIN_CONTENT_ROWS = [2, 3, 4] as const;
-const WORKSPACE_LABEL_MODES = ["name", "smart", "path"] as const;
-const GIT_SHA_MODES = ["off", "detached", "always"] as const;
-const CONTEXT_DISPLAY_MODES = ["percent+tokens", "percent", "tokens"] as const;
-const CONTEXT_UNKNOWN_MODES = ["show", "hide"] as const;
-const TOKENS_DISPLAY_MODES = ["input-output", "total"] as const;
-const TOKENS_CACHE_MODES = ["auto", "show", "hide"] as const;
-const PROVIDER_LABEL_MODES = ["auto", "always", "never"] as const;
-const MODEL_THINKING_MODES = ["auto", "always", "never"] as const;
 
 const CONTEXT_DISPLAY_LABELS: Record<GlanceConfig["context"]["display"], string> = {
 	"percent+tokens": "percent / tokens",
@@ -128,7 +130,7 @@ export function getSettingsRows(config: GlanceConfig, categoryId: SettingsCatego
 				),
 				cycleRow("general.icons", "Icons", config.icons, "Nerd icons need a Nerd Font or Symbols Nerd Font fallback. If icons look like boxes, choose plain.", (draft) =>
 					withConfig(draft, (next) => {
-						next.icons = nextIn(next.icons, ICON_MODES);
+						next.icons = nextIn(next.icons, ICON_MODE_VALUES);
 					}),
 				),
 				cycleRow("general.minInputRows", "Min input rows", `${config.editor.minContentRows}`, "Set the resting editor height.", (draft) =>
@@ -143,7 +145,7 @@ export function getSettingsRows(config: GlanceConfig, categoryId: SettingsCatego
 				),
 				cycleRow("general.workspaceLabel", "Workspace label", config.display.workspaceLabel, "Use ~/ path when space allows.", (draft) =>
 					withConfig(draft, (next) => {
-						next.display.workspaceLabel = nextIn(next.display.workspaceLabel, WORKSPACE_LABEL_MODES);
+						next.display.workspaceLabel = nextIn(next.display.workspaceLabel, WORKSPACE_LABEL_MODE_VALUES);
 					}),
 				),
 			];
@@ -161,7 +163,7 @@ export function getSettingsRows(config: GlanceConfig, categoryId: SettingsCatego
 				),
 				cycleRow("git.sha", "SHA", config.git.shaMode, "Keep branches quiet unless enabled.", (draft) =>
 					withConfig(draft, (next) => {
-						next.git.shaMode = nextIn(next.git.shaMode, GIT_SHA_MODES);
+						next.git.shaMode = nextIn(next.git.shaMode, GIT_SHA_MODE_VALUES);
 					}),
 				),
 				cycleRow("git.polling", "Polling", formatPolling(config.git.pollIntervalMs), "Check external Git changes.", (draft) =>
@@ -174,12 +176,12 @@ export function getSettingsRows(config: GlanceConfig, categoryId: SettingsCatego
 			return segmentRows(config, "context", [
 				cycleRow("context.display", "Display", contextDisplayLabel(config.context.display), "Choose percent, tokens, or both.", (draft) =>
 					withConfig(draft, (next) => {
-						next.context.display = nextIn(next.context.display, CONTEXT_DISPLAY_MODES);
+						next.context.display = nextIn(next.context.display, CONTEXT_DISPLAY_MODE_VALUES);
 					}),
 				),
 				cycleRow("context.unknown", "Unknown", config.context.unknown, "Hide when usage is unknown.", (draft) =>
 					withConfig(draft, (next) => {
-						next.context.unknown = nextIn(next.context.unknown, CONTEXT_UNKNOWN_MODES);
+						next.context.unknown = nextIn(next.context.unknown, CONTEXT_UNKNOWN_MODE_VALUES);
 					}),
 				),
 			]);
@@ -196,12 +198,12 @@ export function getSettingsRows(config: GlanceConfig, categoryId: SettingsCatego
 			return segmentRows(config, "tokens", [
 				cycleRow("tokens.display", "Display", tokensDisplayLabel(config.tokens.display), "Choose input/output or total.", (draft) =>
 					withConfig(draft, (next) => {
-						next.tokens.display = nextIn(next.tokens.display, TOKENS_DISPLAY_MODES);
+						next.tokens.display = nextIn(next.tokens.display, TOKENS_DISPLAY_MODE_VALUES);
 					}),
 				),
 				cycleRow("tokens.cache", "Cache", config.tokens.cache, "Show or hide cache details.", (draft) =>
 					withConfig(draft, (next) => {
-						next.tokens.cache = nextIn(next.tokens.cache, TOKENS_CACHE_MODES);
+						next.tokens.cache = nextIn(next.tokens.cache, TOKENS_CACHE_MODE_VALUES);
 					}),
 				),
 			]);
@@ -209,12 +211,12 @@ export function getSettingsRows(config: GlanceConfig, categoryId: SettingsCatego
 			return segmentRows(config, "model", [
 				cycleRow("model.providerLabel", "Provider label", config.display.showProvider, "Show provider name.", (draft) =>
 					withConfig(draft, (next) => {
-						next.display.showProvider = nextIn(next.display.showProvider, PROVIDER_LABEL_MODES);
+						next.display.showProvider = nextIn(next.display.showProvider, PROVIDER_DISPLAY_MODE_VALUES);
 					}),
 				),
 				cycleRow("model.thinkingLabel", "Thinking label", config.model.showThinking, "Show thinking level.", (draft) =>
 					withConfig(draft, (next) => {
-						next.model.showThinking = nextIn(next.model.showThinking, MODEL_THINKING_MODES);
+						next.model.showThinking = nextIn(next.model.showThinking, MODEL_THINKING_MODE_VALUES);
 					}),
 				),
 			]);

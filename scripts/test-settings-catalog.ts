@@ -1,4 +1,15 @@
 import { strict as assert } from "node:assert";
+import {
+	CONTEXT_DISPLAY_MODE_VALUES,
+	CONTEXT_UNKNOWN_MODE_VALUES,
+	GIT_SHA_MODE_VALUES,
+	ICON_MODE_VALUES,
+	MODEL_THINKING_MODE_VALUES,
+	PROVIDER_DISPLAY_MODE_VALUES,
+	TOKENS_CACHE_MODE_VALUES,
+	TOKENS_DISPLAY_MODE_VALUES,
+	WORKSPACE_LABEL_MODE_VALUES,
+} from "../config-options.js";
 import { defaultConfig } from "../config.js";
 import { getSettingsCategories, getSettingsRows, type SettingsCategoryId, type SettingsRow } from "../settings-catalog.js";
 import { GLANCE_THEMES } from "../themes.js";
@@ -6,6 +17,12 @@ import type { GlanceConfig, SegmentId } from "../types.js";
 
 function clone<T>(value: T): T {
 	return JSON.parse(JSON.stringify(value)) as T;
+}
+
+function withTestConfig(config: GlanceConfig, mutate: (next: GlanceConfig) => void): GlanceConfig {
+	const next = clone(config);
+	mutate(next);
+	return next;
 }
 
 function assertConfigUnchanged(before: GlanceConfig, after: GlanceConfig, message: string): void {
@@ -48,6 +65,25 @@ function rowById(rows: SettingsRow[], id: string): SettingsRow {
 	const row = rows.find((candidate) => candidate.id === id);
 	assert.ok(row, `expected row ${id}`);
 	return row;
+}
+
+function assertCycleUsesValues<T extends string>(
+	base: GlanceConfig,
+	values: readonly T[],
+	categoryId: SettingsCategoryId,
+	rowId: string,
+	label: string,
+	withValue: (config: GlanceConfig, value: T) => GlanceConfig,
+	getValue: (config: GlanceConfig) => T,
+): void {
+	for (let index = 0; index < values.length; index++) {
+		const current = values[index]!;
+		const expected = values[(index + 1) % values.length]!;
+		const before = withValue(base, current);
+		const row = rowById(getSettingsRows(before, categoryId), rowId);
+		const after = applyRow(before, row);
+		assert.equal(getValue(after), expected, `${label} should cycle ${current} -> ${expected}`);
+	}
 }
 
 const config = defaultConfig();
@@ -304,6 +340,106 @@ assert.equal(rowById(tokensRows, "tokens.cache").apply!(config).tokens.cache, "s
 assert.equal(rowById(modelRows, "model.enabled").apply!(config).segments.find((segment) => segment.id === "model")?.enabled, false, "model enabled should toggle off");
 assert.equal(rowById(modelRows, "model.providerLabel").apply!(config).display.showProvider, "always", "provider label should cycle auto -> always");
 assert.equal(rowById(modelRows, "model.thinkingLabel").apply!(config).model.showThinking, "always", "thinking label should cycle auto -> always");
+
+assertCycleUsesValues(
+	config,
+	ICON_MODE_VALUES,
+	"general",
+	"general.icons",
+	"General Icons",
+	(base, icons) => withTestConfig(base, (next) => {
+		next.icons = icons;
+	}),
+	(after) => after.icons,
+);
+assertCycleUsesValues(
+	config,
+	WORKSPACE_LABEL_MODE_VALUES,
+	"general",
+	"general.workspaceLabel",
+	"General Workspace label",
+	(base, workspaceLabel) => withTestConfig(base, (next) => {
+		next.display.workspaceLabel = workspaceLabel;
+	}),
+	(after) => after.display.workspaceLabel,
+);
+assertCycleUsesValues(
+	config,
+	GIT_SHA_MODE_VALUES,
+	"git",
+	"git.sha",
+	"Git SHA",
+	(base, shaMode) => withTestConfig(base, (next) => {
+		next.git.shaMode = shaMode;
+	}),
+	(after) => after.git.shaMode,
+);
+assertCycleUsesValues(
+	config,
+	CONTEXT_DISPLAY_MODE_VALUES,
+	"context",
+	"context.display",
+	"Context Display",
+	(base, display) => withTestConfig(base, (next) => {
+		next.context.display = display;
+	}),
+	(after) => after.context.display,
+);
+assertCycleUsesValues(
+	config,
+	CONTEXT_UNKNOWN_MODE_VALUES,
+	"context",
+	"context.unknown",
+	"Context Unknown",
+	(base, unknown) => withTestConfig(base, (next) => {
+		next.context.unknown = unknown;
+	}),
+	(after) => after.context.unknown,
+);
+assertCycleUsesValues(
+	config,
+	TOKENS_DISPLAY_MODE_VALUES,
+	"tokens",
+	"tokens.display",
+	"Tokens Display",
+	(base, display) => withTestConfig(base, (next) => {
+		next.tokens.display = display;
+	}),
+	(after) => after.tokens.display,
+);
+assertCycleUsesValues(
+	config,
+	TOKENS_CACHE_MODE_VALUES,
+	"tokens",
+	"tokens.cache",
+	"Tokens Cache",
+	(base, cache) => withTestConfig(base, (next) => {
+		next.tokens.cache = cache;
+	}),
+	(after) => after.tokens.cache,
+);
+assertCycleUsesValues(
+	config,
+	PROVIDER_DISPLAY_MODE_VALUES,
+	"model",
+	"model.providerLabel",
+	"Model Provider label",
+	(base, showProvider) => withTestConfig(base, (next) => {
+		next.display.showProvider = showProvider;
+	}),
+	(after) => after.display.showProvider,
+);
+assertCycleUsesValues(
+	config,
+	MODEL_THINKING_MODE_VALUES,
+	"model",
+	"model.thinkingLabel",
+	"Model Thinking label",
+	(base, showThinking) => withTestConfig(base, (next) => {
+		next.model.showThinking = showThinking;
+	}),
+	(after) => after.model.showThinking,
+);
 
 for (const categoryId of ["general", "git", "context", "cost", "tokens", "model"] as const) {
 	assertEditableRowsArePure(config, categoryId);

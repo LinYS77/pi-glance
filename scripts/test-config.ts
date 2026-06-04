@@ -1,5 +1,16 @@
 import { strict as assert } from "node:assert";
-import { defaultConfig, normalizeConfig } from "../config.js";
+import {
+	CONTEXT_DISPLAY_MODE_VALUES,
+	CONTEXT_UNKNOWN_MODE_VALUES,
+	GIT_SHA_MODE_VALUES,
+	ICON_MODE_VALUES,
+	MODEL_THINKING_MODE_VALUES,
+	PROVIDER_DISPLAY_MODE_VALUES,
+	TOKENS_CACHE_MODE_VALUES,
+	TOKENS_DISPLAY_MODE_VALUES,
+	WORKSPACE_LABEL_MODE_VALUES,
+} from "../config-options.js";
+import { configFromText, configToText, defaultConfig, normalizeConfig } from "../config.js";
 import { GLANCE_THEME_IDS } from "../themes.js";
 import type { GlanceConfig, SegmentConfig } from "../types.js";
 
@@ -22,6 +33,34 @@ assert.equal(normalizeConfig({ version: 999 }).version, 2, "future raw version s
 
 for (const theme of GLANCE_THEME_IDS) {
 	assert.equal(normalizeConfig({ theme }).theme, theme, `${theme} should normalize as a valid theme`);
+}
+
+for (const icons of ICON_MODE_VALUES) {
+	assert.equal(normalizeConfig({ icons }).icons, icons, `${icons} should normalize as a valid icon mode`);
+}
+for (const showProvider of PROVIDER_DISPLAY_MODE_VALUES) {
+	assert.equal(normalizeConfig({ display: { showProvider } }).display.showProvider, showProvider, `${showProvider} should normalize as a valid provider display mode`);
+}
+for (const workspaceLabel of WORKSPACE_LABEL_MODE_VALUES) {
+	assert.equal(normalizeConfig({ display: { workspaceLabel } }).display.workspaceLabel, workspaceLabel, `${workspaceLabel} should normalize as a valid workspace label mode`);
+}
+for (const shaMode of GIT_SHA_MODE_VALUES) {
+	assert.equal(normalizeConfig({ git: { shaMode } }).git.shaMode, shaMode, `${shaMode} should normalize as a valid git SHA mode`);
+}
+for (const display of CONTEXT_DISPLAY_MODE_VALUES) {
+	assert.equal(normalizeConfig({ context: { display } }).context.display, display, `${display} should normalize as a valid context display mode`);
+}
+for (const unknown of CONTEXT_UNKNOWN_MODE_VALUES) {
+	assert.equal(normalizeConfig({ context: { unknown } }).context.unknown, unknown, `${unknown} should normalize as a valid context unknown mode`);
+}
+for (const display of TOKENS_DISPLAY_MODE_VALUES) {
+	assert.equal(normalizeConfig({ tokens: { display } }).tokens.display, display, `${display} should normalize as a valid tokens display mode`);
+}
+for (const cache of TOKENS_CACHE_MODE_VALUES) {
+	assert.equal(normalizeConfig({ tokens: { cache } }).tokens.cache, cache, `${cache} should normalize as a valid tokens cache mode`);
+}
+for (const showThinking of MODEL_THINKING_MODE_VALUES) {
+	assert.equal(normalizeConfig({ model: { showThinking } }).model.showThinking, showThinking, `${showThinking} should normalize as a valid model thinking mode`);
 }
 
 const userConfig = normalizeConfig({
@@ -245,5 +284,34 @@ assertSegments(normalizeConfig({ segments: "git" }).segments, defaults.segments,
 const normalized = normalizeConfig({ enabled: false, editor: { minContentRows: 4 } });
 const expectedShape: GlanceConfig = { ...defaults, enabled: false, editor: { minContentRows: 4 } };
 assert.deepEqual(normalized, expectedShape, "partial configs should normalize to the full current config shape");
+
+const rawConfig = {
+	version: 1,
+	enabled: false,
+	theme: "dark",
+	icons: "nerd",
+	display: {
+		adaptive: false,
+		showProvider: "never",
+		workspaceLabel: "smart",
+	},
+	segments: [
+		{ id: "git", enabled: false },
+		{ id: "model", enabled: false },
+	],
+};
+const configText = JSON.stringify(rawConfig);
+const codecConfig = normalizeConfig(rawConfig);
+
+assert.deepEqual(configFromText(configText), codecConfig, "valid config text should parse and normalize like raw config objects");
+assert.throws(() => configFromText("{"), SyntaxError, "invalid JSON config text should throw instead of falling back");
+assert.deepEqual(configFromText("false"), defaultConfig(), "non-object JSON config text should normalize to defaults");
+
+const encodedText = configToText(codecConfig);
+assert.equal(encodedText.endsWith("\n"), true, "configToText should end with a newline");
+assert.equal(encodedText.endsWith("\n\n"), false, "configToText should end with exactly one newline");
+assert.equal(encodedText.includes("\n\t\"enabled\""), true, "configToText should use tab indentation");
+assert.deepEqual(JSON.parse(encodedText), normalizeConfig(codecConfig), "encoded config JSON should equal normalized config");
+assert.deepEqual(configFromText(encodedText), normalizeConfig(codecConfig), "config text should round-trip through encode/decode helpers");
 
 console.log("✓ config normalization checks passed");

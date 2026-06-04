@@ -9,6 +9,7 @@ const ALLOWED_PI_IMPORTS = new Set([
 	"@earendil-works/pi-tui",
 ]);
 const RENDER_MODULES = new Set(["editor.ts", "renderer.ts", "pane.ts", "segments.ts", "surface-layout.ts"]);
+const PURE_CONFIG_OPTIONS_MODULE = "config-options.ts";
 const SURFACE_LAYOUT_MODULE = "surface-layout.ts";
 const SETTINGS_CATALOG_MODULE = "settings-catalog.ts";
 const GUARD_SCRIPT = join("scripts", "test-boundaries.ts");
@@ -121,29 +122,32 @@ function assertSettingsCatalogSeamImports(files: SourceFile[]): void {
 	}
 }
 
+const IO_NETWORK_PROCESS_IMPORTS = new Set([
+	"fs",
+	"fs/promises",
+	"node:fs",
+	"node:fs/promises",
+	"child_process",
+	"node:child_process",
+	"process",
+	"node:process",
+	"http",
+	"node:http",
+	"https",
+	"node:https",
+	"net",
+	"node:net",
+	"tls",
+	"node:tls",
+	"dgram",
+	"node:dgram",
+	"dns",
+	"node:dns",
+	"undici",
+	"ws",
+]);
+
 function assertRenderModulesHaveNoIo(files: SourceFile[]): void {
-	const forbiddenImports = new Set([
-		"fs",
-		"fs/promises",
-		"node:fs",
-		"node:fs/promises",
-		"child_process",
-		"node:child_process",
-		"http",
-		"node:http",
-		"https",
-		"node:https",
-		"net",
-		"node:net",
-		"tls",
-		"node:tls",
-		"dgram",
-		"node:dgram",
-		"dns",
-		"node:dns",
-		"undici",
-		"ws",
-	]);
 	const importPattern = /(?:import|export)\s+(?:[^"'`]*?\s+from\s+)?["']([^"']+)["']/g;
 	const callPatterns: Array<[RegExp, string]> = [
 		[/\bfetch\s*\(/, "fetch()"],
@@ -164,11 +168,31 @@ function assertRenderModulesHaveNoIo(files: SourceFile[]): void {
 	for (const file of files.filter((candidate) => RENDER_MODULES.has(basename(candidate.path)) || basename(candidate.path) === SETTINGS_CATALOG_MODULE)) {
 		for (const match of file.text.matchAll(importPattern)) {
 			const specifier = match[1]!;
-			if (forbiddenImports.has(specifier)) fail(`${file.path}: render module must not import IO/network/process module ${specifier}`);
+			if (IO_NETWORK_PROCESS_IMPORTS.has(specifier)) fail(`${file.path}: render module must not import IO/network/process module ${specifier}`);
 		}
 		for (const [pattern, label] of callPatterns) {
 			if (pattern.test(file.text)) fail(`${file.path}: render module must not perform render-time IO/network/process work (${label})`);
 		}
+	}
+}
+
+function assertConfigOptionsPureModule(files: SourceFile[]): void {
+	const configOptions = files.find((candidate) => basename(candidate.path) === PURE_CONFIG_OPTIONS_MODULE);
+	assert.ok(configOptions, "config-options.ts pure option source should exist");
+
+	const forbiddenLocalModules = new Set(["./config.js", "./settings-catalog.js", "./pane.js", "./editor.js", "./renderer.js", "./surface-layout.js"]);
+	const importPattern = /import\s+(type\s+)?(?:[^"'`]*?\s+from\s+)?["']([^"']+)["']/g;
+	for (const match of configOptions.text.matchAll(importPattern)) {
+		const isTypeOnly = match[1] === "type ";
+		const specifier = match[2]!;
+		if (specifier === "./types.js") {
+			if (!isTypeOnly) fail(`${configOptions.path}: config-options may only type-import from ./types.js`);
+			continue;
+		}
+		if (specifier.startsWith("@earendil-works/pi-")) fail(`${configOptions.path}: pure option source must not import pi package ${specifier}`);
+		if (IO_NETWORK_PROCESS_IMPORTS.has(specifier)) fail(`${configOptions.path}: pure option source must not import IO/network/process module ${specifier}`);
+		if (forbiddenLocalModules.has(specifier)) fail(`${configOptions.path}: pure option source must not import runtime/config/catalog module ${specifier}`);
+		fail(`${configOptions.path}: pure option source must not import ${specifier}`);
 	}
 }
 
@@ -185,5 +209,6 @@ assertNoCorePatching(sourceFiles);
 assertSurfaceLayoutSeamImports(sourceFiles);
 assertSettingsCatalogSeamImports(sourceFiles);
 assertRenderModulesHaveNoIo(sourceFiles);
+assertConfigOptionsPureModule(sourceFiles);
 
 console.log("✓ public import and render-boundary guard checks passed");
