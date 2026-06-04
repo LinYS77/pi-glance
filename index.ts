@@ -137,8 +137,15 @@ export default function piGlance(pi: ExtensionAPI): void {
 				return;
 			}
 
-			config = result.config;
-			await saveConfig(config);
+			const nextConfig = result.config;
+			try {
+				await saveConfig(nextConfig);
+			} catch {
+				ctx.ui.notify("pi-glance configuration save failed; keeping previous configuration", "error");
+				return;
+			}
+
+			config = nextConfig;
 			if (state) {
 				refreshReliableSnapshot(ctx, { model: true, git: true });
 			}
