@@ -13,6 +13,7 @@ export type TokensDisplayMode = "input-output" | "total";
 export type TokensCacheMode = "auto" | "show" | "hide";
 export type ModelThinkingMode = "auto" | "always" | "never";
 export type WorkspaceLabelMode = "name" | "smart" | "path";
+export type EditorTopMarginRows = 0 | 1 | 2;
 
 export interface SegmentConfig {
 	id: SegmentId;
@@ -27,6 +28,7 @@ interface DisplayConfig {
 
 interface EditorConfig {
 	minContentRows: number;
+	topMarginRows: EditorTopMarginRows;
 }
 
 export interface GitConfig {
@@ -53,7 +55,7 @@ interface TokensConfig {
 }
 
 export interface GlanceConfig {
-	version: 2;
+	version: 3;
 	enabled: boolean;
 	theme: GlanceThemeName;
 	icons: IconMode;

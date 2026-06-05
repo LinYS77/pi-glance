@@ -18,6 +18,7 @@ import { GLANCE_THEME_ID_SET } from "./themes.js";
 import type {
 	ContextDisplayMode,
 	ContextUnknownMode,
+	EditorTopMarginRows,
 	GitShaMode,
 	GlanceConfig,
 	IconMode,
@@ -31,7 +32,7 @@ import type {
 
 const CONFIG_PATH = join(getAgentDir(), "pi-glance", "config.json");
 // CONFIG_VERSION is the on-disk config schema version, not the npm package version.
-const CONFIG_VERSION = 2 as const;
+const CONFIG_VERSION = 3 as const;
 
 const ICON_MODES = new Set<IconMode>(ICON_MODE_VALUES);
 const PROVIDER_MODES = new Set<GlanceConfig["display"]["showProvider"]>(PROVIDER_DISPLAY_MODE_VALUES);
@@ -51,6 +52,7 @@ export function defaultConfig(): GlanceConfig {
 		icons: "plain",
 		editor: {
 			minContentRows: 3,
+			topMarginRows: 1,
 		},
 		display: {
 			adaptive: true,
@@ -173,6 +175,7 @@ export function normalizeConfig(raw: unknown): GlanceConfig {
 		icons: parseStringEnum(record.icons, ICON_MODES, defaults.icons),
 		editor: {
 			minContentRows: parseIntInRange(editor.minContentRows, defaults.editor.minContentRows, 2, 4),
+			topMarginRows: parseIntInRange(editor.topMarginRows, defaults.editor.topMarginRows, 0, 2) as EditorTopMarginRows,
 		},
 		display: {
 			adaptive: parseBool(display.adaptive, defaults.display.adaptive),

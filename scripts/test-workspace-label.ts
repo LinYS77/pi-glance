@@ -6,10 +6,14 @@ import { formatWorkspaceLabel, stripControls } from "../format.js";
 import { renderInputSurface } from "../renderer.js";
 import { testState } from "./helpers.js";
 
+function findTopBorder(lines: readonly string[]): string {
+	return lines.map(stripControls).find((line) => line.startsWith("╭")) ?? "";
+}
+
 function topLine(path: string, mode: "name" | "smart" | "path", width = 160): string {
 	const config = defaultConfig();
 	config.display.workspaceLabel = mode;
-	return stripControls(renderInputSurface(testState({ workspace: { name: "07_pi-glance", path } }), config, width)[0] ?? "");
+	return findTopBorder(renderInputSurface(testState({ workspace: { name: "07_pi-glance", path } }), config, width));
 }
 
 function previewState() {
@@ -39,7 +43,7 @@ function previewState() {
 function renderedTop(width: number, mutateConfig?: (config: ReturnType<typeof defaultConfig>) => void, showTitle = true): string {
 	const config = defaultConfig();
 	mutateConfig?.(config);
-	return renderInputSurface(previewState(), config, width, { showTitle })[0] ?? "";
+	return findTopBorder(renderInputSurface(previewState(), config, width, { showTitle }));
 }
 
 const homePath = `${homedir()}/winnie/00_project/07_pi-glance`;

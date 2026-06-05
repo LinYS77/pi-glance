@@ -63,7 +63,7 @@ That's the only command — opens a calm settings pane with a real input-surface
 
 | | | |
 |---|---|---|
-| 🖊️ | **Rounded editor** | Configurable 2 / 3 / 4 min rows, preserves all pi defaults |
+| 🖊️ | **Rounded editor** | Configurable 2 / 3 / 4 min rows and 0 / 1 / 2 top spacing rows, preserves all pi defaults |
 | 🏷️ | **Project title** | Current folder name, or a safe `~/...` path when enabled |
 | 📊 | **Inline status** | Model · context · tokens · cost · Git status — top-right |
 | ⚙️ | **`/glance` pane** | General settings, segment order, and per-segment detail settings in a calm grid |
@@ -74,6 +74,7 @@ That's the only command — opens a calm settings pane with a real input-surface
 
 - To switch themes, open `/glance` → **General** → `Theme`. Built-ins: Light, Dark, Catppuccin Latte/Mocha, Nord, Tokyo Night, Gruvbox Dark, Solarized Dark, Rosé Pine, and One Dark.
 - Icons default to `plain` so pi-glance works with normal terminal fonts.
+- Editor top spacing is configurable: open `/glance` → **General** → `Top spacing` and choose `none`, `1 row`, or `2 rows`.
 - `nerd` icons are opt-in: open `/glance` → **General** → `Icons` and choose `nerd` for richer symbols.
 - Nerd icons need a Nerd Font or Symbols Nerd Font fallback. If icons look like boxes, choose `plain`.
 - pi-glance does not auto-detect, install, or bundle terminal fonts.

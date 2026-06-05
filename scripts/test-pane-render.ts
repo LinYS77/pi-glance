@@ -307,6 +307,16 @@ assertContains(plainText(generalHintPane.component), "Switch the palette.", "gen
 press(generalHintPane.component, "\x1b[B");
 press(generalHintPane.component, "\x1b[B");
 press(generalHintPane.component, "\x1b[B");
+const topSpacing = plainText(generalHintPane.component);
+assertLineContainsAll(topSpacing, ["Top spacing", "1 row"], "top spacing setting should render");
+assertContains(topSpacing, "Set breathing room above the editor.", "top spacing hint should render");
+press(generalHintPane.component, "\r");
+assertLineContainsAll(plainText(generalHintPane.component), ["Top spacing", "1 row"], "enter should not cycle top spacing before value column");
+press(generalHintPane.component, "\x1b[C");
+press(generalHintPane.component, "\r");
+assertLineContainsAll(plainText(generalHintPane.component), ["Top spacing", "2 rows"], "enter should cycle top spacing in value column");
+press(generalHintPane.component, "\x1b[D");
+press(generalHintPane.component, "\x1b[B");
 press(generalHintPane.component, "\x1b[B");
 const workspaceLabel = plainText(generalHintPane.component);
 assertLineContainsAll(workspaceLabel, ["Workspace label", "name"], "workspace label setting should render");

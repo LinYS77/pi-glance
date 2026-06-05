@@ -7,6 +7,7 @@ import {
 	planSurfaceTopFrame,
 	planWorkspaceTitle,
 	renderSurfaceChunks,
+	renderSurfaceTopMargin,
 	surfaceMetrics,
 } from "./surface-layout.js";
 import { renderGlanceLine } from "./status-line.js";
@@ -93,7 +94,7 @@ export function renderInputSurface(
 		text: (text) => text,
 		dim: (text) => dimColor(config, text),
 	});
-	const lines = [truncateToWidth(top, safeWidth, borderColor(config, "…"))];
+	const lines = [...renderSurfaceTopMargin(safeWidth, config.editor.topMarginRows), truncateToWidth(top, safeWidth, borderColor(config, "…"))];
 	for (let i = 0; i < rows; i++) {
 		const raw = contentLines[i] ?? "";
 		const focusedPrefix = i === 0 && options.focused;

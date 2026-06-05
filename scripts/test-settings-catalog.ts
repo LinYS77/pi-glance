@@ -2,6 +2,7 @@ import { strict as assert } from "node:assert";
 import {
 	CONTEXT_DISPLAY_MODE_VALUES,
 	CONTEXT_UNKNOWN_MODE_VALUES,
+	EDITOR_TOP_MARGIN_ROW_VALUES,
 	GIT_SHA_MODE_VALUES,
 	ICON_MODE_VALUES,
 	MODEL_THINKING_MODE_VALUES,
@@ -67,7 +68,7 @@ function rowById(rows: SettingsRow[], id: string): SettingsRow {
 	return row;
 }
 
-function assertCycleUsesValues<T extends string>(
+function assertCycleUsesValues<T extends string | number>(
 	base: GlanceConfig,
 	values: readonly T[],
 	categoryId: SettingsCategoryId,
@@ -147,6 +148,13 @@ const generalRows = assertRows(config, "general", [
 		label: "Min input rows",
 		value: "3",
 		hint: "Set the resting editor height.",
+		kind: "cycle",
+	},
+	{
+		id: "general.topMarginRows",
+		label: "Top spacing",
+		value: "1 row",
+		hint: "Set breathing room above the editor.",
 		kind: "cycle",
 	},
 	{
@@ -308,6 +316,7 @@ assert.equal(
 );
 assert.equal(rowById(generalRows, "general.icons").apply!(config).icons, "nerd", "icons should cycle plain -> nerd");
 assert.equal(rowById(generalRows, "general.minInputRows").apply!(config).editor.minContentRows, 4, "min input rows should cycle 3 -> 4");
+assert.equal(rowById(generalRows, "general.topMarginRows").apply!(config).editor.topMarginRows, 2, "top spacing should cycle 1 row -> 2 rows");
 assert.equal(rowById(generalRows, "general.adaptiveWidth").apply!(config).display.adaptive, false, "adaptive width should toggle off");
 assert.equal(rowById(generalRows, "general.workspaceLabel").apply!(config).display.workspaceLabel, "smart", "workspace label should cycle name -> smart");
 
@@ -362,6 +371,17 @@ assertCycleUsesValues(
 		next.display.workspaceLabel = workspaceLabel;
 	}),
 	(after) => after.display.workspaceLabel,
+);
+assertCycleUsesValues(
+	config,
+	EDITOR_TOP_MARGIN_ROW_VALUES,
+	"general",
+	"general.topMarginRows",
+	"General Top spacing",
+	(base, topMarginRows) => withTestConfig(base, (next) => {
+		next.editor.topMarginRows = topMarginRows;
+	}),
+	(after) => after.editor.topMarginRows,
 );
 assertCycleUsesValues(
 	config,

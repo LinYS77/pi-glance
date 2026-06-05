@@ -2,6 +2,7 @@ import type {
 	ContextDisplayMode,
 	ContextUnknownMode,
 	GitShaMode,
+	EditorTopMarginRows,
 	GlanceConfig,
 	IconMode,
 	ModelThinkingMode,
@@ -13,6 +14,7 @@ import type {
 export const ICON_MODE_VALUES: ReadonlyArray<IconMode> = ["plain", "nerd"];
 export const PROVIDER_DISPLAY_MODE_VALUES: ReadonlyArray<GlanceConfig["display"]["showProvider"]> = ["auto", "always", "never"];
 export const WORKSPACE_LABEL_MODE_VALUES: ReadonlyArray<WorkspaceLabelMode> = ["name", "smart", "path"];
+export const EDITOR_TOP_MARGIN_ROW_VALUES: ReadonlyArray<EditorTopMarginRows> = [0, 1, 2];
 export const GIT_SHA_MODE_VALUES: ReadonlyArray<GitShaMode> = ["off", "detached", "always"];
 export const CONTEXT_DISPLAY_MODE_VALUES: ReadonlyArray<ContextDisplayMode> = ["percent+tokens", "percent", "tokens"];
 export const CONTEXT_UNKNOWN_MODE_VALUES: ReadonlyArray<ContextUnknownMode> = ["show", "hide"];

@@ -11,6 +11,7 @@ import {
 	planSurfaceTopFrame,
 	planWorkspaceTitle,
 	renderSurfaceChunks,
+	renderSurfaceTopMargin,
 	safeSurfaceWidth,
 	surfaceMetrics,
 	SURFACE_AUTOCOMPLETE_INDENT,
@@ -203,7 +204,7 @@ export class GlanceEditor extends CustomEditor {
 			contentLines.push("");
 		}
 
-		const output = [this.makeTopBorder(safeWidth, topOriginal, isFocused)];
+		const output = [...renderSurfaceTopMargin(safeWidth, config.editor.topMarginRows), this.makeTopBorder(safeWidth, topOriginal, isFocused)];
 		for (const line of contentLines) {
 			output.push(this.wrapContentLine(line, safeWidth, isFocused));
 		}

@@ -1,11 +1,12 @@
 import { cloneConfig, toggleSegment } from "./config.js";
 import {
+	EDITOR_TOP_MARGIN_ROW_VALUES,
 	ICON_MODE_VALUES,
 	WORKSPACE_LABEL_MODE_VALUES,
 } from "./config-options.js";
 import { getSegmentSettings, segmentLabel, type SegmentSettingDescriptor } from "./segment-registry.js";
 import { GLANCE_THEME_IDS, themeLabel } from "./themes.js";
-import type { GlanceConfig, SegmentId } from "./types.js";
+import type { EditorTopMarginRows, GlanceConfig, SegmentId } from "./types.js";
 
 export type SettingsCategoryId = "general" | SegmentId;
 type SettingsRowKind = "toggle" | "cycle" | "info";
@@ -45,6 +46,10 @@ function withConfig(config: GlanceConfig, mutate: (next: GlanceConfig) => void):
 
 function onOff(value: boolean): string {
 	return value ? "on" : "off";
+}
+
+function topMarginRowsLabel(value: EditorTopMarginRows): string {
+	return value === 0 ? "none" : value === 1 ? "1 row" : "2 rows";
 }
 
 function toggleRow(id: string, label: string, value: boolean, hint: string, apply: (config: GlanceConfig) => GlanceConfig): SettingsRow {
@@ -119,6 +124,11 @@ export function getSettingsRows(config: GlanceConfig, categoryId: SettingsCatego
 				cycleRow("general.minInputRows", "Min input rows", `${config.editor.minContentRows}`, "Set the resting editor height.", (draft) =>
 					withConfig(draft, (next) => {
 						next.editor.minContentRows = nextNumber(next.editor.minContentRows, MIN_CONTENT_ROWS);
+					}),
+				),
+				cycleRow("general.topMarginRows", "Top spacing", topMarginRowsLabel(config.editor.topMarginRows), "Set breathing room above the editor.", (draft) =>
+					withConfig(draft, (next) => {
+						next.editor.topMarginRows = nextNumber(next.editor.topMarginRows, EDITOR_TOP_MARGIN_ROW_VALUES);
 					}),
 				),
 				toggleRow("general.adaptiveWidth", "Adaptive width", config.display.adaptive, "Drop later segments first.", (draft) =>

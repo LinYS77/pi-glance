@@ -13,6 +13,7 @@ import {
 	planSurfaceTopFrame,
 	planWorkspaceTitle,
 	renderSurfaceChunks,
+	renderSurfaceTopMargin,
 	safeSurfaceWidth,
 	surfaceMetrics,
 	surfaceTitleBudget,
@@ -65,6 +66,14 @@ for (const width of WIDTHS) {
 	const bottom = planSurfaceBottomFrame({ width });
 	const bottomWithIndicator = planSurfaceBottomFrame({ width, scrollIndicator: formatSurfaceScrollIndicator("│ ↑ 123 more │", width) });
 	const row = planSurfaceRow({ width, text: "Ask pi to improve the input surface...", prefix: "› " });
+	assert.deepEqual(renderSurfaceTopMargin(width, 0), [], `zero top margin rows render no lines at width ${width}`);
+	assert.deepEqual(renderSurfaceTopMargin(width), [" "], `default top margin is one defensive space at width ${width}`);
+	assert.deepEqual(renderSurfaceTopMargin(width, 1), [" "], `one top margin row is one defensive space at width ${width}`);
+	assert.deepEqual(renderSurfaceTopMargin(width, 2), [" ", " "], `two top margin rows are defensive spaces at width ${width}`);
+	for (const line of renderSurfaceTopMargin(width, 2)) {
+		assert.equal(line.trim(), "", `top margin line is blank after trim at width ${width}`);
+		assert.ok(visibleWidth(line) <= metrics.safeWidth, `top margin should fit width ${width}`);
+	}
 
 	for (const [label, rendered] of [
 		["top", plain(top.chunks)],
@@ -77,6 +86,13 @@ for (const width of WIDTHS) {
 	}
 }
 
+assert.deepEqual(renderSurfaceTopMargin(80, -1), [], "negative row count clamps to no top margin rows");
+assert.deepEqual(renderSurfaceTopMargin(80, 99), [" ", " "], "large row count clamps to two top margin rows");
+assert.deepEqual(renderSurfaceTopMargin(80, 1.9), [" "], "fractional row count floors before rendering");
+assert.deepEqual(renderSurfaceTopMargin(80, Number.NaN), [], "non-finite row count renders no top margin rows");
+assert.deepEqual(renderSurfaceTopMargin(0, 2), ["", ""], "zero width keeps row count but uses empty lines");
+assert.deepEqual(renderSurfaceTopMargin(-1, 1), [""], "negative width keeps row count but uses an empty line");
+assert.deepEqual(renderSurfaceTopMargin(Number.NaN, 1), [""], "non-finite width keeps row count but uses an empty line");
 assert.equal(surfaceTitleBudget(200), SURFACE_TITLE_MAX_WIDTH, "title budget is capped at 48 columns");
 assert.equal(surfaceTitleBudget(100), 42, "title budget uses the 42% ratio before the cap");
 assert.equal(surfaceTitleBudget(99), Math.floor(99 * SURFACE_TITLE_RATIO), "title budget ratio is floored");

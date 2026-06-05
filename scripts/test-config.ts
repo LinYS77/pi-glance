@@ -2,6 +2,7 @@ import { strict as assert } from "node:assert";
 import {
 	CONTEXT_DISPLAY_MODE_VALUES,
 	CONTEXT_UNKNOWN_MODE_VALUES,
+	EDITOR_TOP_MARGIN_ROW_VALUES,
 	GIT_SHA_MODE_VALUES,
 	ICON_MODE_VALUES,
 	MODEL_THINKING_MODE_VALUES,
@@ -28,8 +29,9 @@ for (const raw of [undefined, null, false, true, 0, 1, "", "{}", []]) {
 	assertDefault(raw, `non-object raw config ${JSON.stringify(raw)} should normalize to defaults`);
 }
 
-assert.equal(normalizeConfig({ version: 0 }).version, 2, "old raw version should normalize to current schema version");
-assert.equal(normalizeConfig({ version: 999 }).version, 2, "future raw version should normalize to current schema version");
+assert.equal(defaults.editor.topMarginRows, 1, "default editor top margin rows should preserve the one-row breathing room");
+assert.equal(normalizeConfig({ version: 0 }).version, 3, "old raw version should normalize to current schema version");
+assert.equal(normalizeConfig({ version: 999 }).version, 3, "future raw version should normalize to current schema version");
 
 for (const theme of GLANCE_THEME_IDS) {
 	assert.equal(normalizeConfig({ theme }).theme, theme, `${theme} should normalize as a valid theme`);
@@ -43,6 +45,9 @@ for (const showProvider of PROVIDER_DISPLAY_MODE_VALUES) {
 }
 for (const workspaceLabel of WORKSPACE_LABEL_MODE_VALUES) {
 	assert.equal(normalizeConfig({ display: { workspaceLabel } }).display.workspaceLabel, workspaceLabel, `${workspaceLabel} should normalize as a valid workspace label mode`);
+}
+for (const topMarginRows of EDITOR_TOP_MARGIN_ROW_VALUES) {
+	assert.equal(normalizeConfig({ editor: { topMarginRows } }).editor.topMarginRows, topMarginRows, `${topMarginRows} should normalize as a valid editor top margin row count`);
 }
 for (const shaMode of GIT_SHA_MODE_VALUES) {
 	assert.equal(normalizeConfig({ git: { shaMode } }).git.shaMode, shaMode, `${shaMode} should normalize as a valid git SHA mode`);
@@ -70,6 +75,7 @@ const userConfig = normalizeConfig({
 	icons: "nerd",
 	editor: {
 		minContentRows: 4,
+		topMarginRows: 2,
 	},
 	display: {
 		adaptive: false,
@@ -114,12 +120,13 @@ const userConfig = normalizeConfig({
 assert.deepEqual(
 	userConfig,
 	{
-		version: 2,
+		version: 3,
 		enabled: false,
 		theme: "tokyo-night",
 		icons: "nerd",
 		editor: {
 			minContentRows: 4,
+			topMarginRows: 2,
 		},
 		display: {
 			adaptive: false,
@@ -193,6 +200,14 @@ assert.equal(normalizeConfig({ editor: { minContentRows: 3.9 } }).editor.minCont
 assert.equal(normalizeConfig({ editor: { minContentRows: 9 } }).editor.minContentRows, 4, "minContentRows should clamp to maximum 4");
 assert.equal(normalizeConfig({ editor: { minContentRows: Number.NaN } }).editor.minContentRows, defaults.editor.minContentRows, "NaN minContentRows should fall back to default");
 assert.equal(normalizeConfig({ editor: { minContentRows: "4" } }).editor.minContentRows, defaults.editor.minContentRows, "non-number minContentRows should fall back to default");
+assert.equal(normalizeConfig({ editor: {} }).editor.topMarginRows, 1, "missing topMarginRows should default to one row for old configs");
+assert.equal(normalizeConfig({ editor: { topMarginRows: -1 } }).editor.topMarginRows, 0, "topMarginRows should clamp to minimum 0");
+assert.equal(normalizeConfig({ editor: { topMarginRows: 99 } }).editor.topMarginRows, 2, "topMarginRows should clamp to maximum 2");
+assert.equal(normalizeConfig({ editor: { topMarginRows: 1.9 } }).editor.topMarginRows, 1, "topMarginRows should floor fractional values");
+assert.equal(normalizeConfig({ editor: { topMarginRows: 2.9 } }).editor.topMarginRows, 2, "topMarginRows should floor before clamping to max");
+assert.equal(normalizeConfig({ editor: { topMarginRows: Number.NaN } }).editor.topMarginRows, defaults.editor.topMarginRows, "NaN topMarginRows should fall back to default");
+assert.equal(normalizeConfig({ editor: { topMarginRows: null } }).editor.topMarginRows, defaults.editor.topMarginRows, "null topMarginRows should fall back to default");
+assert.equal(normalizeConfig({ editor: { topMarginRows: "1" } }).editor.topMarginRows, defaults.editor.topMarginRows, "non-number topMarginRows should fall back to default");
 
 assert.equal(normalizeConfig({ git: { timeoutMs: 99 } }).git.timeoutMs, 100, "git timeout should enforce minimum 100ms");
 assert.equal(normalizeConfig({ git: { timeoutMs: 250.9 } }).git.timeoutMs, 250, "git timeout should floor fractional values");
@@ -282,7 +297,7 @@ assertSegments(normalizeConfig({ segments: [] }).segments, defaults.segments, "e
 assertSegments(normalizeConfig({ segments: "git" }).segments, defaults.segments, "non-array segment lists should fall back to defaults");
 
 const normalized = normalizeConfig({ enabled: false, editor: { minContentRows: 4 } });
-const expectedShape: GlanceConfig = { ...defaults, enabled: false, editor: { minContentRows: 4 } };
+const expectedShape: GlanceConfig = { ...defaults, enabled: false, editor: { ...defaults.editor, minContentRows: 4 } };
 assert.deepEqual(normalized, expectedShape, "partial configs should normalize to the full current config shape");
 
 const rawConfig = {

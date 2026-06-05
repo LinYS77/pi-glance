@@ -154,6 +154,13 @@ export function safeSurfaceWidth(width: number): number {
 	return Math.max(MIN_SURFACE_WIDTH, finiteFloor(width, MIN_SURFACE_WIDTH));
 }
 
+export function renderSurfaceTopMargin(width: number, rows = 1): string[] {
+	// Pure string helper for input-surface breathing rows: no Text/widgets/private pi APIs or terminal side effects.
+	const count = Math.max(0, Math.min(2, finiteFloor(rows, 0)));
+	const line = finiteFloor(width, 0) > 0 ? " " : "";
+	return Array.from({ length: count }, () => line);
+}
+
 export function surfaceMetrics(width: number): SurfaceMetrics {
 	const safeWidth = safeSurfaceWidth(width);
 	return { safeWidth, innerWidth: Math.max(0, safeWidth - 2) };
