@@ -8,9 +8,11 @@ const ALLOWED_PI_IMPORTS = new Set([
 	"@earendil-works/pi-coding-agent",
 	"@earendil-works/pi-tui",
 ]);
-const RENDER_MODULES = new Set(["editor.ts", "renderer.ts", "pane.ts", "segments.ts", "surface-layout.ts"]);
+const FOOTER_BRIDGE_MODULE = "footer-bridge.ts";
+const RENDER_MODULES = new Set(["editor.ts", "renderer.ts", "pane.ts", "segments.ts", "surface-layout.ts", FOOTER_BRIDGE_MODULE]);
 const INDEX_MODULE = "index.ts";
 const PURE_CONFIG_OPTIONS_MODULE = "config-options.ts";
+const RUNTIME_POLICY_MODULE = "runtime-policy.ts";
 const RUNTIME_SNAPSHOT_MODULE = "runtime-snapshot.ts";
 const STATE_MODULE = "state.ts";
 const SURFACE_LAYOUT_MODULE = "surface-layout.ts";
@@ -215,6 +217,31 @@ function assertRuntimeSnapshotAdapterSeam(files: SourceFile[]): void {
 	}
 }
 
+function assertRuntimePolicyPureModule(files: SourceFile[]): void {
+	const runtimePolicy = files.find((candidate) => basename(candidate.path) === RUNTIME_POLICY_MODULE);
+	assert.ok(runtimePolicy, "runtime-policy.ts pure policy table should exist");
+
+	const forbiddenLocalModules = new Set([
+		"./runtime.js",
+		"./runtime-snapshot.js",
+		"./state.js",
+		"./editor.js",
+		"./renderer.js",
+		"./pane.js",
+		"./footer-bridge.js",
+		"./git.js",
+		"./config.js",
+	]);
+	const importPattern = /(?:import|export)\s+(type\s+)?(?:[^"'`]*?\s+from\s+)?["']([^"']+)["']/g;
+	for (const match of runtimePolicy.text.matchAll(importPattern)) {
+		const specifier = match[2]!;
+		if (specifier.startsWith("@earendil-works/pi-")) fail(`${runtimePolicy.path}: runtime policy must not import pi/TUI package ${specifier}`);
+		if (IO_NETWORK_PROCESS_IMPORTS.has(specifier)) fail(`${runtimePolicy.path}: runtime policy must not import IO/network/process module ${specifier}`);
+		if (forbiddenLocalModules.has(specifier)) fail(`${runtimePolicy.path}: runtime policy must not import runtime/state/render/config module ${specifier}`);
+		fail(`${runtimePolicy.path}: runtime policy table should be import-free, found ${specifier}`);
+	}
+}
+
 function assertStateModulePiFree(files: SourceFile[]): void {
 	const state = files.find((candidate) => basename(candidate.path) === STATE_MODULE);
 	assert.ok(state, "state.ts should exist");
@@ -224,6 +251,27 @@ function assertStateModulePiFree(files: SourceFile[]): void {
 		const specifier = match[1]!;
 		if (specifier.startsWith("@earendil-works/pi-")) fail(`${state.path}: state module must not import pi package ${specifier}`);
 	}
+}
+
+function assertFooterBridgeProviderSeam(files: SourceFile[]): void {
+	const footerBridge = files.find((candidate) => basename(candidate.path) === FOOTER_BRIDGE_MODULE);
+	assert.ok(footerBridge, "footer-bridge.ts provider facts bridge should exist");
+
+	const importPattern = /(?:import|export)\s+(type\s+)?(?:[^"'`]*?\s+from\s+)?["']([^"']+)["']/g;
+	const allowedSpecifiers = new Set(["@earendil-works/pi-coding-agent", "@earendil-works/pi-tui", "./state.js", "./types.js"]);
+	for (const match of footerBridge.text.matchAll(importPattern)) {
+		const isTypeOnly = match[1] === "type ";
+		const specifier = match[2]!;
+		if (!allowedSpecifiers.has(specifier)) fail(`${footerBridge.path}: footer bridge must only import provider/component types and state provider-count seam, not ${specifier}`);
+		if ((specifier === "@earendil-works/pi-coding-agent" || specifier === "@earendil-works/pi-tui" || specifier === "./types.js") && !isTypeOnly) {
+			fail(`${footerBridge.path}: footer bridge import from ${specifier} must be type-only`);
+		}
+	}
+	if (!/setProviderCount\s*\(\s*this\.getState\(\)\s*,\s*this\.footerData\.getAvailableProviderCount\(\)\s*\)/.test(footerBridge.text)) {
+		fail(`${footerBridge.path}: footer bridge sync should delegate provider count facts to setProviderCount()`);
+	}
+	if (/\.version\s*(?:\+\+|=|\+=)/.test(footerBridge.text)) fail(`${footerBridge.path}: footer bridge must not mutate state.version directly`);
+	if (/providers\.availableCount\s*=/.test(footerBridge.text)) fail(`${footerBridge.path}: footer bridge must not mutate provider count directly`);
 }
 
 function assertIndexThinWiring(files: SourceFile[]): void {
@@ -275,7 +323,9 @@ assertSettingsCatalogSeamImports(sourceFiles);
 assertPaneModelSeamImports(sourceFiles);
 assertRenderModulesHaveNoIo(sourceFiles);
 assertRuntimeSnapshotAdapterSeam(sourceFiles);
+assertRuntimePolicyPureModule(sourceFiles);
 assertStateModulePiFree(sourceFiles);
+assertFooterBridgeProviderSeam(sourceFiles);
 assertIndexThinWiring(sourceFiles);
 assertConfigOptionsPureModule(sourceFiles);
 

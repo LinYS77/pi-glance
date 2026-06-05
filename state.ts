@@ -46,6 +46,13 @@ export function setUsageTotals(state: GlanceState, usage: UsageTotals): boolean 
 	return true;
 }
 
+export function setProviderCount(state: GlanceState, availableCount: number): boolean {
+	if (state.providers.availableCount === availableCount) return false;
+	state.providers.availableCount = availableCount;
+	touch(state);
+	return true;
+}
+
 export function clearContextUsage(state: GlanceState, inputs?: Pick<StateInputs, "model">): boolean {
 	const window = inputs?.model?.contextWindow ?? state.context.window ?? 0;
 	if (state.context.tokens === null && state.context.percent === null && state.context.window === window) return false;

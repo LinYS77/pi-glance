@@ -2,6 +2,7 @@ import type { ExtensionCommandContext, ExtensionContext } from "@earendil-works/
 import { GlanceEditor } from "./editor.js";
 import { GlanceFooterBridge } from "./footer-bridge.js";
 import { GitRefresher } from "./git.js";
+import { runtimePlanFor, type RuntimeEventFacts, type RuntimeEventKind, type RuntimeRefreshPlan } from "./runtime-policy.js";
 import { stateInputsFromContext } from "./runtime-snapshot.js";
 import { clearContextUsage, createInitialState, refreshContextUsage, refreshModel, refreshWorkspace, setGitSnapshot, setUsageTotals } from "./state.js";
 import type { GitSnapshot, GlanceConfig, GlanceState } from "./types.js";
@@ -101,20 +102,25 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 		gitRefresher?.schedule(immediate);
 	}
 
-	function refreshReliableSnapshot(ctx: ExtensionContext, options: { model?: boolean; git?: boolean } = {}): void {
-		if (!state) return;
+	function applySnapshotPlan(ctx: ExtensionContext, plan: RuntimeRefreshPlan): void {
+		if (!state || plan.snapshot === "none") return;
 		const inputs = stateInputsFromContext(ctx, adapters.getThinkingLevel());
-		const workspaceChanged = refreshWorkspace(state, inputs);
-		if (options.model) refreshModel(state, inputs, getConfig());
-		setUsageTotals(state, inputs.usage);
-		refreshContextUsage(state, inputs);
-		if (options.git || workspaceChanged) scheduleGitRefresh(options.git || workspaceChanged);
+		const workspaceChanged = plan.refreshWorkspace ? refreshWorkspace(state, inputs) : false;
+		if (plan.refreshModel) refreshModel(state, inputs, getConfig());
+		if (plan.refreshUsageTotals) setUsageTotals(state, inputs.usage);
+		if (plan.context === "refresh") refreshContextUsage(state, inputs);
+		else if (plan.context === "clear") clearContextUsage(state, inputs);
+		if (plan.git === "immediate") scheduleGitRefresh(true);
+		else if (plan.git === "onWorkspaceChange" && workspaceChanged) scheduleGitRefresh(true);
 	}
 
-	function refreshThinkingLevel(ctx: ExtensionContext): void {
-		if (!state) return;
-		const inputs = stateInputsFromContext(ctx, adapters.getThinkingLevel());
-		refreshModel(state, inputs, getConfig());
+	async function executeRuntimePlan(kind: RuntimeEventKind, ctx: ExtensionContext, facts?: RuntimeEventFacts, beforeRender?: () => void): Promise<void> {
+		const plan = runtimePlanFor(kind, facts);
+		if (plan.ensureConfig) await ensureConfig();
+		if (plan.ensureState) ensureState(ctx);
+		applySnapshotPlan(ctx, plan);
+		beforeRender?.();
+		if (plan.render) renderNow();
 	}
 
 	function clearBridge(): void {
@@ -162,8 +168,7 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 				() => state ?? ensureState(ctx),
 				() => getConfig(),
 				() => {
-					refreshThinkingLevel(ctx);
-					renderNow();
+					void executeRuntimePlan("editor_thinking_cycle", ctx);
 				},
 			);
 		});
@@ -189,11 +194,7 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 				}
 
 				config = nextConfig;
-				if (state) {
-					refreshReliableSnapshot(ctx, { model: true, git: true });
-				}
-				installInputSurface(ctx);
-				renderNow();
+				await executeRuntimePlan("config_save_success", ctx, undefined, () => installInputSurface(ctx));
 				ctx.ui.notify("pi-glance configuration saved", "info");
 			},
 		},
@@ -207,65 +208,31 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 				clearUI(ctx);
 			},
 			modelSelect: async (_event, ctx) => {
-				await ensureConfig();
-				ensureState(ctx);
-				refreshReliableSnapshot(ctx, { model: true, git: true });
-				renderNow();
+				await executeRuntimePlan("model_select", ctx);
 			},
 			thinkingLevelSelect: async (_event, ctx) => {
-				await ensureConfig();
-				ensureState(ctx);
-				refreshThinkingLevel(ctx);
-				renderNow();
+				await executeRuntimePlan("thinking_level_select", ctx);
 			},
 			turnStart: async (_event, ctx) => {
-				await ensureConfig();
-				ensureState(ctx);
-				refreshReliableSnapshot(ctx, { model: true });
-				renderNow();
+				await executeRuntimePlan("turn_start", ctx);
 			},
 			toolExecutionEnd: async (_event, ctx) => {
-				await ensureConfig();
-				ensureState(ctx);
-				refreshReliableSnapshot(ctx, { git: true });
-				renderNow();
+				await executeRuntimePlan("tool_execution_end", ctx);
 			},
 			sessionTree: async (_event, ctx) => {
-				await ensureConfig();
-				ensureState(ctx);
-				refreshReliableSnapshot(ctx, { model: true, git: true });
-				renderNow();
+				await executeRuntimePlan("session_tree", ctx);
 			},
 			sessionCompact: async (_event, ctx) => {
-				await ensureConfig();
-				ensureState(ctx);
-				const inputs = stateInputsFromContext(ctx, adapters.getThinkingLevel());
-				refreshWorkspace(state!, inputs);
-				refreshModel(state!, inputs, getConfig());
-				setUsageTotals(state!, inputs.usage);
-				clearContextUsage(state!, inputs);
-				scheduleGitRefresh(true);
-				renderNow();
+				await executeRuntimePlan("session_compact", ctx);
 			},
 			messageEnd: async (event, ctx) => {
-				await ensureConfig();
-				ensureState(ctx);
-				if (event.message.role === "assistant") {
-					refreshReliableSnapshot(ctx);
-					renderNow();
-				}
+				await executeRuntimePlan("message_end", ctx, { messageRole: event.message.role });
 			},
 			turnEnd: async (_event, ctx) => {
-				await ensureConfig();
-				ensureState(ctx);
-				refreshReliableSnapshot(ctx);
-				renderNow();
+				await executeRuntimePlan("turn_end", ctx);
 			},
 			agentEnd: async (_event, ctx) => {
-				await ensureConfig();
-				ensureState(ctx);
-				refreshReliableSnapshot(ctx);
-				renderNow();
+				await executeRuntimePlan("agent_end", ctx);
 			},
 		},
 	};
