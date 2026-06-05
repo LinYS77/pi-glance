@@ -9,7 +9,8 @@ import {
 	renderSurfaceChunks,
 	surfaceMetrics,
 } from "./surface-layout.js";
-import { SEGMENT_BY_ID, renderSegment } from "./segments.js";
+import { SEGMENT_BY_ID } from "./segment-registry.js";
+import { renderSegment } from "./segments.js";
 import type {
 	GlanceConfig,
 	GlancePalette,

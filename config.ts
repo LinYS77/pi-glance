@@ -13,6 +13,7 @@ import {
 	TOKENS_DISPLAY_MODE_VALUES,
 	WORKSPACE_LABEL_MODE_VALUES,
 } from "./config-options.js";
+import { defaultSegmentConfigs, isSegmentId } from "./segment-registry.js";
 import { GLANCE_THEME_ID_SET } from "./themes.js";
 import type {
 	ContextDisplayMode,
@@ -32,15 +33,6 @@ const CONFIG_PATH = join(getAgentDir(), "pi-glance", "config.json");
 // CONFIG_VERSION is the on-disk config schema version, not the npm package version.
 const CONFIG_VERSION = 2 as const;
 
-const DEFAULT_SEGMENTS: SegmentConfig[] = [
-	{ id: "git", enabled: true },
-	{ id: "context", enabled: true },
-	{ id: "cost", enabled: true },
-	{ id: "tokens", enabled: false },
-	{ id: "model", enabled: true },
-];
-
-const SEGMENT_IDS = new Set<SegmentId>(DEFAULT_SEGMENTS.map((s) => s.id));
 const ICON_MODES = new Set<IconMode>(ICON_MODE_VALUES);
 const PROVIDER_MODES = new Set<GlanceConfig["display"]["showProvider"]>(PROVIDER_DISPLAY_MODE_VALUES);
 const WORKSPACE_LABEL_MODES = new Set<WorkspaceLabelMode>(WORKSPACE_LABEL_MODE_VALUES);
@@ -65,7 +57,7 @@ export function defaultConfig(): GlanceConfig {
 			showProvider: "auto",
 			workspaceLabel: "name",
 		},
-		segments: DEFAULT_SEGMENTS.map((s) => ({ ...s })),
+		segments: defaultSegmentConfigs(),
 		model: {
 			customNames: {},
 			showThinking: "auto",
@@ -129,7 +121,7 @@ function parseIntAtLeast(value: unknown, fallback: number, min: number): number 
 // If a segment list is too old/ambiguous (currently: no git segment), fall back
 // to the curated default order rather than guessing.
 function normalizeSegments(value: unknown): SegmentConfig[] {
-	const defaults = DEFAULT_SEGMENTS.map((s) => ({ ...s }));
+	const defaults = defaultSegmentConfigs();
 	const byId = new Map<SegmentId, SegmentConfig>(defaults.map((s) => [s.id, s]));
 	const ordered: SegmentConfig[] = [];
 
@@ -137,8 +129,8 @@ function normalizeSegments(value: unknown): SegmentConfig[] {
 		for (const raw of value) {
 			if (!raw || typeof raw !== "object") continue;
 			const record = raw as Record<string, unknown>;
-			if (typeof record.id !== "string" || !SEGMENT_IDS.has(record.id as SegmentId)) continue;
-			const id = record.id as SegmentId;
+			if (!isSegmentId(record.id)) continue;
+			const id = record.id;
 			const base = byId.get(id)!;
 			const segment = {
 				id,
