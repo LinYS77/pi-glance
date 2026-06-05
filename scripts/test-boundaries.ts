@@ -9,7 +9,8 @@ const ALLOWED_PI_IMPORTS = new Set([
 	"@earendil-works/pi-tui",
 ]);
 const FOOTER_BRIDGE_MODULE = "footer-bridge.ts";
-const RENDER_MODULES = new Set(["editor.ts", "renderer.ts", "pane.ts", "segments.ts", "surface-layout.ts", FOOTER_BRIDGE_MODULE]);
+const STATUS_LINE_MODULE = "status-line.ts";
+const RENDER_MODULES = new Set(["editor.ts", "renderer.ts", "pane.ts", "segments.ts", "surface-layout.ts", FOOTER_BRIDGE_MODULE, STATUS_LINE_MODULE]);
 const INDEX_MODULE = "index.ts";
 const PURE_CONFIG_OPTIONS_MODULE = "config-options.ts";
 const RUNTIME_POLICY_MODULE = "runtime-policy.ts";
@@ -105,7 +106,7 @@ function assertNoCorePatching(files: SourceFile[]): void {
 function assertSurfaceLayoutSeamImports(files: SourceFile[]): void {
 	const surfaceLayout = files.find((candidate) => basename(candidate.path) === SURFACE_LAYOUT_MODULE);
 	if (!surfaceLayout) return;
-	const forbiddenModulePattern = /(?:^|\/)(?:renderer|editor|pane)(?:\.js)?$/;
+	const forbiddenModulePattern = /(?:^|\/)(?:renderer|editor|pane|status-line)(?:\.js)?$/;
 	const importPattern = /(?:import|export)\s+(?:[^"'`]*?\s+from\s+)?["']([^"']+)["']/g;
 	for (const match of surfaceLayout.text.matchAll(importPattern)) {
 		const specifier = match[1]!;
@@ -242,6 +243,52 @@ function assertRuntimePolicyPureModule(files: SourceFile[]): void {
 	}
 }
 
+function assertStatusLineSeamImports(files: SourceFile[]): void {
+	const statusLine = files.find((candidate) => basename(candidate.path) === STATUS_LINE_MODULE);
+	assert.ok(statusLine, "status-line.ts render seam should exist");
+
+	const allowedSpecifiers = new Set(["@earendil-works/pi-tui", "./palette.js", "./segment-registry.js", "./segments.js", "./types.js"]);
+	const forbiddenLocalSpecifiers = new Set([
+		"./renderer.js",
+		"./surface-layout.js",
+		"./editor.js",
+		"./pane.js",
+		"./runtime.js",
+		"./runtime-snapshot.js",
+		"./state.js",
+		"./footer-bridge.js",
+		"./config.js",
+		"./settings-catalog.js",
+	]);
+	const importPattern = /(?:import|export)\s+(type\s+)?(?:[^"'`]*?\s+from\s+)?["']([^"']+)["']/g;
+	for (const match of statusLine.text.matchAll(importPattern)) {
+		const specifier = match[2]!;
+		if (specifier.startsWith("@earendil-works/pi-") && specifier !== "@earendil-works/pi-tui") {
+			fail(`${statusLine.path}: status-line may only import public pi-tui helpers, not ${specifier}`);
+		}
+		if (IO_NETWORK_PROCESS_IMPORTS.has(specifier)) fail(`${statusLine.path}: status-line must not import IO/network/process module ${specifier}`);
+		if (forbiddenLocalSpecifiers.has(specifier)) fail(`${statusLine.path}: status-line must not import UI/runtime/state/config module ${specifier}`);
+		if (!allowedSpecifiers.has(specifier)) fail(`${statusLine.path}: status-line must not import ${specifier}`);
+	}
+}
+
+function assertStatusLineConsumers(files: SourceFile[]): void {
+	const renderer = files.find((candidate) => basename(candidate.path) === "renderer.ts");
+	assert.ok(renderer, "renderer.ts should exist");
+	const editor = files.find((candidate) => basename(candidate.path) === "editor.ts");
+	assert.ok(editor, "editor.ts should exist");
+
+	const importPattern = /(?:import|export)\s+(?:[^"'`]*?\s+from\s+)?["']([^"']+)["']/g;
+	const rendererImports = [...renderer.text.matchAll(importPattern)].map((match) => match[1]!);
+	if (rendererImports.includes("./segments.js")) fail(`${renderer.path}: renderer must not import ./segments.js after status-line split`);
+	if (rendererImports.includes("./segment-registry.js")) fail(`${renderer.path}: renderer must not import ./segment-registry.js after status-line split`);
+	assert.ok(rendererImports.includes("./status-line.js"), "renderer.ts should import status-line seam for renderGlanceLine");
+
+	const editorImports = [...editor.text.matchAll(importPattern)].map((match) => match[1]!);
+	if (editorImports.includes("./renderer.js")) fail(`${editor.path}: editor must not import renderGlanceLine from renderer after status-line split`);
+	assert.ok(editorImports.includes("./status-line.js"), "editor.ts should import renderGlanceLine from status-line seam");
+}
+
 function assertStateModulePiFree(files: SourceFile[]): void {
 	const state = files.find((candidate) => basename(candidate.path) === STATE_MODULE);
 	assert.ok(state, "state.ts should exist");
@@ -324,6 +371,8 @@ assertPaneModelSeamImports(sourceFiles);
 assertRenderModulesHaveNoIo(sourceFiles);
 assertRuntimeSnapshotAdapterSeam(sourceFiles);
 assertRuntimePolicyPureModule(sourceFiles);
+assertStatusLineSeamImports(sourceFiles);
+assertStatusLineConsumers(sourceFiles);
 assertStateModulePiFree(sourceFiles);
 assertFooterBridgeProviderSeam(sourceFiles);
 assertIndexThinWiring(sourceFiles);

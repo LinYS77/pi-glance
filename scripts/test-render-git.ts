@@ -1,7 +1,7 @@
 import { strict as assert } from "node:assert";
 import { defaultConfig } from "../config.js";
 import { stripControls } from "../format.js";
-import { renderGlanceLine } from "../renderer.js";
+import { renderGlanceLine } from "../status-line.js";
 import { testState } from "./helpers.js";
 import type { GitSnapshot } from "../types.js";
 

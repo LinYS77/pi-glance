@@ -2,7 +2,7 @@ import { CustomEditor, type KeybindingsManager } from "@earendil-works/pi-coding
 import { truncateToWidth, visibleWidth, type EditorOptions, type EditorTheme, type TUI } from "@earendil-works/pi-tui";
 import { stripControls } from "./format.js";
 import { PALETTES, fg } from "./palette.js";
-import { renderGlanceLine } from "./renderer.js";
+import { renderGlanceLine } from "./status-line.js";
 import {
 	formatSurfaceScrollIndicator,
 	planSurfaceBottomFrame,
