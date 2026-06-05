@@ -15,6 +15,7 @@ const RUNTIME_SNAPSHOT_MODULE = "runtime-snapshot.ts";
 const STATE_MODULE = "state.ts";
 const SURFACE_LAYOUT_MODULE = "surface-layout.ts";
 const SETTINGS_CATALOG_MODULE = "settings-catalog.ts";
+const PANE_MODEL_MODULE = "pane-model.ts";
 const GUARD_SCRIPT = join("scripts", "test-boundaries.ts");
 const LEGACY_NAMESPACE = ["@mariozechner", ""].join("/");
 
@@ -115,12 +116,12 @@ function assertSurfaceLayoutSeamImports(files: SourceFile[]): void {
 function assertSettingsCatalogSeamImports(files: SourceFile[]): void {
 	const settingsCatalog = files.find((candidate) => basename(candidate.path) === SETTINGS_CATALOG_MODULE);
 	if (!settingsCatalog) return;
-	const forbiddenModulePattern = /(?:^|\/)(?:renderer|editor|pane|surface-layout)(?:\.js)?$/;
+	const forbiddenModulePattern = /(?:^|\/)(?:renderer|editor|pane|pane-model|surface-layout)(?:\.js)?$/;
 	const importPattern = /(?:import|export)\s+(?:[^"'`]*?\s+from\s+)?["']([^"']+)["']/g;
 	for (const match of settingsCatalog.text.matchAll(importPattern)) {
 		const specifier = match[1]!;
 		if (forbiddenModulePattern.test(specifier) || specifier.startsWith("@earendil-works/pi-")) {
-			fail(`${settingsCatalog.path}: settings-catalog seam must not import runtime/rendering module ${specifier}`);
+			fail(`${settingsCatalog.path}: settings-catalog seam must not import runtime/render/model module ${specifier}`);
 		}
 	}
 }
@@ -149,6 +150,22 @@ const IO_NETWORK_PROCESS_IMPORTS = new Set([
 	"undici",
 	"ws",
 ]);
+
+function assertPaneModelSeamImports(files: SourceFile[]): void {
+	const paneModel = files.find((candidate) => basename(candidate.path) === PANE_MODEL_MODULE);
+	assert.ok(paneModel, "pane-model.ts pure model seam should exist");
+
+	const allowedLocalSpecifiers = new Set(["./config.js", "./settings-catalog.js", "./types.js"]);
+	const forbiddenLocalModulePattern = /(?:^|\/)(?:pane|editor|renderer|surface-layout)(?:\.js)?$/;
+	const importPattern = /(?:import|export)\s+(?:[^"'`]*?\s+from\s+)?["']([^"']+)["']/g;
+	for (const match of paneModel.text.matchAll(importPattern)) {
+		const specifier = match[1]!;
+		if (specifier.startsWith("@earendil-works/pi-")) fail(`${paneModel.path}: pane-model seam must not import pi package ${specifier}`);
+		if (IO_NETWORK_PROCESS_IMPORTS.has(specifier)) fail(`${paneModel.path}: pane-model seam must not import IO/network/process module ${specifier}`);
+		if (forbiddenLocalModulePattern.test(specifier)) fail(`${paneModel.path}: pane-model seam must not import render/UI module ${specifier}`);
+		if (specifier.startsWith(".") && !allowedLocalSpecifiers.has(specifier)) fail(`${paneModel.path}: pane-model seam may only import pure helpers/types, not ${specifier}`);
+	}
+}
 
 function assertRenderModulesHaveNoIo(files: SourceFile[]): void {
 	const importPattern = /(?:import|export)\s+(?:[^"'`]*?\s+from\s+)?["']([^"']+)["']/g;
@@ -255,6 +272,7 @@ assertPublicPiImports(sourceFiles);
 assertNoCorePatching(sourceFiles);
 assertSurfaceLayoutSeamImports(sourceFiles);
 assertSettingsCatalogSeamImports(sourceFiles);
+assertPaneModelSeamImports(sourceFiles);
 assertRenderModulesHaveNoIo(sourceFiles);
 assertRuntimeSnapshotAdapterSeam(sourceFiles);
 assertStateModulePiFree(sourceFiles);

@@ -1,13 +1,21 @@
 import { Key, matchesKey, truncateToWidth, visibleWidth, type Component, type TUI } from "@earendil-works/pi-tui";
 import type { Theme } from "@earendil-works/pi-coding-agent";
-import { cloneConfig, defaultConfig, moveSegment } from "./config.js";
+import {
+	createPaneModel,
+	createPaneViewModel,
+	updatePaneModel,
+	type CategoryViewModel,
+	type GlancePaneViewModel,
+	type HelpShortcut,
+	type PaneIntent,
+	type PaneModelState,
+	type SettingViewModel,
+} from "./pane-model.js";
 import { renderInputSurface, renderInputSurfacePreview } from "./renderer.js";
-import { getSettingsCategories, getSettingsRows, type SettingsCategory, type SettingsCategoryId, type SettingsRow } from "./settings-catalog.js";
 import type { GlanceConfig, GlanceState } from "./types.js";
 
-type PaneFocus = "categories" | "settings" | "values";
 type PaneResult = { action: "save"; config: GlanceConfig } | { action: "cancel" };
-type Done = (result: PaneResult) => void;
+type Done = (result: GlanceConfig | null) => void;
 type Tone = (text: string) => string;
 
 interface PaneColors {
@@ -32,32 +40,6 @@ interface PaneLayout {
 	asideSeparator: string;
 	showAside: boolean;
 }
-
-type HelpShortcut = { key: string; label: string };
-
-type CategoryViewModel = SettingsCategory & {
-	selected: boolean;
-	hasFocus: boolean;
-};
-
-type SettingViewModel = Omit<SettingsRow, "id" | "apply"> & {
-	selected: boolean;
-	labelHasFocus: boolean;
-	valueHasFocus: boolean;
-};
-
-interface GlancePaneViewModel {
-	dirty: boolean;
-	status: string;
-	categories: CategoryViewModel[];
-	selectedCategory?: SettingsCategory;
-	settingsTitle: string;
-	settings: SettingViewModel[];
-	selectedHint?: string;
-	help: HelpShortcut[];
-}
-
-const PANE_FOCUS_ORDER: PaneFocus[] = ["categories", "settings", "values"];
 
 const PANE_SPACING = {
 	outerPadding: 2,
@@ -131,10 +113,6 @@ function spreadAnsi(left: string, right: string, width: number): string {
 	return `${left}${" ".repeat(Math.max(0, width - leftWidth - rightWidth))}${right}`;
 }
 
-function sameConfig(a: GlanceConfig, b: GlanceConfig): boolean {
-	return JSON.stringify(a) === JSON.stringify(b);
-}
-
 function makePaneColors(theme: Theme): PaneColors {
 	return {
 		accent: (s: string) => theme.fg("accent", s),
@@ -159,13 +137,24 @@ function focusGap(gap: string, colors: PaneColors): string {
 	return `${" ".repeat(Math.max(0, gapWidth - 2))}${colors.accent("› ")}`;
 }
 
+function paneIntentFromKey(data: string): PaneIntent | undefined {
+	if (matchesKey(data, Key.ctrl("c"))) return { type: "cancel" };
+	if (matchesKey(data, Key.escape) || data === "q" || data === "Q") return { type: "back" };
+	if (matchesKey(data, Key.left)) return { type: "move", direction: "left" };
+	if (matchesKey(data, Key.right)) return { type: "move", direction: "right" };
+	if (matchesKey(data, Key.up)) return { type: "move", direction: "up" };
+	if (matchesKey(data, Key.down)) return { type: "move", direction: "down" };
+	if (matchesKey(data, Key.enter)) return { type: "activate" };
+	if (matchesKey(data, Key.space)) return { type: "noop" };
+	if (data === "s" || data === "S") return { type: "save" };
+	if (data === "r" || data === "R") return { type: "resetDefaults" };
+	if (data === "j" || data === "J") return { type: "reorderSegment", direction: 1 };
+	if (data === "k" || data === "K") return { type: "reorderSegment", direction: -1 };
+	return undefined;
+}
+
 class GlanceConfigPane implements Component {
-	private readonly initial: GlanceConfig;
-	private draft: GlanceConfig;
-	private focus: PaneFocus = "categories";
-	private catIndex = 0;
-	private setIndex = 0;
-	private status = "";
+	private model: PaneModelState;
 
 	constructor(
 		initial: GlanceConfig,
@@ -174,233 +163,33 @@ class GlanceConfigPane implements Component {
 		private readonly requestRender: () => void,
 		private readonly previewState?: GlanceState,
 	) {
-		this.initial = cloneConfig(initial);
-		this.draft = cloneConfig(initial);
+		this.model = createPaneModel(initial);
 	}
 
 	invalidate(): void {}
 
-	private isDirty(): boolean {
-		return !sameConfig(this.draft, this.initial);
-	}
-
-	private getViewModel(width = this.lastRenderedWidth): GlancePaneViewModel {
-		const categories = this.getCategories();
-		const selectedCategory = categories[this.catIndex];
-		const settings = selectedCategory ? this.getSettings(selectedCategory.id) : [];
-		return {
-			dirty: this.isDirty(),
-			status: this.status,
-			categories: categories.map((cat, index) => ({
-				...cat,
-				selected: index === this.catIndex,
-				hasFocus: this.focus === "categories",
-			})),
-			selectedCategory,
-			settingsTitle: selectedCategory ? (selectedCategory.id === "general" ? "General" : selectedCategory.label) : "",
-			settings: settings.map((row, index) => ({
-				label: row.label,
-				value: row.value,
-				hint: row.hint,
-				kind: row.kind,
-				selected: index === this.setIndex,
-				labelHasFocus: this.focus === "settings",
-				valueHasFocus: this.focus === "values",
-			})),
-			selectedHint: settings[this.setIndex]?.hint,
-			help: this.helpShortcuts(width),
-		};
-	}
-
-	private helpShortcuts(width = this.lastRenderedWidth): HelpShortcut[] {
-		const stable: HelpShortcut[] = [
-			{ key: "←→↑↓", label: "move" },
-			{ key: "S", label: "save" },
-			{ key: "R", label: "reset" },
-		];
-
-		const isNarrow = width < 72;
-
-		switch (this.focus) {
-			case "categories":
-				if (isNarrow) {
-					return [
-						{ key: "S", label: "save" },
-						{ key: "J/K", label: "switch" },
-						{ key: "Esc", label: "cancel" },
-					];
-				}
-				return [...stable, { key: "J/K", label: "switch" }, { key: "Esc", label: "cancel" }];
-			case "settings":
-				if (isNarrow) {
-					return [
-						{ key: "S", label: "save" },
-						{ key: "Esc", label: "back" },
-					];
-				}
-				return [...stable, { key: "Esc", label: "back" }];
-			case "values":
-				if (isNarrow) {
-					return [
-						{ key: "S", label: "save" },
-						{ key: "Enter", label: "change" },
-						{ key: "Esc", label: "back" },
-					];
-				}
-				return [...stable, { key: "Enter", label: "change" }, { key: "Esc", label: "back" }];
-		}
-	}
-
-	private lastRenderedWidth = 96;
-
-	private getCategories(): SettingsCategory[] {
-		return getSettingsCategories(this.draft);
-	}
-
-	private getSettings(id: SettingsCategoryId): SettingsRow[] {
-		return getSettingsRows(this.draft, id);
-	}
-
-	private activateCurrent(): void {
-		const cat = this.getCategories()[this.catIndex];
-		if (!cat) return;
-		const settings = this.getSettings(cat.id);
-		const row = settings[this.setIndex];
-		if (!row) return;
-
-		if (!row.apply) {
-			this.status = row.hint ?? `${row.label} is informational.`;
-			return;
-		}
-
-		this.draft = row.apply(this.draft);
-		const next = this.getSettings(cat.id)[this.setIndex];
-		this.status = `${row.label} → ${next?.value ?? "updated"}. Press S to save.`;
-	}
-
-	private moveCurrentSegment(direction: -1 | 1): void {
-		if (this.catIndex === 0) {
-			this.status = "Cannot move General settings.";
-			return;
-		}
-		const segment = this.draft.segments[this.catIndex - 1];
-		if (!segment) return;
-
-		const targetCatIndex = this.catIndex + direction;
-		if (targetCatIndex < 1 || targetCatIndex > this.draft.segments.length) {
-			this.status = direction < 0 ? "Already at the top." : "Already at the bottom.";
-			return;
-		}
-
-		this.draft = moveSegment(this.draft, segment.id, direction);
-		this.catIndex = targetCatIndex;
-		this.status = "Segment order updated. Press S to save.";
-	}
-
 	handleInput(data: string): void {
-		if (matchesKey(data, Key.ctrl("c"))) {
-			this.done({ action: "cancel" });
+		const intent = paneIntentFromKey(data);
+		if (!intent) return;
+
+		const update = updatePaneModel(this.model, intent);
+		this.model = update.model;
+
+		if (update.completion) {
+			this.done(update.completion.action === "cancel" ? null : update.completion.config);
 			return;
 		}
-		if (matchesKey(data, Key.escape) || data === "q" || data === "Q") {
-			if (this.focus === "categories") {
-				this.done({ action: "cancel" });
-			} else {
-				this.focus = "categories";
-				this.requestRender();
-			}
-			return;
-		}
-		if (matchesKey(data, Key.left)) {
-			const index = PANE_FOCUS_ORDER.indexOf(this.focus);
-			if (this.focus === "settings") {
-				const count = this.getCategories().length;
-				this.catIndex = count === 0 ? 0 : Math.min(this.setIndex, count - 1);
-			}
-			this.focus = PANE_FOCUS_ORDER[Math.max(0, index - 1)] ?? "categories";
-			this.requestRender();
-			return;
-		}
-		if (matchesKey(data, Key.right)) {
-			const index = PANE_FOCUS_ORDER.indexOf(this.focus);
-			if (this.focus === "categories") {
-				const cat = this.getCategories()[this.catIndex];
-				const count = cat ? this.getSettings(cat.id).length : 0;
-				this.setIndex = count === 0 ? 0 : Math.min(this.catIndex, count - 1);
-			}
-			this.focus = PANE_FOCUS_ORDER[Math.min(PANE_FOCUS_ORDER.length - 1, index + 1)] ?? "values";
-			this.requestRender();
-			return;
-		}
-		if (data === "s" || data === "S") {
-			this.done({ action: "save", config: cloneConfig(this.draft) });
-			return;
-		}
-		if (data === "r" || data === "R") {
-			this.draft = defaultConfig();
-			this.focus = "categories";
-			this.catIndex = 0;
-			this.setIndex = 0;
-			this.status = "Defaults restored locally. Press S to save or Esc to discard.";
-			this.requestRender();
-			return;
-		}
-		if (matchesKey(data, Key.up)) {
-			if (this.focus === "categories") {
-				const count = this.getCategories().length;
-				this.catIndex = count === 0 ? 0 : (this.catIndex - 1 + count) % count;
-				const cat = this.getCategories()[this.catIndex];
-				const settingsCount = cat ? this.getSettings(cat.id).length : 0;
-				this.setIndex = settingsCount === 0 ? 0 : Math.min(this.catIndex, settingsCount - 1);
-			} else {
-				const cat = this.getCategories()[this.catIndex];
-				const count = cat ? this.getSettings(cat.id).length : 0;
-				this.setIndex = count === 0 ? 0 : (this.setIndex - 1 + count) % count;
-			}
-			this.requestRender();
-			return;
-		}
-		if (matchesKey(data, Key.down)) {
-			if (this.focus === "categories") {
-				const count = this.getCategories().length;
-				this.catIndex = count === 0 ? 0 : (this.catIndex + 1) % count;
-				const cat = this.getCategories()[this.catIndex];
-				const settingsCount = cat ? this.getSettings(cat.id).length : 0;
-				this.setIndex = settingsCount === 0 ? 0 : Math.min(this.catIndex, settingsCount - 1);
-			} else {
-				const cat = this.getCategories()[this.catIndex];
-				const count = cat ? this.getSettings(cat.id).length : 0;
-				this.setIndex = count === 0 ? 0 : (this.setIndex + 1) % count;
-			}
-			this.requestRender();
-			return;
-		}
-		if (matchesKey(data, Key.enter)) {
-			if (this.focus === "values") {
-				this.activateCurrent();
-				this.requestRender();
-			}
-			return;
-		}
-		if (matchesKey(data, Key.space)) return;
-		if (this.focus === "categories" && (data === "k" || data === "K")) {
-			this.moveCurrentSegment(-1);
-			this.requestRender();
-			return;
-		}
-		if (this.focus === "categories" && (data === "j" || data === "J")) {
-			this.moveCurrentSegment(1);
-			this.requestRender();
-		}
+
+		if (update.requestRender) this.requestRender();
 	}
 
 	private renderPreview(lines: string[], layout: PaneLayout): void {
 		const preview = this.previewState
-			? renderInputSurface(this.previewState, this.draft, layout.width, {
+			? renderInputSurface(this.previewState, this.model.draft, layout.width, {
 					contentLines: ["Ask pi to improve the input surface..."],
 					focused: true,
 				})
-			: renderInputSurfacePreview(this.draft, layout.width, {
+			: renderInputSurfacePreview(this.model.draft, layout.width, {
 					contentLines: ["Ask pi to improve the input surface..."],
 					focused: true,
 				});
@@ -505,10 +294,9 @@ class GlanceConfigPane implements Component {
 	}
 
 	render(width: number): string[] {
-		this.lastRenderedWidth = width;
 		const colors = makePaneColors(this.theme);
 		const layout = makePaneLayout(width);
-		const model = this.getViewModel(width);
+		const model = createPaneViewModel(this.model, width);
 		const lines: string[] = [];
 
 		if (model.status) lines.push(paneLine(layout, [colors.dim(model.status)]));
@@ -532,6 +320,12 @@ interface GlancePaneUI {
 
 export async function showGlancePane(initial: GlanceConfig, ctx: { ui: GlancePaneUI }, previewState?: GlanceState): Promise<PaneResult> {
 	return ctx.ui.custom<PaneResult>((tui, theme, _kb, done) => {
-		return new GlanceConfigPane(initial, theme, done, () => tui.requestRender(), previewState);
+		return new GlanceConfigPane(
+			initial,
+			theme,
+			(result) => done(result ? { action: "save", config: result } : { action: "cancel" }),
+			() => tui.requestRender(),
+			previewState,
+		);
 	});
 }
