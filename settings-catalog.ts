@@ -147,6 +147,7 @@ export function getSettingsRows(config: GlanceConfig, categoryId: SettingsCatego
 		case "cost":
 		case "tokens":
 		case "model":
+		case "throughput":
 			return segmentDescriptorRows(config, categoryId);
 		default:
 			return [];

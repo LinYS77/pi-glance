@@ -24,14 +24,16 @@ function assertSegments(actual: SegmentConfig[], expected: SegmentConfig[], mess
 }
 
 const defaults = defaultConfig();
+const THROUGHPUT_PRECISION_VALUES = ["auto", 1, 0] as const;
 
 for (const raw of [undefined, null, false, true, 0, 1, "", "{}", []]) {
 	assertDefault(raw, `non-object raw config ${JSON.stringify(raw)} should normalize to defaults`);
 }
 
 assert.equal(defaults.editor.topMarginRows, 1, "default editor top margin rows should preserve the one-row breathing room");
-assert.equal(normalizeConfig({ version: 0 }).version, 3, "old raw version should normalize to current schema version");
-assert.equal(normalizeConfig({ version: 999 }).version, 3, "future raw version should normalize to current schema version");
+assert.equal(normalizeConfig({ version: 0 }).version, 5, "old raw version should normalize to current schema version");
+assert.equal(normalizeConfig({ version: 999 }).version, 5, "future raw version should normalize to current schema version");
+assert.deepEqual((defaults as unknown as { throughput?: unknown }).throughput, { precision: "auto" }, "default config should include throughput.precision=auto");
 
 for (const theme of GLANCE_THEME_IDS) {
 	assert.equal(normalizeConfig({ theme }).theme, theme, `${theme} should normalize as a valid theme`);
@@ -66,6 +68,9 @@ for (const cache of TOKENS_CACHE_MODE_VALUES) {
 }
 for (const showThinking of MODEL_THINKING_MODE_VALUES) {
 	assert.equal(normalizeConfig({ model: { showThinking } }).model.showThinking, showThinking, `${showThinking} should normalize as a valid model thinking mode`);
+}
+for (const precision of THROUGHPUT_PRECISION_VALUES) {
+	assert.equal((normalizeConfig({ throughput: { precision } }) as unknown as { throughput: { precision: unknown } }).throughput.precision, precision, `${precision} should normalize as a valid throughput precision`);
 }
 
 const userConfig = normalizeConfig({
@@ -115,12 +120,15 @@ const userConfig = normalizeConfig({
 		display: "total",
 		cache: "show",
 	},
+	throughput: {
+		precision: 1,
+	},
 });
 
 assert.deepEqual(
 	userConfig,
 	{
-		version: 3,
+		version: 5,
 		enabled: false,
 		theme: "tokyo-night",
 		icons: "nerd",
@@ -139,6 +147,7 @@ assert.deepEqual(
 			{ id: "git", enabled: false },
 			{ id: "cost", enabled: false },
 			{ id: "context", enabled: true },
+			{ id: "throughput", enabled: true },
 		],
 		model: {
 			customNames: {
@@ -166,6 +175,9 @@ assert.deepEqual(
 			display: "total",
 			cache: "show",
 		},
+		throughput: {
+			precision: 1,
+		},
 	},
 	"valid existing user settings should be preserved while version normalizes",
 );
@@ -180,6 +192,7 @@ assert.deepEqual(normalizeConfig({ enabled: false, theme: "dark" }).git, default
 assert.deepEqual(normalizeConfig({ enabled: false, theme: "dark" }).context, defaults.context, "missing context group should fill defaults");
 assert.deepEqual(normalizeConfig({ enabled: false, theme: "dark" }).cost, defaults.cost, "missing cost group should fill defaults");
 assert.deepEqual(normalizeConfig({ enabled: false, theme: "dark" }).tokens, defaults.tokens, "missing tokens group should fill defaults");
+assert.deepEqual((normalizeConfig({ enabled: false, theme: "dark" }) as unknown as { throughput: unknown }).throughput, { precision: "auto" }, "missing throughput group should fill defaults");
 
 assert.equal(normalizeConfig({ theme: "catppuccin-macchiato" }).theme, defaults.theme, "unknown theme should fall back to default theme");
 assert.equal(normalizeConfig({ theme: null }).theme, defaults.theme, "non-string theme should fall back to default theme");
@@ -193,6 +206,9 @@ assert.equal(normalizeConfig({ context: { unknown: "dim" } }).context.unknown, d
 assert.equal(normalizeConfig({ tokens: { display: "input" } }).tokens.display, defaults.tokens.display, "unknown tokens display mode should fall back to default");
 assert.equal(normalizeConfig({ tokens: { cache: "read" } }).tokens.cache, defaults.tokens.cache, "unknown tokens cache mode should fall back to default");
 assert.equal(normalizeConfig({ model: { showThinking: "maybe" } }).model.showThinking, defaults.model.showThinking, "unknown thinking mode should fall back to default");
+assert.equal((normalizeConfig({ throughput: { precision: "1" } }) as unknown as { throughput: { precision: unknown } }).throughput.precision, "auto", "string throughput precision should fall back to default");
+assert.equal((normalizeConfig({ throughput: { precision: 2 } }) as unknown as { throughput: { precision: unknown } }).throughput.precision, "auto", "unknown throughput precision should fall back to default");
+assert.equal((normalizeConfig({ throughput: { precision: null } }) as unknown as { throughput: { precision: unknown } }).throughput.precision, "auto", "non-number/string throughput precision should fall back to default");
 
 assert.equal(normalizeConfig({ editor: { minContentRows: 1 } }).editor.minContentRows, 2, "minContentRows should clamp to minimum 2");
 assert.equal(normalizeConfig({ editor: { minContentRows: 2.9 } }).editor.minContentRows, 2, "minContentRows should floor fractional values");
@@ -242,8 +258,9 @@ assertSegments(
 		{ id: "model", enabled: false },
 		{ id: "context", enabled: true },
 		{ id: "cost", enabled: false },
+		{ id: "throughput", enabled: true },
 	],
-	"current segment lists should preserve known order and enabled flags",
+	"custom current segment lists should preserve known order/enabled flags and append enabled throughput",
 );
 
 assertSegments(
@@ -256,8 +273,9 @@ assertSegments(
 	[
 		{ id: "git", enabled: false },
 		{ id: "tokens", enabled: true },
-		{ id: "context", enabled: true },
 		{ id: "cost", enabled: true },
+		{ id: "throughput", enabled: true },
+		{ id: "context", enabled: true },
 		{ id: "model", enabled: true },
 	],
 	"segment migration should append missing default segments when current model anchor is present",
@@ -277,8 +295,9 @@ assertSegments(
 		{ id: "git", enabled: false },
 		{ id: "model", enabled: false },
 		{ id: "tokens", enabled: false },
-		{ id: "context", enabled: true },
 		{ id: "cost", enabled: true },
+		{ id: "throughput", enabled: true },
+		{ id: "context", enabled: true },
 	],
 	"segment migration should ignore duplicates/unknown ids and use defaults for invalid enabled flags",
 );

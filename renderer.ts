@@ -62,6 +62,7 @@ export function renderInputSurfacePreview(config: GlanceConfig, width: number, o
 		model: { id: "claude-sonnet-4-20250514", provider: "anthropic", displayName: "Sonnet 4", thinking: "high" },
 		context: { tokens: 46_800, window: 200_000, percent: 23.4 },
 		usage: { input: 12_400, output: 3_100, cacheRead: 800, cacheWrite: 0, cost: 0.042 },
+		throughput: { lastTurn: null, currentRun: null },
 		version: 0,
 	};
 	return renderInputSurface(state, config, width, options);

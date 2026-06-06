@@ -5,13 +5,14 @@ import { getSettingsRows } from "../settings-catalog.js";
 import { GLANCE_THEME_IDS } from "../themes.js";
 import type { SegmentConfig, SegmentDefinition, SegmentId } from "../types.js";
 
-const EXPECTED_SEGMENT_IDS = ["git", "context", "cost", "tokens", "model"] as const satisfies readonly SegmentId[];
+const EXPECTED_SEGMENT_IDS = ["git", "cost", "throughput", "context", "tokens", "model"] as const satisfies readonly SegmentId[];
 type ExpectedSegmentId = (typeof EXPECTED_SEGMENT_IDS)[number];
 
 const EXPECTED_DEFAULT_SEGMENTS: SegmentConfig[] = [
 	{ id: "git", enabled: true },
-	{ id: "context", enabled: true },
 	{ id: "cost", enabled: true },
+	{ id: "throughput", enabled: true },
+	{ id: "context", enabled: true },
 	{ id: "tokens", enabled: false },
 	{ id: "model", enabled: true },
 ];
@@ -22,6 +23,7 @@ const EXPECTED_LABELS: Record<ExpectedSegmentId, string> = {
 	cost: "Cost",
 	tokens: "Tokens",
 	model: "Model",
+	throughput: "Reply speed",
 };
 
 const EXPECTED_SEGMENT_SETTING_IDS: Record<ExpectedSegmentId, string[]> = {
@@ -30,6 +32,7 @@ const EXPECTED_SEGMENT_SETTING_IDS: Record<ExpectedSegmentId, string[]> = {
 	cost: ["cost.hideZero", "cost.display"],
 	tokens: ["tokens.display", "tokens.cache"],
 	model: ["model.providerLabel", "model.thinkingLabel"],
+	throughput: ["throughput.precision"],
 };
 
 type SegmentSettingDescriptor = {
@@ -113,7 +116,7 @@ function assertExactCoverage(name: string, record: Record<string, unknown>): voi
 
 assert.deepEqual(
 	registry.segmentRecordCoverage({ git: true, cost: true, extra: true }),
-	{ missing: ["context", "tokens", "model"], extra: ["extra"] },
+	{ missing: ["throughput", "context", "tokens", "model"], extra: ["extra"] },
 	"segmentRecordCoverage() should report missing ids in registry order and extra keys in record order",
 );
 

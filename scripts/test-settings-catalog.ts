@@ -88,12 +88,18 @@ function assertCycleUsesValues<T extends string | number>(
 }
 
 const config = defaultConfig();
+const THROUGHPUT_PRECISION_VALUES = ["auto", 1, 0] as const;
 const categories = getSettingsCategories(config);
 assert.deepEqual(
 	categories,
 	[
 		{ id: "general", label: "General" },
-		...config.segments.map((segment) => ({ id: segment.id, label: segment.id[0]!.toUpperCase() + segment.id.slice(1), enabled: segment.enabled })),
+		{ id: "git", label: "Git", enabled: true },
+		{ id: "cost", label: "Cost", enabled: true },
+		{ id: "throughput", label: "Reply speed", enabled: true },
+		{ id: "context", label: "Context", enabled: true },
+		{ id: "tokens", label: "Tokens", enabled: false },
+		{ id: "model", label: "Model", enabled: true },
 	],
 	"categories should start with General then follow configured segment order with enabled flags",
 );
@@ -106,6 +112,7 @@ const reordered: GlanceConfig = {
 		{ id: "cost", enabled: false },
 		{ id: "context", enabled: true },
 		{ id: "git", enabled: false },
+		{ id: "throughput", enabled: true },
 	],
 };
 assert.deepEqual(
@@ -117,6 +124,7 @@ assert.deepEqual(
 		{ id: "cost", label: "Cost", enabled: false },
 		{ id: "context", label: "Context", enabled: true },
 		{ id: "git", label: "Git", enabled: false },
+		{ id: "throughput", label: "Reply speed", enabled: true },
 	],
 	"categories should preserve arbitrary config.segments order",
 );
@@ -307,6 +315,23 @@ const modelRows = assertRows(config, "model", [
 	},
 ]);
 
+const throughputRows = assertRows(config, "throughput", [
+	{
+		id: "throughput.enabled",
+		label: "Enabled",
+		value: "on",
+		hint: "Show or hide this segment.",
+		kind: "toggle",
+	},
+	{
+		id: "throughput.precision",
+		label: "Precision",
+		value: "auto",
+		hint: "Controls Reply speed decimals. Output tokens / wall time; includes tools, waiting, network, and thinking; not a benchmark.",
+		kind: "cycle",
+	},
+]);
+
 assert.equal(rowById(generalRows, "general.enabled").apply!(config).enabled, false, "general enabled should toggle off");
 assert.equal(rowById(generalRows, "general.theme").apply!(config).theme, GLANCE_THEMES[1]!.id, "theme should cycle to next theme id");
 assert.equal(
@@ -349,6 +374,9 @@ assert.equal(rowById(tokensRows, "tokens.cache").apply!(config).tokens.cache, "s
 assert.equal(rowById(modelRows, "model.enabled").apply!(config).segments.find((segment) => segment.id === "model")?.enabled, false, "model enabled should toggle off");
 assert.equal(rowById(modelRows, "model.providerLabel").apply!(config).display.showProvider, "always", "provider label should cycle auto -> always");
 assert.equal(rowById(modelRows, "model.thinkingLabel").apply!(config).model.showThinking, "always", "thinking label should cycle auto -> always");
+assert.equal(rowById(throughputRows, "throughput.enabled").apply!(config).segments.find((segment) => segment.id === "throughput")?.enabled, false, "throughput enabled should toggle off");
+assert.equal((rowById(throughputRows, "throughput.precision").apply!(config) as unknown as { throughput: { precision: unknown } }).throughput.precision, 1, "throughput precision should cycle auto -> 1 digit");
+assert.equal(rowById(throughputRows, "throughput.precision").kind, "cycle", "throughput precision should be an editable cycle row");
 
 assertCycleUsesValues(
 	config,
@@ -460,8 +488,19 @@ assertCycleUsesValues(
 	}),
 	(after) => after.model.showThinking,
 );
+assertCycleUsesValues(
+	config,
+	THROUGHPUT_PRECISION_VALUES,
+	"throughput",
+	"throughput.precision",
+	"Reply speed Precision",
+	(base, precision) => withTestConfig(base, (next) => {
+		(next as unknown as { throughput: { precision: typeof precision } }).throughput.precision = precision;
+	}),
+	(after) => (after as unknown as { throughput: { precision: (typeof THROUGHPUT_PRECISION_VALUES)[number] } }).throughput.precision,
+);
 
-for (const categoryId of ["general", "git", "context", "cost", "tokens", "model"] as const) {
+for (const categoryId of ["general", "git", "context", "cost", "tokens", "model", "throughput"] as const) {
 	assertEditableRowsArePure(config, categoryId);
 }
 

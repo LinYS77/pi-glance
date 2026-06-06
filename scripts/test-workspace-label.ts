@@ -98,7 +98,7 @@ for (const width of [56, 64, 72, 96, 120, 160]) {
 }
 assert.ok(stripControls(renderedTop(56)).includes("$ $0.042"), "preview top status preserves cost at width 56");
 assert.ok(!stripControls(renderedTop(56)).includes("Sonnet 4"), "preview top status drops trailing segment when seam budget is tight at width 56");
-assert.ok(stripControls(renderedTop(64)).includes("Sonnet 4"), "preview top status keeps model once width allows it");
+assert.ok(stripControls(renderedTop(72)).includes("Sonnet 4"), "preview top status keeps model once width allows it");
 assert.ok(stripControls(renderedTop(18)).includes(" repo "), "preview title starts at the seam's innerWidth 16 threshold");
 assert.ok(!stripControls(renderedTop(16)).includes(" repo "), "preview title falls back below the seam's innerWidth 16 threshold");
 assert.ok(!stripControls(renderedTop(64, undefined, false)).includes(" repo "), "showTitle false keeps workspace title hidden in preview top frame");

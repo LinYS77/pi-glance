@@ -4,7 +4,8 @@ import { GlanceFooterBridge } from "./footer-bridge.js";
 import { GitRefresher } from "./git.js";
 import { runtimePlanFor, type RuntimeEventFacts, type RuntimeEventKind, type RuntimeRefreshPlan } from "./runtime-policy.js";
 import { stateInputsFromContext } from "./runtime-snapshot.js";
-import { clearContextUsage, createInitialState, refreshContextUsage, refreshModel, refreshWorkspace, setGitSnapshot, setUsageTotals } from "./state.js";
+import { clearContextUsage, clearCurrentRunThroughput, createInitialState, refreshContextUsage, refreshModel, refreshWorkspace, setCurrentRunThroughput, setGitSnapshot, setLastTurnThroughput, setUsageTotals } from "./state.js";
+import { calculateTurnThroughput } from "./throughput.js";
 import type { GitSnapshot, GlanceConfig, GlanceState } from "./types.js";
 
 export type GlancePaneResult = { action: "save"; config: GlanceConfig } | { action: "cancel" };
@@ -27,12 +28,22 @@ export interface GlanceRuntimeAdapters {
 	saveConfig(config: GlanceConfig): Promise<void>;
 	showPane(initial: GlanceConfig, ctx: ExtensionCommandContext, previewState?: GlanceState): Promise<GlancePaneResult>;
 	createGitRefresher?: (options: CreateGitRefresherOptions) => RuntimeGitRefresher;
+	nowMs?: () => number;
 }
 
 interface MessageEndLikeEvent {
 	message: {
 		role?: string;
 	};
+}
+
+interface TurnEndLikeEvent {
+	turnIndex?: unknown;
+	message?: unknown;
+}
+
+interface AgentEndLikeEvent {
+	messages?: unknown;
 }
 
 export interface GlanceRuntime {
@@ -49,13 +60,26 @@ export interface GlanceRuntime {
 		sessionTree(event: unknown, ctx: ExtensionContext): Promise<void>;
 		sessionCompact(event: unknown, ctx: ExtensionContext): Promise<void>;
 		messageEnd(event: MessageEndLikeEvent, ctx: ExtensionContext): Promise<void>;
-		turnEnd(event: unknown, ctx: ExtensionContext): Promise<void>;
-		agentEnd(event: unknown, ctx: ExtensionContext): Promise<void>;
+		turnEnd(event: TurnEndLikeEvent, ctx: ExtensionContext): Promise<void>;
+		agentStart(event: unknown, ctx: ExtensionContext): void;
+		agentEnd(event: AgentEndLikeEvent, ctx: ExtensionContext): Promise<void>;
 	};
 }
 
 function createDefaultGitRefresher(options: CreateGitRefresherOptions): RuntimeGitRefresher {
 	return new GitRefresher(options.getConfig, options.getCwd, options.onSnapshot);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === "object" && value !== null;
+}
+
+function isAssistantMessage(value: unknown): boolean {
+	return isRecord(value) && value.role === "assistant";
+}
+
+function finiteTurnIndex(value: unknown): number | undefined {
+	return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
 export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRuntime {
@@ -64,6 +88,10 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 	let footerBridge: GlanceFooterBridge | undefined;
 	let gitRefresher: RuntimeGitRefresher | undefined;
 	let requestRender: (() => void) | undefined;
+	let agentStartMs: number | null = null;
+	let completedAssistantMessages: unknown[] = [];
+	const seenTurnIndexes = new Set<number>();
+	const nowMs = adapters.nowMs ?? Date.now;
 
 	async function ensureConfig(): Promise<GlanceConfig> {
 		config ??= await adapters.loadConfig();
@@ -85,6 +113,12 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 	function renderNow(): void {
 		footerBridge?.invalidate();
 		requestRender?.();
+	}
+
+	function resetRunAccumulator(startedAtMs: number | null = null): void {
+		agentStartMs = startedAtMs;
+		completedAssistantMessages = [];
+		seenTurnIndexes.clear();
 	}
 
 	function ensureGitRefresher(): RuntimeGitRefresher {
@@ -200,11 +234,13 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 		},
 		events: {
 			sessionStart: (_event, ctx) => {
+				resetRunAccumulator();
 				config = adapters.loadConfigSync();
 				state = createInitialState(stateInputsFromContext(ctx, adapters.getThinkingLevel()), config);
 				installInputSurface(ctx);
 			},
 			sessionShutdown: async (_event, ctx) => {
+				resetRunAccumulator();
 				clearUI(ctx);
 			},
 			modelSelect: async (_event, ctx) => {
@@ -228,11 +264,43 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 			messageEnd: async (event, ctx) => {
 				await executeRuntimePlan("message_end", ctx, { messageRole: event.message.role });
 			},
-			turnEnd: async (_event, ctx) => {
-				await executeRuntimePlan("turn_end", ctx);
+			turnEnd: async (event, ctx) => {
+				await executeRuntimePlan("turn_end", ctx, undefined, () => {
+					if (!state || agentStartMs === null) return;
+					const turnIndex = finiteTurnIndex(event.turnIndex);
+					if (turnIndex !== undefined && seenTurnIndexes.has(turnIndex)) return;
+					if (!isAssistantMessage(event.message)) return;
+					completedAssistantMessages.push(event.message);
+					if (turnIndex !== undefined) seenTurnIndexes.add(turnIndex);
+					const measurement = calculateTurnThroughput({
+						startedAtMs: agentStartMs,
+						endedAtMs: nowMs(),
+						messages: completedAssistantMessages,
+					});
+					if (measurement) setCurrentRunThroughput(state, measurement);
+					else clearCurrentRunThroughput(state);
+				});
 			},
-			agentEnd: async (_event, ctx) => {
-				await executeRuntimePlan("agent_end", ctx);
+			agentStart: (_event, _ctx) => {
+				resetRunAccumulator(nowMs());
+			},
+			agentEnd: async (event, ctx) => {
+				const startedAtMs = agentStartMs;
+				agentStartMs = null;
+				const endedAtMs = startedAtMs === null ? null : nowMs();
+				try {
+					await executeRuntimePlan("agent_end", ctx, undefined, () => {
+						if (!state) return;
+						const messages = Array.isArray(event.messages) ? event.messages : undefined;
+						const measurement = startedAtMs !== null && endedAtMs !== null && messages
+							? calculateTurnThroughput({ startedAtMs, endedAtMs, messages })
+							: undefined;
+						if (measurement) setLastTurnThroughput(state, measurement);
+						clearCurrentRunThroughput(state);
+					});
+				} finally {
+					resetRunAccumulator();
+				}
 			},
 		},
 	};

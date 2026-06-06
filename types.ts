@@ -2,7 +2,7 @@ import type { GlanceThemeName } from "./themes.js";
 
 export type { GlanceThemeName } from "./themes.js";
 
-export type SegmentId = "git" | "model" | "context" | "tokens" | "cost";
+export type SegmentId = "git" | "model" | "context" | "tokens" | "cost" | "throughput";
 export type IconMode = "nerd" | "plain";
 export type WidthMode = "full" | "compact" | "minimal";
 export type GitStatus = "clean" | "dirty" | "conflict" | "unknown";
@@ -14,6 +14,7 @@ export type TokensCacheMode = "auto" | "show" | "hide";
 export type ModelThinkingMode = "auto" | "always" | "never";
 export type WorkspaceLabelMode = "name" | "smart" | "path";
 export type EditorTopMarginRows = 0 | 1 | 2;
+export type ThroughputPrecision = "auto" | 0 | 1;
 
 export interface SegmentConfig {
 	id: SegmentId;
@@ -54,8 +55,12 @@ interface TokensConfig {
 	cache: TokensCacheMode;
 }
 
+interface ThroughputConfig {
+	precision: ThroughputPrecision;
+}
+
 export interface GlanceConfig {
-	version: 3;
+	version: 5;
 	enabled: boolean;
 	theme: GlanceThemeName;
 	icons: IconMode;
@@ -70,6 +75,7 @@ export interface GlanceConfig {
 	context: ContextConfig;
 	cost: CostConfig;
 	tokens: TokensConfig;
+	throughput: ThroughputConfig;
 }
 
 export interface UsageTotals {
@@ -78,6 +84,23 @@ export interface UsageTotals {
 	cacheRead: number;
 	cacheWrite: number;
 	cost: number;
+}
+
+export interface TurnThroughputUsage {
+	input: number;
+	output: number;
+	cacheRead: number;
+	cacheWrite: number;
+	totalTokens: number;
+	assistantMessages: number;
+}
+
+export interface TurnThroughput {
+	startedAtMs: number;
+	endedAtMs: number;
+	elapsedMs: number;
+	tokensPerSecond: number;
+	usage: TurnThroughputUsage;
 }
 
 export interface GitSnapshot {
@@ -118,6 +141,10 @@ export interface GlanceState {
 		percent: number | null;
 	};
 	usage: UsageTotals;
+	throughput: {
+		lastTurn: TurnThroughput | null;
+		currentRun: TurnThroughput | null;
+	};
 	version: number;
 }
 

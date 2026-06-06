@@ -9,6 +9,7 @@ import {
 	ICON_MODE_VALUES,
 	MODEL_THINKING_MODE_VALUES,
 	PROVIDER_DISPLAY_MODE_VALUES,
+	THROUGHPUT_PRECISION_VALUES,
 	TOKENS_CACHE_MODE_VALUES,
 	TOKENS_DISPLAY_MODE_VALUES,
 	WORKSPACE_LABEL_MODE_VALUES,
@@ -25,6 +26,7 @@ import type {
 	ModelThinkingMode,
 	SegmentConfig,
 	SegmentId,
+	ThroughputPrecision,
 	TokensCacheMode,
 	TokensDisplayMode,
 	WorkspaceLabelMode,
@@ -32,7 +34,7 @@ import type {
 
 const CONFIG_PATH = join(getAgentDir(), "pi-glance", "config.json");
 // CONFIG_VERSION is the on-disk config schema version, not the npm package version.
-const CONFIG_VERSION = 3 as const;
+const CONFIG_VERSION = 5 as const;
 
 const ICON_MODES = new Set<IconMode>(ICON_MODE_VALUES);
 const PROVIDER_MODES = new Set<GlanceConfig["display"]["showProvider"]>(PROVIDER_DISPLAY_MODE_VALUES);
@@ -43,6 +45,7 @@ const CONTEXT_UNKNOWN_MODES = new Set<ContextUnknownMode>(CONTEXT_UNKNOWN_MODE_V
 const TOKENS_DISPLAY_MODES = new Set<TokensDisplayMode>(TOKENS_DISPLAY_MODE_VALUES);
 const TOKENS_CACHE_MODES = new Set<TokensCacheMode>(TOKENS_CACHE_MODE_VALUES);
 const MODEL_THINKING_MODES = new Set<ModelThinkingMode>(MODEL_THINKING_MODE_VALUES);
+const THROUGHPUT_PRECISIONS = new Set<ThroughputPrecision>(THROUGHPUT_PRECISION_VALUES);
 
 export function defaultConfig(): GlanceConfig {
 	return {
@@ -83,6 +86,9 @@ export function defaultConfig(): GlanceConfig {
 			display: "input-output",
 			cache: "auto",
 		},
+		throughput: {
+			precision: "auto",
+		},
 	};
 }
 
@@ -97,6 +103,7 @@ export function cloneConfig(config: GlanceConfig): GlanceConfig {
 		context: { ...config.context },
 		cost: { ...config.cost },
 		tokens: { ...config.tokens },
+		throughput: { ...config.throughput },
 	};
 }
 
@@ -106,6 +113,10 @@ function parseBool(value: unknown, fallback: boolean): boolean {
 
 function parseStringEnum<T extends string>(value: unknown, allowed: ReadonlySet<T>, fallback: T): T {
 	return typeof value === "string" && allowed.has(value as T) ? (value as T) : fallback;
+}
+
+function parseThroughputPrecision(value: unknown, fallback: ThroughputPrecision): ThroughputPrecision {
+	return THROUGHPUT_PRECISIONS.has(value as ThroughputPrecision) ? (value as ThroughputPrecision) : fallback;
 }
 
 function parseIntInRange(value: unknown, fallback: number, min: number, max: number): number {
@@ -122,6 +133,10 @@ function parseIntAtLeast(value: unknown, fallback: number, min: number): number 
 // current segment model, and append missing default segments for old configs.
 // If a segment list is too old/ambiguous (currently: no git segment), fall back
 // to the curated default order rather than guessing.
+function sameSegmentOrder(actual: readonly SegmentConfig[], expected: readonly SegmentId[]): boolean {
+	return actual.length === expected.length && actual.every((segment, index) => segment.id === expected[index]);
+}
+
 function normalizeSegments(value: unknown): SegmentConfig[] {
 	const defaults = defaultSegmentConfigs();
 	const byId = new Map<SegmentId, SegmentConfig>(defaults.map((s) => [s.id, s]));
@@ -145,6 +160,13 @@ function normalizeSegments(value: unknown): SegmentConfig[] {
 
 	if (!ordered.some((s) => s.id === "git")) return defaults;
 
+	if (
+		sameSegmentOrder(ordered, ["git", "context", "cost", "tokens", "model"]) ||
+		sameSegmentOrder(ordered, ["git", "cost", "context", "tokens", "model", "throughput"])
+	) {
+		return defaults.map((segment) => byId.get(segment.id)!);
+	}
+
 	for (const segment of defaults) {
 		if (!ordered.some((s) => s.id === segment.id)) ordered.push(byId.get(segment.id)!);
 	}
@@ -167,6 +189,7 @@ export function normalizeConfig(raw: unknown): GlanceConfig {
 	const context = record.context && typeof record.context === "object" ? (record.context as Record<string, unknown>) : {};
 	const cost = record.cost && typeof record.cost === "object" ? (record.cost as Record<string, unknown>) : {};
 	const tokens = record.tokens && typeof record.tokens === "object" ? (record.tokens as Record<string, unknown>) : {};
+	const throughput = record.throughput && typeof record.throughput === "object" ? (record.throughput as Record<string, unknown>) : {};
 
 	return {
 		version: CONFIG_VERSION,
@@ -212,6 +235,9 @@ export function normalizeConfig(raw: unknown): GlanceConfig {
 		tokens: {
 			display: parseStringEnum(tokens.display, TOKENS_DISPLAY_MODES, defaults.tokens.display),
 			cache: parseStringEnum(tokens.cache, TOKENS_CACHE_MODES, defaults.tokens.cache),
+		},
+		throughput: {
+			precision: parseThroughputPrecision(throughput.precision, defaults.throughput.precision),
 		},
 	};
 }

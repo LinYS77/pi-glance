@@ -15,6 +15,7 @@ export const PALETTES: Record<GlanceThemeName, GlancePalette> = {
 			context: { fg: { r: 5, g: 150, b: 105 } },
 			tokens: { fg: { r: 100, g: 116, b: 139 } },
 			cost: { fg: { r: 154, g: 104, b: 20 } },
+			throughput: { fg: { r: 100, g: 116, b: 139 } },
 		},
 	},
 	dark: {
@@ -31,6 +32,7 @@ export const PALETTES: Record<GlanceThemeName, GlancePalette> = {
 			context: { fg: { r: 52, g: 211, b: 153 } },
 			tokens: { fg: { r: 156, g: 163, b: 175 } },
 			cost: { fg: { r: 251, g: 191, b: 36 } },
+			throughput: { fg: { r: 156, g: 163, b: 175 } },
 		},
 	},
 	"catppuccin-latte": {
@@ -47,6 +49,7 @@ export const PALETTES: Record<GlanceThemeName, GlancePalette> = {
 			context: { fg: { r: 23, g: 146, b: 153 } },
 			tokens: { fg: { r: 140, g: 143, b: 161 } },
 			cost: { fg: { r: 254, g: 100, b: 11 } },
+			throughput: { fg: { r: 140, g: 143, b: 161 } },
 		},
 	},
 	"catppuccin-mocha": {
@@ -63,6 +66,7 @@ export const PALETTES: Record<GlanceThemeName, GlancePalette> = {
 			context: { fg: { r: 148, g: 226, b: 213 } },
 			tokens: { fg: { r: 127, g: 132, b: 156 } },
 			cost: { fg: { r: 250, g: 179, b: 135 } },
+			throughput: { fg: { r: 127, g: 132, b: 156 } },
 		},
 	},
 	nord: {
@@ -79,6 +83,7 @@ export const PALETTES: Record<GlanceThemeName, GlancePalette> = {
 			context: { fg: { r: 143, g: 188, b: 187 } },
 			tokens: { fg: { r: 76, g: 86, b: 106 } },
 			cost: { fg: { r: 208, g: 135, b: 112 } },
+			throughput: { fg: { r: 76, g: 86, b: 106 } },
 		},
 	},
 	"tokyo-night": {
@@ -95,6 +100,7 @@ export const PALETTES: Record<GlanceThemeName, GlancePalette> = {
 			context: { fg: { r: 125, g: 207, b: 255 } },
 			tokens: { fg: { r: 86, g: 95, b: 137 } },
 			cost: { fg: { r: 224, g: 175, b: 104 } },
+			throughput: { fg: { r: 86, g: 95, b: 137 } },
 		},
 	},
 	"gruvbox-dark": {
@@ -111,6 +117,7 @@ export const PALETTES: Record<GlanceThemeName, GlancePalette> = {
 			context: { fg: { r: 142, g: 192, b: 124 } },
 			tokens: { fg: { r: 146, g: 131, b: 116 } },
 			cost: { fg: { r: 254, g: 128, b: 25 } },
+			throughput: { fg: { r: 146, g: 131, b: 116 } },
 		},
 	},
 	"solarized-dark": {
@@ -127,6 +134,7 @@ export const PALETTES: Record<GlanceThemeName, GlancePalette> = {
 			context: { fg: { r: 42, g: 161, b: 152 } },
 			tokens: { fg: { r: 88, g: 110, b: 117 } },
 			cost: { fg: { r: 203, g: 75, b: 22 } },
+			throughput: { fg: { r: 88, g: 110, b: 117 } },
 		},
 	},
 	"rose-pine": {
@@ -143,6 +151,7 @@ export const PALETTES: Record<GlanceThemeName, GlancePalette> = {
 			context: { fg: { r: 49, g: 116, b: 143 } },
 			tokens: { fg: { r: 110, g: 106, b: 134 } },
 			cost: { fg: { r: 246, g: 193, b: 119 } },
+			throughput: { fg: { r: 110, g: 106, b: 134 } },
 		},
 	},
 	"one-dark": {
@@ -159,6 +168,7 @@ export const PALETTES: Record<GlanceThemeName, GlancePalette> = {
 			context: { fg: { r: 86, g: 182, b: 194 } },
 			tokens: { fg: { r: 92, g: 99, b: 112 } },
 			cost: { fg: { r: 209, g: 154, b: 102 } },
+			throughput: { fg: { r: 92, g: 99, b: 112 } },
 		},
 	},
 };
@@ -170,6 +180,7 @@ export const ICONS: Record<IconMode, IconSet> = {
 		context: "󰔟",
 		tokens: "󰄨",
 		cost: "󰈸",
+		throughput: "",
 	},
 	plain: {
 		git: "git",
@@ -177,6 +188,7 @@ export const ICONS: Record<IconMode, IconSet> = {
 		context: "ctx",
 		tokens: "tok",
 		cost: "$",
+		throughput: "spd",
 	},
 };
 

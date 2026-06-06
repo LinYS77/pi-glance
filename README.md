@@ -5,7 +5,7 @@
 **A calm input surface for [pi](https://github.com/badlogic/pi-mono)**
 
 Replace the default prompt with a rounded multiline editor
-and an inline glance at model, context, tokens, cost, and Git.
+and an inline glance at Git, cost, Reply speed, context, optional tokens, and model.
 
 [![npm](https://img.shields.io/npm/v/pi-glance?style=flat-square&color=blue)](https://www.npmjs.com/package/pi-glance)
 [![license](https://img.shields.io/badge/license-MIT-64748b?style=flat-square)](LICENSE)
@@ -65,7 +65,7 @@ That's the only command — opens a calm settings pane with a real input-surface
 |---|---|---|
 | 🖊️ | **Rounded editor** | Configurable 2 / 3 / 4 min rows and 0 / 1 / 2 top spacing rows, preserves all pi defaults |
 | 🏷️ | **Project title** | Current folder name, or a safe `~/...` path when enabled |
-| 📊 | **Inline status** | Model · context · tokens · cost · Git status — top-right |
+| 📊 | **Inline status** | Git · cost · Reply speed · context · optional tokens · model — top-right |
 | ⚙️ | **`/glance` pane** | General settings, segment order, and per-segment detail settings in a calm grid |
 | 💤 | **Dim unfocused** | Surface quiets down when you scroll the chat |
 | 🎨 | **Themes** | 10 built-in palettes, from Light/Dark to Catppuccin, Nord, Tokyo Night, Gruvbox, Solarized, Rosé Pine, and One Dark |
@@ -78,16 +78,19 @@ That's the only command — opens a calm settings pane with a real input-surface
 - `nerd` icons are opt-in: open `/glance` → **General** → `Icons` and choose `nerd` for richer symbols.
 - Nerd icons need a Nerd Font or Symbols Nerd Font fallback. If icons look like boxes, choose `plain`.
 - pi-glance does not auto-detect, install, or bundle terminal fonts.
+- Reply speed is enabled by default and appears between cost and context. It shows output tokens per wall time: `?` means no trusted measurement yet, `~42 tok/s` is a provisional current-run checkpoint from completed turns, and `42 tok/s` is the finalized agent-end measurement.
+- Configure `/glance` → **Reply speed** → `Precision`: `auto`, `1 digit`, or `0 digits`. Wall time includes tools, waiting, network, and thinking, so it is not a benchmark. Reply speed uses no notifications, no timers/tickers, no token estimation from text/deltas, and adds no command, footer, dashboard, history, or average view.
 
 ## Segment details
 
 `/glance` keeps segment settings small and display-focused:
 
-- **Context** — percent / tokens, or hide unknown usage.
-- **Cost** — hide zero cost.
-- **Tokens** — input / output, total, or cache details.
-- **Model** — provider and thinking labels.
 - **Git** — dirty marker, upstream counts, SHA, and polling.
+- **Cost** — hide zero cost.
+- **Reply speed** — enabled by default; shows unknown `?`, provisional `~`, or finalized output tokens per wall time in the status line. Precision can be `auto`, `1 digit`, or `0 digits`. It sends no notifications, uses no timers, and does not estimate tokens from text or deltas.
+- **Context** — percent / tokens, or hide unknown usage.
+- **Tokens** — input / output, total, or cache details. Tokens stay off by default.
+- **Model** — provider and thinking labels. Model stays last by default.
 
 ## Workspace title
 

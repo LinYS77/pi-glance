@@ -1,7 +1,7 @@
 import { displayDirectory, shortenModel } from "./format.js";
 import { emptyGitSnapshot } from "./git.js";
 import type { StateInputs } from "./runtime-snapshot.js";
-import type { GitSnapshot, GlanceConfig, GlanceState, UsageTotals } from "./types.js";
+import type { GitSnapshot, GlanceConfig, GlanceState, TurnThroughput, UsageTotals } from "./types.js";
 
 export function createInitialState(inputs: StateInputs, config: GlanceConfig): GlanceState {
 	const state: GlanceState = {
@@ -25,6 +25,10 @@ export function createInitialState(inputs: StateInputs, config: GlanceConfig): G
 			percent: null,
 		},
 		usage: inputs.usage,
+		throughput: {
+			lastTurn: null,
+			currentRun: null,
+		},
 		version: 0,
 	};
 	refreshContextUsage(state, inputs);
@@ -37,6 +41,45 @@ function touch(state: GlanceState): void {
 
 function usageTotalsEqual(a: UsageTotals, b: UsageTotals): boolean {
 	return a.input === b.input && a.output === b.output && a.cacheRead === b.cacheRead && a.cacheWrite === b.cacheWrite && a.cost === b.cost;
+}
+
+function turnThroughputEqual(a: TurnThroughput | null, b: TurnThroughput | null): boolean {
+	if (a === b) return true;
+	if (!a || !b) return false;
+	return (
+		a.startedAtMs === b.startedAtMs &&
+		a.endedAtMs === b.endedAtMs &&
+		a.elapsedMs === b.elapsedMs &&
+		a.tokensPerSecond === b.tokensPerSecond &&
+		a.usage.input === b.usage.input &&
+		a.usage.output === b.usage.output &&
+		a.usage.cacheRead === b.usage.cacheRead &&
+		a.usage.cacheWrite === b.usage.cacheWrite &&
+		a.usage.totalTokens === b.usage.totalTokens &&
+		a.usage.assistantMessages === b.usage.assistantMessages
+	);
+}
+
+export function setLastTurnThroughput(state: GlanceState, next: TurnThroughput | null): boolean {
+	if (turnThroughputEqual(state.throughput.lastTurn, next)) return false;
+	state.throughput.lastTurn = next;
+	touch(state);
+	return true;
+}
+
+export function clearLastTurnThroughput(state: GlanceState): boolean {
+	return setLastTurnThroughput(state, null);
+}
+
+export function setCurrentRunThroughput(state: GlanceState, next: TurnThroughput | null): boolean {
+	if (turnThroughputEqual(state.throughput.currentRun, next)) return false;
+	state.throughput.currentRun = next;
+	touch(state);
+	return true;
+}
+
+export function clearCurrentRunThroughput(state: GlanceState): boolean {
+	return setCurrentRunThroughput(state, null);
 }
 
 export function setUsageTotals(state: GlanceState, usage: UsageTotals): boolean {

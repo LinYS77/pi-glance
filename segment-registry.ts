@@ -4,14 +4,15 @@ import {
 	GIT_SHA_MODE_VALUES,
 	MODEL_THINKING_MODE_VALUES,
 	PROVIDER_DISPLAY_MODE_VALUES,
+	THROUGHPUT_PRECISION_VALUES,
 	TOKENS_CACHE_MODE_VALUES,
 	TOKENS_DISPLAY_MODE_VALUES,
 } from "./config-options.js";
-import type { GlanceConfig, SegmentConfig, SegmentData, SegmentDefinition, SegmentId, SegmentRenderContext } from "./types.js";
+import type { GlanceConfig, SegmentConfig, SegmentData, SegmentDefinition, SegmentId, SegmentRenderContext, ThroughputPrecision, TurnThroughput } from "./types.js";
 
 export { type SegmentId } from "./types.js";
 
-export const SEGMENT_IDS = ["git", "context", "cost", "tokens", "model"] as const satisfies readonly SegmentId[];
+export const SEGMENT_IDS = ["git", "cost", "throughput", "context", "tokens", "model"] as const satisfies readonly SegmentId[];
 
 type EditableSegmentSettingKind = "toggle" | "cycle";
 
@@ -56,7 +57,7 @@ const TOKENS_DISPLAY_LABELS: Record<GlanceConfig["tokens"]["display"], string> =
 	total: "total",
 };
 
-function nextIn<T extends string>(current: T, values: readonly T[]): T {
+function nextIn<T extends string | number>(current: T, values: readonly T[]): T {
 	const index = values.indexOf(current);
 	return values[(index + 1) % values.length] ?? values[0]!;
 }
@@ -81,6 +82,12 @@ function contextDisplayLabel(mode: GlanceConfig["context"]["display"]): string {
 
 function tokensDisplayLabel(mode: GlanceConfig["tokens"]["display"]): string {
 	return TOKENS_DISPLAY_LABELS[mode];
+}
+
+function throughputPrecisionLabel(precision: ThroughputPrecision): string {
+	if (precision === 1) return "1 digit";
+	if (precision === 0) return "0 digits";
+	return "auto";
 }
 
 const SEGMENT_SETTINGS = {
@@ -211,6 +218,18 @@ const SEGMENT_SETTINGS = {
 			},
 		},
 	],
+	throughput: [
+		{
+			id: "throughput.precision",
+			label: "Precision",
+			hint: "Controls Reply speed decimals. Output tokens / wall time; includes tools, waiting, network, and thinking; not a benchmark.",
+			kind: "cycle",
+			value: (config) => throughputPrecisionLabel(config.throughput.precision),
+			mutate: (config) => {
+				config.throughput.precision = nextIn(config.throughput.precision, THROUGHPUT_PRECISION_VALUES);
+			},
+		},
+	],
 } as const satisfies Record<SegmentId, readonly SegmentSettingDescriptor[]>;
 
 function formatTokens(count: number | null | undefined): string {
@@ -234,6 +253,29 @@ function formatCost(cost: number): string {
 function formatPercent(percent: number | null | undefined): string {
 	if (percent === null || percent === undefined || !Number.isFinite(percent)) return "?";
 	return percent >= 10 ? `${percent.toFixed(0)}%` : `${percent.toFixed(1)}%`;
+}
+
+function fixedPrecision(value: number, precision: 0 | 1): string {
+	return precision === 0 ? `${Math.round(value)}` : value.toFixed(1);
+}
+
+function formatScaledThroughputRate(rate: number, precision: 0 | 1): string {
+	const abs = Math.abs(rate);
+	if (abs < 1000) return fixedPrecision(rate, precision);
+	if (abs < 1_000_000) return `${fixedPrecision(rate / 1000, precision)}k`;
+	return `${fixedPrecision(rate / 1_000_000, precision)}M`;
+}
+
+function formatThroughputRate(rate: number, precision: ThroughputPrecision): string {
+	if (precision !== "auto") return formatScaledThroughputRate(rate, precision);
+	if (rate < 10) return rate.toFixed(1);
+	if (rate < 1000) return `${Math.round(rate)}`;
+	return formatTokens(rate);
+}
+
+function validThroughput(turn: TurnThroughput | null | undefined): turn is TurnThroughput {
+	const rate = turn?.tokensPerSecond;
+	return typeof rate === "number" && Number.isFinite(rate) && rate > 0;
 }
 
 function gitBranchLabel(ctx: SegmentRenderContext): string {
@@ -384,6 +426,32 @@ function collectModel(ctx: SegmentRenderContext): SegmentData | undefined {
 	};
 }
 
+function collectThroughput(ctx: SegmentRenderContext): SegmentData | undefined {
+	const currentRun = ctx.state.throughput.currentRun;
+	const lastTurn = ctx.state.throughput.lastTurn;
+	const turn = validThroughput(currentRun) ? currentRun : validThroughput(lastTurn) ? lastTurn : undefined;
+	if (!turn) {
+		return {
+			primary: "? tok/s",
+			display: {
+				full: "? tok/s",
+				compact: "?/s",
+				minimal: "?/s",
+			},
+		};
+	}
+	const marker = turn === currentRun ? "~" : "";
+	const formatted = `${marker}${formatThroughputRate(turn.tokensPerSecond, ctx.config.throughput.precision)}`;
+	return {
+		primary: `${formatted} tok/s`,
+		display: {
+			full: `${formatted} tok/s`,
+			compact: `${formatted}/s`,
+			minimal: `${formatted}/s`,
+		},
+	};
+}
+
 export const SEGMENT_REGISTRY = [
 	{
 		id: "git",
@@ -393,18 +461,25 @@ export const SEGMENT_REGISTRY = [
 		collect: collectGit,
 	},
 	{
-		id: "context",
-		label: "Context",
-		defaultEnabled: true,
-		settings: SEGMENT_SETTINGS.context,
-		collect: collectContext,
-	},
-	{
 		id: "cost",
 		label: "Cost",
 		defaultEnabled: true,
 		settings: SEGMENT_SETTINGS.cost,
 		collect: collectCost,
+	},
+	{
+		id: "throughput",
+		label: "Reply speed",
+		defaultEnabled: true,
+		settings: SEGMENT_SETTINGS.throughput,
+		collect: collectThroughput,
+	},
+	{
+		id: "context",
+		label: "Context",
+		defaultEnabled: true,
+		settings: SEGMENT_SETTINGS.context,
+		collect: collectContext,
 	},
 	{
 		id: "tokens",

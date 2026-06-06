@@ -55,7 +55,7 @@ function makeState(): GlanceState {
 	});
 }
 
-async function makePane(config: GlanceConfig = defaultConfig()): Promise<{ component: Component; renders: () => number; done: () => unknown }> {
+async function makePane(config: GlanceConfig = defaultConfig(), previewState: GlanceState = makeState()): Promise<{ component: Component; renders: () => number; done: () => unknown }> {
 	let component: Component | undefined;
 	let renderRequests = 0;
 	let doneResult: unknown;
@@ -77,7 +77,7 @@ async function makePane(config: GlanceConfig = defaultConfig()): Promise<{ compo
 				},
 			},
 		},
-		makeState(),
+		previewState,
 	);
 
 	assert.ok(component, "pane component should be created");
@@ -142,6 +142,41 @@ assertNotContains(initial, "Changes stay local", "empty default status copy shou
 assertNotContains(initial, "NOTES", "old notes section should stay removed");
 assertNotContains(initial, "[Tab]", "tab navigation should stay removed");
 
+const replySpeedPreviewConfig = defaultConfig();
+replySpeedPreviewConfig.segments = replySpeedPreviewConfig.segments.map((segment) =>
+	segment.id === "throughput" ? { ...segment, enabled: true } : segment,
+);
+const replySpeedPreviewPane = await makePane(replySpeedPreviewConfig);
+const replySpeedPreviewText = plainText(replySpeedPreviewPane.component, 160);
+assertNotContains(replySpeedPreviewText, "spd 42 tok/s", "Reply speed preview should not inject a fake sample speed before measurement");
+assertContains(replySpeedPreviewText, "spd ? tok/s", "Reply speed preview should show the same unknown placeholder as runtime when no measurement exists");
+
+const previewTurn = {
+	startedAtMs: 0,
+	endedAtMs: 1000,
+	elapsedMs: 1000,
+	tokensPerSecond: 42,
+	usage: { input: 0, output: 42, cacheRead: 0, cacheWrite: 0, totalTokens: 42, assistantMessages: 1 },
+};
+const provisionalPreviewPane = await makePane(
+	replySpeedPreviewConfig,
+	testState({ throughput: { lastTurn: null, currentRun: previewTurn } as unknown as GlanceState["throughput"] }),
+);
+assertContains(
+	plainText(provisionalPreviewPane.component, 160),
+	"spd ~42 tok/s",
+	"Reply speed preview should render real previewState.throughput.currentRun as provisional with ~",
+);
+const finalPreviewPane = await makePane(
+	replySpeedPreviewConfig,
+	testState({ throughput: { lastTurn: previewTurn, currentRun: null } as unknown as GlanceState["throughput"] }),
+);
+assertContains(
+	plainText(finalPreviewPane.component, 160),
+	"spd 42 tok/s",
+	"Reply speed preview should render real previewState.throughput.lastTurn as final without ~",
+);
+
 const themePane = await makePane();
 press(themePane.component, "\x1b[C");
 press(themePane.component, "\x1b[B");
@@ -173,7 +208,7 @@ const iconsSelectedText = plainText(gridSettingPane.component);
 assertContains(iconsSelectedText, "» Icons", "down arrow should move within the setting column");
 assertContains(iconsSelectedText, "Nerd icons need", "Icons row hint should mention Nerd Font fallback guidance");
 press(gridSettingPane.component, "\x1b[D");
-assertContains(plainText(gridSettingPane.component), "» Context", "left arrow should move to the category on the same visual row");
+assertContains(plainText(gridSettingPane.component), "» Cost", "left arrow should move to the category on the same visual row");
 
 const reorderPane = await makePane();
 press(reorderPane.component, "\x1b[B");
@@ -182,14 +217,14 @@ const reorderedLines = plainRender(reorderPane.component);
 assertContains(reorderedLines.join("\n"), "Segment order updated. Press S to save.", "J should reorder a segment in the category column");
 assertContains(reorderedLines.join("\n"), "● Unsaved changes", "segment reorder should dirty the draft");
 assert.ok(
-	findLineIndexContaining(reorderedLines, "  Context") < findLineIndexContaining(reorderedLines, "» Git"),
-	"J should move Git below Context",
+	findLineIndexContaining(reorderedLines, "  Cost") < findLineIndexContaining(reorderedLines, "» Git"),
+	"J should move Git below Cost",
 );
 press(reorderPane.component, "k");
 const restoredOrderLines = plainRender(reorderPane.component);
 assert.ok(
-	findLineIndexContaining(restoredOrderLines, "» Git") < findLineIndexContaining(restoredOrderLines, "  Context"),
-	"K should move Git back above Context",
+	findLineIndexContaining(restoredOrderLines, "» Git") < findLineIndexContaining(restoredOrderLines, "  Cost"),
+	"K should move Git back above Cost",
 );
 
 const settingsJPane = await makePane();
@@ -202,6 +237,8 @@ assert.equal(plainText(settingsJPane.component), beforeSettingsJ, "J should not 
 assert.equal(settingsJPane.renders(), beforeSettingsJRenders, "J outside the category column should not request a render");
 
 const contextPane = await makePane();
+press(contextPane.component, "\x1b[B");
+press(contextPane.component, "\x1b[B");
 press(contextPane.component, "\x1b[B");
 press(contextPane.component, "\x1b[B");
 const contextCategory = plainText(contextPane.component);
@@ -228,7 +265,6 @@ assertContains(contextUnknownChanged, "Hide when usage is unknown.", "context un
 const costPane = await makePane();
 press(costPane.component, "\x1b[B");
 press(costPane.component, "\x1b[B");
-press(costPane.component, "\x1b[B");
 const costCategory = plainText(costPane.component);
 assertContains(costCategory, "Hide zero", "cost category should show cost detail settings");
 assertLineContainsAll(costCategory, ["Hide zero", "off"], "cost hide zero setting should render");
@@ -245,7 +281,6 @@ assertContains(costChanged, "Hide until cost is non-zero.", "cost hide zero hint
 const costInfoPane = await makePane();
 press(costInfoPane.component, "\x1b[B");
 press(costInfoPane.component, "\x1b[B");
-press(costInfoPane.component, "\x1b[B");
 press(costInfoPane.component, "\x1b[C");
 press(costInfoPane.component, "\x1b[C");
 press(costInfoPane.component, "\r");
@@ -255,6 +290,7 @@ assertContains(costInfoLines.join("\n"), "✓ Saved", "info row enter should not
 assertNotContains(costInfoLines.join("\n"), "● Unsaved changes", "info row enter should not create unsaved changes");
 
 const tokensPane = await makePane();
+press(tokensPane.component, "\x1b[B");
 press(tokensPane.component, "\x1b[B");
 press(tokensPane.component, "\x1b[B");
 press(tokensPane.component, "\x1b[B");
@@ -277,6 +313,7 @@ assertLineContainsAll(tokensCacheChanged, ["Cache", "show"], "enter should cycle
 assertContains(tokensCacheChanged, "Show or hide cache details.", "tokens cache hint should render");
 
 const modelPane = await makePane();
+press(modelPane.component, "\x1b[B");
 press(modelPane.component, "\x1b[B");
 press(modelPane.component, "\x1b[B");
 press(modelPane.component, "\x1b[B");

@@ -16,7 +16,7 @@ const EXPECTED_THEMES = [
 	{ id: "one-dark", label: "One Dark" },
 ] as const;
 
-const SEGMENT_IDS = ["git", "model", "context", "tokens", "cost"] as const satisfies readonly SegmentId[];
+const SEGMENT_IDS = ["git", "model", "context", "tokens", "cost", "throughput"] as const satisfies readonly SegmentId[];
 
 assert.equal(GLANCE_THEMES.length, 10, "theme metadata should keep the curated 10-theme collection");
 assert.deepEqual(GLANCE_THEMES, EXPECTED_THEMES, "theme metadata should keep the curated friendly theme order and labels");

@@ -149,12 +149,12 @@ assert.deepEqual(
 	initialView.categories.map((category) => ({ id: category.id, label: category.label, enabled: category.enabled, selected: category.selected })),
 	[
 		{ id: "general", label: "General", enabled: undefined, selected: true },
-		...config.segments.map((segment) => ({
-			id: segment.id,
-			label: segment.id[0]!.toUpperCase() + segment.id.slice(1),
-			enabled: segment.enabled,
-			selected: false,
-		})),
+		{ id: "git", label: "Git", enabled: true, selected: false },
+		{ id: "cost", label: "Cost", enabled: true, selected: false },
+		{ id: "throughput", label: "Reply speed", enabled: true, selected: false },
+		{ id: "context", label: "Context", enabled: true, selected: false },
+		{ id: "tokens", label: "Tokens", enabled: false, selected: false },
+		{ id: "model", label: "Model", enabled: true, selected: false },
 	],
 	"view categories should start with General and then follow config.segments order/enabled flags",
 );
@@ -223,7 +223,7 @@ assert.equal(upFromGeneral.requestRender, true, "category up should request rend
 assert.equal(upFromGeneral.model.focus, "categories", "category up should stay in categories");
 assert.equal(upFromGeneral.model.categoryIndex, categories.length - 1, "category up from General should wrap to the last category");
 assert.equal(upFromGeneral.model.settingIndex, 2, "category up should sync setting index to the selected visual row bounded by row count");
-assert.equal(view(upFromGeneral.model).selectedCategory?.id, "model", "category up wrap should select Model");
+assert.equal(view(upFromGeneral.model).selectedCategory?.id, "model", "category up wrap should select Model, the default final segment");
 assert.equal(selectedSetting(view(upFromGeneral.model)).id, "model.thinkingLabel", "category up sync should select Model's visible row");
 
 const downToGit = move(model, "down");
@@ -251,7 +251,7 @@ const leftToCategories = move(settingsDown.model, "left");
 assert.equal(leftToCategories.requestRender, true, "left from settings should request render");
 assert.equal(leftToCategories.model.focus, "categories", "left from settings should focus categories");
 assert.equal(leftToCategories.model.categoryIndex, 2, "left from settings should sync the category to the same visual row");
-assert.equal(view(leftToCategories.model).selectedCategory?.id, "context", "left from settings visual row 2 should select Context");
+assert.equal(view(leftToCategories.model).selectedCategory?.id, "cost", "left from settings visual row 2 should select Cost");
 
 const gitSettingsTop = withFocus(model, "settings", 1, 0);
 const settingsWrapUp = move(gitSettingsTop, "up");
@@ -300,7 +300,7 @@ assert.deepEqual(config, sourceConfigBefore, "updatePaneModel should not mutate 
 assert.notEqual(toggledEnabled.model, valuesEnabled, "editable activation should return a new model object");
 assert.notEqual(toggledEnabled.model.draft, valuesEnabled.draft, "editable activation should return a new draft config object");
 
-const costInfoModel = withFocus(model, "values", 3, 2);
+const costInfoModel = withFocus(model, "values", 2, 2);
 const costInfo = updatePaneModel(costInfoModel, { type: "activate" });
 assert.equal(costInfo.requestRender, true, "Enter on an info row should request render so status can be shown");
 assert.equal(costInfo.model.status, "Compact session cost.", "info row activation should copy the row hint into status");
@@ -351,7 +351,7 @@ assert.equal(paneIsDirty(generalReorder.model), false, "J on General should not 
 const gitCategoryModel = withFocus(model, "categories", 1, 1);
 const gitMovedDown = updatePaneModel(gitCategoryModel, { type: "reorderSegment", direction: 1 });
 assert.equal(gitMovedDown.requestRender, true, "J on a segment category should request render");
-assert.deepEqual(segmentOrder(gitMovedDown.model.draft), ["context", "git", "cost", "tokens", "model"], "J should move Git below Context using the segment/category offset");
+assert.deepEqual(segmentOrder(gitMovedDown.model.draft), ["cost", "git", "throughput", "context", "tokens", "model"], "J should move Git below Cost using the segment/category offset");
 assert.equal(gitMovedDown.model.categoryIndex, 2, "J should move the selected category index with the segment");
 assert.equal(gitMovedDown.model.status, "Segment order updated. Press S to save.", "successful segment reorder should show save status");
 assert.equal(paneIsDirty(gitMovedDown.model), true, "successful segment reorder should dirty the draft");
