@@ -3,6 +3,7 @@ import { defaultConfig } from "../config.js";
 import { ICONS, PALETTES } from "../palette.js";
 import { getSettingsRows } from "../settings-catalog.js";
 import { GLANCE_THEME_IDS } from "../themes.js";
+import { throughputSegmentFeature } from "../throughput-segment-feature.js";
 import type { SegmentConfig, SegmentDefinition, SegmentId } from "../types.js";
 
 const EXPECTED_SEGMENT_IDS = ["git", "cost", "throughput", "context", "tokens", "model"] as const satisfies readonly SegmentId[];
@@ -100,6 +101,7 @@ for (const value of ["general", "session", "unknown", "", null, undefined, 0, 1,
 assert.ok(registry.SEGMENT_BY_ID instanceof Map, "SEGMENT_BY_ID should be a Map for stable lookup/order");
 assert.deepEqual([...registry.SEGMENT_BY_ID.keys()], EXPECTED_SEGMENT_IDS, "SEGMENT_BY_ID keys should exactly match SEGMENT_IDS order");
 assert.equal(registry.SEGMENT_BY_ID.size, EXPECTED_SEGMENT_IDS.length, "SEGMENT_BY_ID should not have missing or extra entries");
+assert.equal(registry.SEGMENT_BY_ID.get("throughput"), throughputSegmentFeature, "throughput registry entry should be the extracted SegmentFeature object");
 
 for (const id of EXPECTED_SEGMENT_IDS) {
 	const entry = registry.SEGMENT_BY_ID.get(id);
