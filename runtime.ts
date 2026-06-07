@@ -5,7 +5,7 @@ import { GitRefresher } from "./git.js";
 import { runtimePlanFor, type RuntimeEventFacts, type RuntimeEventKind, type RuntimeRefreshPlan } from "./runtime-policy.js";
 import { stateInputsFromContext } from "./runtime-snapshot.js";
 import { clearContextUsage, clearCurrentRunThroughput, createInitialState, refreshContextUsage, refreshModel, refreshWorkspace, setCurrentRunThroughput, setGitSnapshot, setLastTurnThroughput, setUsageTotals } from "./state.js";
-import { calculateTurnThroughput } from "./throughput.js";
+import { ThroughputRunTracker, type ThroughputRunStateIntent } from "./throughput-run-tracker.js";
 import type { GitSnapshot, GlanceConfig, GlanceState } from "./types.js";
 
 export type GlancePaneResult = { action: "save"; config: GlanceConfig } | { action: "cancel" };
@@ -70,16 +70,21 @@ function createDefaultGitRefresher(options: CreateGitRefresherOptions): RuntimeG
 	return new GitRefresher(options.getConfig, options.getCwd, options.onSnapshot);
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-	return typeof value === "object" && value !== null;
-}
-
-function isAssistantMessage(value: unknown): boolean {
-	return isRecord(value) && value.role === "assistant";
-}
-
-function finiteTurnIndex(value: unknown): number | undefined {
-	return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+function applyThroughputIntent(state: GlanceState, intent: ThroughputRunStateIntent): void {
+	switch (intent.kind) {
+		case "none":
+			return;
+		case "set-current-run":
+			setCurrentRunThroughput(state, intent.currentRun);
+			return;
+		case "clear-current-run":
+			clearCurrentRunThroughput(state);
+			return;
+		case "set-last-turn-and-clear-current-run":
+			setLastTurnThroughput(state, intent.lastTurn);
+			clearCurrentRunThroughput(state);
+			return;
+	}
 }
 
 export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRuntime {
@@ -88,9 +93,7 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 	let footerBridge: GlanceFooterBridge | undefined;
 	let gitRefresher: RuntimeGitRefresher | undefined;
 	let requestRender: (() => void) | undefined;
-	let agentStartMs: number | null = null;
-	let completedAssistantMessages: unknown[] = [];
-	const seenTurnIndexes = new Set<number>();
+	const throughputTracker = new ThroughputRunTracker();
 	const nowMs = adapters.nowMs ?? Date.now;
 
 	async function ensureConfig(): Promise<GlanceConfig> {
@@ -113,12 +116,6 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 	function renderNow(): void {
 		footerBridge?.invalidate();
 		requestRender?.();
-	}
-
-	function resetRunAccumulator(startedAtMs: number | null = null): void {
-		agentStartMs = startedAtMs;
-		completedAssistantMessages = [];
-		seenTurnIndexes.clear();
 	}
 
 	function ensureGitRefresher(): RuntimeGitRefresher {
@@ -234,13 +231,13 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 		},
 		events: {
 			sessionStart: (_event, ctx) => {
-				resetRunAccumulator();
+				throughputTracker.reset();
 				config = adapters.loadConfigSync();
 				state = createInitialState(stateInputsFromContext(ctx, adapters.getThinkingLevel()), config);
 				installInputSurface(ctx);
 			},
 			sessionShutdown: async (_event, ctx) => {
-				resetRunAccumulator();
+				throughputTracker.reset();
 				clearUI(ctx);
 			},
 			modelSelect: async (_event, ctx) => {
@@ -266,41 +263,19 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 			},
 			turnEnd: async (event, ctx) => {
 				await executeRuntimePlan("turn_end", ctx, undefined, () => {
-					if (!state || agentStartMs === null) return;
-					const turnIndex = finiteTurnIndex(event.turnIndex);
-					if (turnIndex !== undefined && seenTurnIndexes.has(turnIndex)) return;
-					if (!isAssistantMessage(event.message)) return;
-					completedAssistantMessages.push(event.message);
-					if (turnIndex !== undefined) seenTurnIndexes.add(turnIndex);
-					const measurement = calculateTurnThroughput({
-						startedAtMs: agentStartMs,
-						endedAtMs: nowMs(),
-						messages: completedAssistantMessages,
-					});
-					if (measurement) setCurrentRunThroughput(state, measurement);
-					else clearCurrentRunThroughput(state);
+					if (!state) return;
+					applyThroughputIntent(state, throughputTracker.checkpoint(event.turnIndex, event.message, nowMs));
 				});
 			},
 			agentStart: (_event, _ctx) => {
-				resetRunAccumulator(nowMs());
+				throughputTracker.start(nowMs());
 			},
 			agentEnd: async (event, ctx) => {
-				const startedAtMs = agentStartMs;
-				agentStartMs = null;
-				const endedAtMs = startedAtMs === null ? null : nowMs();
-				try {
-					await executeRuntimePlan("agent_end", ctx, undefined, () => {
-						if (!state) return;
-						const messages = Array.isArray(event.messages) ? event.messages : undefined;
-						const measurement = startedAtMs !== null && endedAtMs !== null && messages
-							? calculateTurnThroughput({ startedAtMs, endedAtMs, messages })
-							: undefined;
-						if (measurement) setLastTurnThroughput(state, measurement);
-						clearCurrentRunThroughput(state);
-					});
-				} finally {
-					resetRunAccumulator();
-				}
+				const intent = throughputTracker.finish(event.messages, nowMs);
+				await executeRuntimePlan("agent_end", ctx, undefined, () => {
+					if (!state) return;
+					applyThroughputIntent(state, intent);
+				});
 			},
 		},
 	};

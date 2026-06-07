@@ -53,7 +53,7 @@ function user(output: number): unknown {
 	return { role: "user", usage: { output, totalTokens: output } };
 }
 
-function turnEnd(turnIndex: number, message: unknown): unknown {
+function turnEnd(turnIndex: unknown, message: unknown): unknown {
 	return { type: "turn_end", turnIndex, message, toolResults: [] };
 }
 
@@ -86,8 +86,9 @@ function createContext(): TestContext {
 	return { ctx, notifications, getRenderRequests: () => renderRequests };
 }
 
-function createRuntime(nowValues: number[]): { runtime: RuntimeRecord; capturedStates: unknown[] } {
+function createRuntime(nowValues: number[]): { runtime: RuntimeRecord; capturedStates: unknown[]; getRemainingNowReads(): number } {
 	const capturedStates: unknown[] = [];
+	const pendingNowValues = [...nowValues];
 	const config = defaultConfig();
 	const adapters = {
 		getThinkingLevel: () => "off",
@@ -100,11 +101,11 @@ function createRuntime(nowValues: number[]): { runtime: RuntimeRecord; capturedS
 		},
 		createGitRefresher: () => ({ schedule: (_immediate?: boolean) => {}, dispose: () => {} }),
 		nowMs: () => {
-			assert.ok(nowValues.length > 0, "runtime should only read injected nowMs for agent_start/turn_end/agent_end timing");
-			return nowValues.shift()!;
+			assert.ok(pendingNowValues.length > 0, "runtime should only read injected nowMs for agent_start/turn_end/agent_end timing");
+			return pendingNowValues.shift()!;
 		},
 	};
-	return { runtime: createGlanceRuntime(adapters) as unknown as RuntimeRecord, capturedStates };
+	return { runtime: createGlanceRuntime(adapters) as unknown as RuntimeRecord, capturedStates, getRemainingNowReads: () => pendingNowValues.length };
 }
 
 async function captureState(runtime: RuntimeRecord, test: TestContext, capturedStates: unknown[]): Promise<unknown> {
@@ -232,12 +233,14 @@ const firstFinal: TurnThroughputExpectation = {
 
 {
 	const test = createContext();
-	const { runtime, capturedStates } = createRuntime([1_000, 2_000]);
+	const { runtime, capturedStates, getRemainingNowReads } = createRuntime([1_000, 2_000]);
 	runtime.events.sessionStart({}, test.ctx);
 
 	runtime.events.agentStart({}, test.ctx);
 	await runtime.events.turnEnd(turnEnd(7, assistant(20)), test.ctx);
+	assert.equal(getRemainingNowReads(), 0, "accepted assistant checkpoint should consume the only turn_end clock read");
 	await runtime.events.turnEnd(turnEnd(7, assistant(20)), test.ctx);
+	assert.equal(getRemainingNowReads(), 0, "duplicate finite turnIndex should not consume an extra clock read");
 	const afterDuplicate = await captureState(runtime, test, capturedStates);
 	assertSlots(
 		afterDuplicate,
@@ -258,23 +261,80 @@ const firstFinal: TurnThroughputExpectation = {
 				},
 			},
 		},
-		"duplicate turnIndex should not double-count assistant usage in currentRun",
+		"duplicate finite turnIndex should not double-count assistant usage in currentRun",
+	);
+}
+
+{
+	const test = createContext();
+	const { runtime, capturedStates } = createRuntime([1_000, 2_000, 3_000]);
+	runtime.events.sessionStart({}, test.ctx);
+
+	runtime.events.agentStart({}, test.ctx);
+	await runtime.events.turnEnd(turnEnd(undefined, assistant(20)), test.ctx);
+	await runtime.events.turnEnd(turnEnd(undefined, assistant(30)), test.ctx);
+	const afterUndefinedDuplicates = await captureState(runtime, test, capturedStates);
+	assertSlots(
+		afterUndefinedDuplicates,
+		{
+			lastTurn: null,
+			currentRun: {
+				startedAtMs: 1_000,
+				endedAtMs: 3_000,
+				elapsedMs: 2_000,
+				tokensPerSecond: 25,
+				usage: {
+					input: 0,
+					output: 50,
+					cacheRead: 0,
+					cacheWrite: 0,
+					totalTokens: 50,
+					assistantMessages: 2,
+				},
+			},
+		},
+		"undefined turnIndex checkpoints should not be duplicate-guarded",
 	);
 }
 
 {
 	const noStart = createContext();
-	const noStartRuntime = createRuntime([1_000]);
+	const noStartRuntime = createRuntime([]);
 	noStartRuntime.runtime.events.sessionStart({}, noStart.ctx);
 	await noStartRuntime.runtime.events.turnEnd(turnEnd(0, assistant(40)), noStart.ctx);
+	assert.equal(noStartRuntime.getRemainingNowReads(), 0, "turn_end without matching agent_start should not read the clock");
 	assertSlots(await captureState(noStartRuntime.runtime, noStart, noStartRuntime.capturedStates), { lastTurn: null, currentRun: null }, "turn_end without matching agent_start should not create throughput state");
 
 	const nonAssistant = createContext();
-	const nonAssistantRuntime = createRuntime([1_000]);
+	const nonAssistantRuntime = createRuntime([1_000, 2_000]);
 	nonAssistantRuntime.runtime.events.sessionStart({}, nonAssistant.ctx);
 	nonAssistantRuntime.runtime.events.agentStart({}, nonAssistant.ctx);
 	await nonAssistantRuntime.runtime.events.turnEnd(turnEnd(0, user(99)), nonAssistant.ctx);
+	assert.equal(nonAssistantRuntime.getRemainingNowReads(), 1, "non-assistant turn_end should not read the checkpoint clock");
 	assertSlots(await captureState(nonAssistantRuntime.runtime, nonAssistant, nonAssistantRuntime.capturedStates), { lastTurn: null, currentRun: null }, "non-assistant turn_end should not create throughput state");
+	await nonAssistantRuntime.runtime.events.turnEnd(turnEnd(0, assistant(20)), nonAssistant.ctx);
+	assert.equal(nonAssistantRuntime.getRemainingNowReads(), 0, "assistant checkpoint after same-index non-assistant should consume the remaining clock read");
+	assertSlots(
+		await captureState(nonAssistantRuntime.runtime, nonAssistant, nonAssistantRuntime.capturedStates),
+		{
+			lastTurn: null,
+			currentRun: {
+				startedAtMs: 1_000,
+				endedAtMs: 2_000,
+				elapsedMs: 1_000,
+				tokensPerSecond: 20,
+				usage: {
+					input: 0,
+					output: 20,
+					cacheRead: 0,
+					cacheWrite: 0,
+					totalTokens: 20,
+					assistantMessages: 1,
+				},
+			},
+		},
+		"non-assistant turn_end should not consume duplicate guard semantics for its turnIndex",
+	);
 }
 
 {
@@ -311,21 +371,80 @@ const firstFinal: TurnThroughputExpectation = {
 
 {
 	const test = createContext();
-	const { runtime, capturedStates } = createRuntime([1_000, 3_500]);
+	const { runtime, capturedStates } = createRuntime([1_000, 2_000, 3_000, 4_000]);
+	runtime.events.sessionStart({}, test.ctx);
+
+	runtime.events.agentStart({}, test.ctx);
+	await runtime.events.turnEnd(turnEnd(0, assistant(0)), test.ctx);
+	assertSlots(
+		await captureState(runtime, test, capturedStates),
+		{ lastTurn: null, currentRun: null },
+		"invalid accepted checkpoint should clear currentRun instead of leaving a stale provisional value",
+	);
+	await runtime.events.turnEnd(turnEnd(1, assistant(20)), test.ctx);
+	assertSlots(
+		await captureState(runtime, test, capturedStates),
+		{
+			lastTurn: null,
+			currentRun: {
+				startedAtMs: 1_000,
+				endedAtMs: 3_000,
+				elapsedMs: 2_000,
+				tokensPerSecond: 10,
+				usage: {
+					input: 0,
+					output: 20,
+					cacheRead: 0,
+					cacheWrite: 0,
+					totalTokens: 20,
+					assistantMessages: 2,
+				},
+			},
+		},
+		"valid checkpoint after an invalid accepted checkpoint should reuse the accumulated assistant messages",
+	);
+	await runtime.events.agentEnd({ messages: [assistant(0)] }, test.ctx);
+	assertSlots(
+		await captureState(runtime, test, capturedStates),
+		{ lastTurn: null, currentRun: null },
+		"invalid final should clear currentRun even after a valid provisional checkpoint",
+	);
+}
+
+{
+	const test = createContext();
+	const { runtime, capturedStates, getRemainingNowReads } = createRuntime([1_000, 3_500]);
 	runtime.events.sessionStart({}, test.ctx);
 
 	runtime.events.agentStart({}, test.ctx);
 	await runtime.events.agentEnd({ messages: [assistant(50)] }, test.ctx);
 	assert.deepEqual(throughputSlots(await captureState(runtime, test, capturedStates)).lastTurn, firstFinal, "no-start final setup should create an initial trusted final");
+	assert.equal(getRemainingNowReads(), 0, "setup should consume only agent_start and matching agent_end clock reads");
 
 	await runtime.events.agentEnd({ messages: [assistant(1)] }, test.ctx);
+	assert.equal(getRemainingNowReads(), 0, "agent_end without matching agent_start should not read the clock");
 	assertSlots(await captureState(runtime, test, capturedStates), { lastTurn: firstFinal, currentRun: null }, "agent_end without matching agent_start should preserve previous trusted lastTurn and keep currentRun clear");
+}
+
+{
+	const test = createContext();
+	const { runtime, capturedStates } = createRuntime([1_000, 3_500, 5_000, 6_000]);
+	runtime.events.sessionStart({}, test.ctx);
+
+	runtime.events.agentStart({}, test.ctx);
+	await runtime.events.agentEnd({ messages: [assistant(50)] }, test.ctx);
+	assert.deepEqual(throughputSlots(await captureState(runtime, test, capturedStates)).lastTurn, firstFinal, "non-array final setup should create an initial trusted final");
+
+	runtime.events.agentStart({}, test.ctx);
+	await runtime.events.agentEnd({ messages: { role: "assistant", usage: { output: 20, totalTokens: 20 } } }, test.ctx);
+	assertSlots(await captureState(runtime, test, capturedStates), { lastTurn: firstFinal, currentRun: null }, "non-array agent_end messages should clear currentRun and preserve previous trusted lastTurn");
 }
 
 for (const [name, event] of [
 	["zero-output final", { messages: [assistant(0)] }],
 	["error final", { messages: [assistant(20, {}, "error")] }],
 	["aborted final", { messages: [assistant(20, {}, "aborted")] }],
+	["non-array final", { messages: { role: "assistant", usage: { output: 20, totalTokens: 20 } } }],
 ] as const) {
 	const test = createContext();
 	const { runtime, capturedStates } = createRuntime([1_000, 3_500, 5_000, 6_000, 7_000]);
@@ -341,6 +460,55 @@ for (const [name, event] of [
 	await runtime.events.agentEnd(event, test.ctx);
 	const afterInvalid = await captureState(runtime, test, capturedStates);
 	assertSlots(afterInvalid, { lastTurn: firstFinal, currentRun: null }, `${name} should clear currentRun but preserve previous trusted lastTurn`);
+}
+
+{
+	const test = createContext();
+	const { runtime, capturedStates, getRemainingNowReads } = createRuntime([1_000]);
+	runtime.events.sessionStart({}, test.ctx);
+	runtime.events.agentStart({}, test.ctx);
+	runtime.events.sessionStart({}, test.ctx);
+	await runtime.events.turnEnd(turnEnd(0, assistant(20)), test.ctx);
+	assert.equal(getRemainingNowReads(), 0, "sessionStart should reset tracker internals so a stale active run cannot consume a turn_end clock read");
+	assertSlots(await captureState(runtime, test, capturedStates), { lastTurn: null, currentRun: null }, "sessionStart should preserve existing fresh-session visible throughput semantics");
+}
+
+{
+	const test = createContext();
+	const { runtime, capturedStates, getRemainingNowReads } = createRuntime([1_000, 2_000]);
+	runtime.events.sessionStart({}, test.ctx);
+	runtime.events.agentStart({}, test.ctx);
+	await runtime.events.turnEnd(turnEnd(0, assistant(20)), test.ctx);
+	const beforeShutdown = await captureState(runtime, test, capturedStates);
+	assertSlots(
+		beforeShutdown,
+		{
+			lastTurn: null,
+			currentRun: {
+				startedAtMs: 1_000,
+				endedAtMs: 2_000,
+				elapsedMs: 1_000,
+				tokensPerSecond: 20,
+				usage: {
+					input: 0,
+					output: 20,
+					cacheRead: 0,
+					cacheWrite: 0,
+					totalTokens: 20,
+					assistantMessages: 1,
+				},
+			},
+		},
+		"sessionShutdown setup should create a visible provisional currentRun",
+	);
+	await runtime.events.sessionShutdown({}, test.ctx);
+	await runtime.events.turnEnd(turnEnd(1, assistant(20)), test.ctx);
+	assert.equal(getRemainingNowReads(), 0, "sessionShutdown should reset tracker internals so stale turn_end cannot consume a clock read");
+	assert.deepEqual(
+		throughputSlots(await captureState(runtime, test, capturedStates)),
+		throughputSlots(beforeShutdown),
+		"sessionShutdown should not clear existing visible throughput state outside existing UI teardown semantics",
+	);
 }
 
 assert.equal(
