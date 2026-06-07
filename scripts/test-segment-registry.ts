@@ -1,9 +1,15 @@
 import { strict as assert } from "node:assert";
+import { readFile } from "node:fs/promises";
 import { defaultConfig } from "../config.js";
+import { contextSegmentFeature } from "../context-segment-feature.js";
 import { ICONS, PALETTES } from "../palette.js";
+import { costSegmentFeature } from "../cost-segment-feature.js";
 import { getSettingsRows } from "../settings-catalog.js";
+import { gitSegmentFeature } from "../git-segment-feature.js";
 import { GLANCE_THEME_IDS } from "../themes.js";
+import { modelSegmentFeature } from "../model-segment-feature.js";
 import { throughputSegmentFeature } from "../throughput-segment-feature.js";
+import { tokensSegmentFeature } from "../tokens-segment-feature.js";
 import type { SegmentConfig, SegmentDefinition, SegmentId } from "../types.js";
 
 const EXPECTED_SEGMENT_IDS = ["git", "cost", "throughput", "context", "tokens", "model"] as const satisfies readonly SegmentId[];
@@ -36,6 +42,45 @@ const EXPECTED_SEGMENT_SETTING_IDS: Record<ExpectedSegmentId, string[]> = {
 	throughput: ["throughput.precision"],
 };
 
+const FORBIDDEN_REGISTRY_SOURCE_SNIPPETS = [
+	"./config-options.js",
+	"SEGMENT_SETTINGS",
+	"POLL_INTERVALS",
+	"CONTEXT_DISPLAY_LABELS",
+	"TOKENS_DISPLAY_LABELS",
+	"function nextIn",
+	"function nextNumber",
+	"function onOff",
+	"function formatPolling",
+	"function formatTokens",
+	"function formatCost",
+	"function formatPercent",
+	"function throughputPrecisionLabel",
+	"function fixedPrecision",
+	"function formatScaledThroughputRate",
+	"function formatThroughputRate",
+	"function validThroughput",
+	"function gitBranchLabel",
+	"function gitStatusMark",
+	"function gitDetailParts",
+	"function contextDisplayLabel",
+	"function tokensDisplayLabel",
+	"function contextTokenRatio",
+	"function contextIsUnknown",
+	"function contextDisplayValue",
+	"function contextCompactValue",
+	"function shouldShowTokenCache",
+	"function tokenCacheParts",
+	"function tokenPrimary",
+	"function shouldShowThinking",
+	"function collectGit",
+	"function collectCost",
+	"function collectThroughput",
+	"function collectContext",
+	"function collectTokens",
+	"function collectModel",
+] as const;
+
 type SegmentSettingDescriptor = {
 	id: string;
 	label: string;
@@ -65,6 +110,11 @@ interface SegmentRegistryModule {
 
 const segmentRegistryPath: string = "../segment-registry.js";
 const registry = (await import(segmentRegistryPath)) as SegmentRegistryModule;
+const registrySource = await readFile("segment-registry.ts", "utf8");
+
+for (const snippet of FORBIDDEN_REGISTRY_SOURCE_SNIPPETS) {
+	assert.equal(registrySource.includes(snippet), false, `segment-registry.ts should not contain segment-specific source snippet ${snippet}`);
+}
 
 for (const [name, exported] of Object.entries({
 	SEGMENT_IDS: registry.SEGMENT_IDS,
@@ -101,7 +151,12 @@ for (const value of ["general", "session", "unknown", "", null, undefined, 0, 1,
 assert.ok(registry.SEGMENT_BY_ID instanceof Map, "SEGMENT_BY_ID should be a Map for stable lookup/order");
 assert.deepEqual([...registry.SEGMENT_BY_ID.keys()], EXPECTED_SEGMENT_IDS, "SEGMENT_BY_ID keys should exactly match SEGMENT_IDS order");
 assert.equal(registry.SEGMENT_BY_ID.size, EXPECTED_SEGMENT_IDS.length, "SEGMENT_BY_ID should not have missing or extra entries");
+assert.equal(registry.SEGMENT_BY_ID.get("git"), gitSegmentFeature, "git registry entry should be the extracted SegmentFeature object");
+assert.equal(registry.SEGMENT_BY_ID.get("cost"), costSegmentFeature, "cost registry entry should be the extracted SegmentFeature object");
 assert.equal(registry.SEGMENT_BY_ID.get("throughput"), throughputSegmentFeature, "throughput registry entry should be the extracted SegmentFeature object");
+assert.equal(registry.SEGMENT_BY_ID.get("context"), contextSegmentFeature, "context registry entry should be the extracted SegmentFeature object");
+assert.equal(registry.SEGMENT_BY_ID.get("tokens"), tokensSegmentFeature, "tokens registry entry should be the extracted SegmentFeature object");
+assert.equal(registry.SEGMENT_BY_ID.get("model"), modelSegmentFeature, "model registry entry should be the extracted SegmentFeature object");
 
 for (const id of EXPECTED_SEGMENT_IDS) {
 	const entry = registry.SEGMENT_BY_ID.get(id);
