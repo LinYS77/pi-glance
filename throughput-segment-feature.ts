@@ -1,12 +1,6 @@
-import { THROUGHPUT_PRECISION_VALUES } from "./config-options.js";
+import { THROUGHPUT_PRECISION_DESCRIPTOR } from "./config-schema.js";
 import type { SegmentFeature } from "./segment-feature.js";
 import type { GlanceConfig, SegmentData, SegmentRenderContext, ThroughputPrecision, TurnThroughput } from "./types.js";
-
-function throughputPrecisionLabel(precision: ThroughputPrecision): string {
-	if (precision === 1) return "1 digit";
-	if (precision === 0) return "0 digits";
-	return "auto";
-}
 
 function fixedPrecision(value: number, precision: 0 | 1): string {
 	return precision === 0 ? `${Math.round(value)}` : value.toFixed(1);
@@ -71,10 +65,9 @@ export const throughputSegmentFeature = {
 			label: "Precision",
 			hint: "Controls Reply speed decimals. Output tokens / wall time; includes tools, waiting, network, and thinking; not a benchmark.",
 			kind: "cycle",
-			value: (config: GlanceConfig) => throughputPrecisionLabel(config.throughput.precision),
+			value: (config: GlanceConfig) => THROUGHPUT_PRECISION_DESCRIPTOR.label(config.throughput.precision),
 			mutate: (config: GlanceConfig) => {
-				const index = THROUGHPUT_PRECISION_VALUES.indexOf(config.throughput.precision);
-				config.throughput.precision = THROUGHPUT_PRECISION_VALUES[index + 1] ?? THROUGHPUT_PRECISION_VALUES[0]!;
+				config.throughput.precision = THROUGHPUT_PRECISION_DESCRIPTOR.next(config.throughput.precision);
 			},
 		},
 	],

@@ -12,6 +12,7 @@ import {
 	WORKSPACE_LABEL_MODE_VALUES,
 } from "../config-options.js";
 import { defaultConfig } from "../config.js";
+import { THROUGHPUT_PRECISION_DESCRIPTOR } from "../config-schema.js";
 import {
 	getSettingsCategories,
 	getSettingsRows,
@@ -97,7 +98,7 @@ function assertCycleUsesValues<T extends string | number>(
 }
 
 const config = defaultConfig();
-const THROUGHPUT_PRECISION_VALUES = ["auto", 1, 0] as const;
+const THROUGHPUT_PRECISION_VALUES = THROUGHPUT_PRECISION_DESCRIPTOR.values;
 const themeCatalog = getThemeCatalog();
 assert.equal(themeCatalog.length, 22, "theme catalog helper should expose the curated 22-theme collection");
 assert.deepEqual(themeCatalog, GLANCE_THEMES, "theme catalog helper should return shared GLANCE_THEMES metadata exactly");

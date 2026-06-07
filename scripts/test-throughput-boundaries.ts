@@ -73,7 +73,7 @@ const forbiddenThroughputFeatureLocalModules = new Set([
 	"./themes.js",
 	"./palette.js",
 ]);
-const throughputFeatureAllowedLocalModules = new Set(["./config-options.js", "./segment-feature.js", "./types.js"]);
+const throughputFeatureAllowedLocalModules = new Set(["./config-schema.js", "./segment-feature.js", "./types.js"]);
 
 function assertPureThroughputImport(file: SourceFile, specifier: string): void {
 	if (specifier.startsWith("@earendil-works/pi-")) fail(`${file.path}: throughput pure module must not import pi package ${specifier}`);
@@ -105,6 +105,13 @@ for (const match of throughputSegmentFeature.text.matchAll(importPattern)) {
 	if (forbiddenThroughputFeatureLocalModules.has(specifier)) fail(`${throughputSegmentFeature.path}: throughput feature must not import runtime/UI/config/theme module ${specifier}`);
 	if (specifier.startsWith("./") && !throughputFeatureAllowedLocalModules.has(specifier)) fail(`${throughputSegmentFeature.path}: throughput feature local deps should stay narrow; unexpected import ${specifier}`);
 	if (["./segment-feature.js", "./types.js"].includes(specifier) && !isTypeOnly) fail(`${throughputSegmentFeature.path}: throughput feature may only type-import from ${specifier}`);
+}
+
+if (/function\s+throughputPrecisionLabel\b/.test(throughputSegmentFeature.text)) {
+	fail(`${throughputSegmentFeature.path}: throughput precision settings label should come from config-schema descriptor`);
+}
+if (/THROUGHPUT_PRECISION_VALUES/.test(throughputSegmentFeature.text)) {
+	fail(`${throughputSegmentFeature.path}: throughput precision settings cycle should use config-schema descriptor next()`);
 }
 
 for (const file of [throughput, throughputRunTracker, throughputSegmentFeature]) {

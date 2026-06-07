@@ -12,6 +12,7 @@ import {
 	WORKSPACE_LABEL_MODE_VALUES,
 } from "../config-options.js";
 import { configFromText, configToText, defaultConfig, normalizeConfig } from "../config.js";
+import { THROUGHPUT_PRECISION_DESCRIPTOR } from "../config-schema.js";
 import { GLANCE_THEME_IDS } from "../themes.js";
 import type { GlanceConfig, SegmentConfig } from "../types.js";
 
@@ -24,7 +25,7 @@ function assertSegments(actual: SegmentConfig[], expected: SegmentConfig[], mess
 }
 
 const defaults = defaultConfig();
-const THROUGHPUT_PRECISION_VALUES = ["auto", 1, 0] as const;
+const THROUGHPUT_PRECISION_VALUES = THROUGHPUT_PRECISION_DESCRIPTOR.values;
 
 for (const raw of [undefined, null, false, true, 0, 1, "", "{}", []]) {
 	assertDefault(raw, `non-object raw config ${JSON.stringify(raw)} should normalize to defaults`);
@@ -33,7 +34,8 @@ for (const raw of [undefined, null, false, true, 0, 1, "", "{}", []]) {
 assert.equal(defaults.editor.topMarginRows, 1, "default editor top margin rows should preserve the one-row breathing room");
 assert.equal(normalizeConfig({ version: 0 }).version, 5, "old raw version should normalize to current schema version");
 assert.equal(normalizeConfig({ version: 999 }).version, 5, "future raw version should normalize to current schema version");
-assert.deepEqual((defaults as unknown as { throughput?: unknown }).throughput, { precision: "auto" }, "default config should include throughput.precision=auto");
+assert.equal(defaults.throughput.precision, THROUGHPUT_PRECISION_DESCRIPTOR.defaultValue, "default config throughput precision should come from descriptor default");
+assert.deepEqual((defaults as unknown as { throughput?: unknown }).throughput, { precision: THROUGHPUT_PRECISION_DESCRIPTOR.defaultValue }, "default config should include throughput.precision=auto");
 
 for (const theme of GLANCE_THEME_IDS) {
 	assert.equal(normalizeConfig({ theme }).theme, theme, `${theme} should normalize as a valid theme`);
@@ -71,6 +73,9 @@ for (const showThinking of MODEL_THINKING_MODE_VALUES) {
 }
 for (const precision of THROUGHPUT_PRECISION_VALUES) {
 	assert.equal((normalizeConfig({ throughput: { precision } }) as unknown as { throughput: { precision: unknown } }).throughput.precision, precision, `${precision} should normalize as a valid throughput precision`);
+}
+for (const precision of ["1", "0", "manual", 2, -1, Number.NaN, null, undefined, true, false, {}, []]) {
+	assert.equal((normalizeConfig({ throughput: { precision } }) as unknown as { throughput: { precision: unknown } }).throughput.precision, THROUGHPUT_PRECISION_DESCRIPTOR.defaultValue, `${String(precision)} should fall back to descriptor default precision`);
 }
 
 const userConfig = normalizeConfig({

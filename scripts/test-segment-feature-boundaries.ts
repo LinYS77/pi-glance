@@ -45,7 +45,7 @@ const FORBIDDEN_LOCAL_MODULES = new Set([
 	"./git.js",
 ]);
 const TYPE_ONLY_LOCAL_MODULES = new Set(["./segment-feature.js", "./types.js"]);
-const ALLOWED_VALUE_LOCAL_MODULES = new Set(["./config-options.js"]);
+const ALLOWED_VALUE_LOCAL_MODULES = new Set(["./config-options.js", "./config-schema.js"]);
 const EXPECTED_FEATURE_FILES = [
 	"context-segment-feature.ts",
 	"cost-segment-feature.ts",

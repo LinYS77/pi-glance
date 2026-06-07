@@ -9,11 +9,11 @@ import {
 	ICON_MODE_VALUES,
 	MODEL_THINKING_MODE_VALUES,
 	PROVIDER_DISPLAY_MODE_VALUES,
-	THROUGHPUT_PRECISION_VALUES,
 	TOKENS_CACHE_MODE_VALUES,
 	TOKENS_DISPLAY_MODE_VALUES,
 	WORKSPACE_LABEL_MODE_VALUES,
 } from "./config-options.js";
+import { THROUGHPUT_PRECISION_DESCRIPTOR } from "./config-schema.js";
 import { defaultSegmentConfigs, isSegmentId } from "./segment-registry.js";
 import { GLANCE_THEME_ID_SET } from "./themes.js";
 import type {
@@ -26,7 +26,6 @@ import type {
 	ModelThinkingMode,
 	SegmentConfig,
 	SegmentId,
-	ThroughputPrecision,
 	TokensCacheMode,
 	TokensDisplayMode,
 	WorkspaceLabelMode,
@@ -45,7 +44,6 @@ const CONTEXT_UNKNOWN_MODES = new Set<ContextUnknownMode>(CONTEXT_UNKNOWN_MODE_V
 const TOKENS_DISPLAY_MODES = new Set<TokensDisplayMode>(TOKENS_DISPLAY_MODE_VALUES);
 const TOKENS_CACHE_MODES = new Set<TokensCacheMode>(TOKENS_CACHE_MODE_VALUES);
 const MODEL_THINKING_MODES = new Set<ModelThinkingMode>(MODEL_THINKING_MODE_VALUES);
-const THROUGHPUT_PRECISIONS = new Set<ThroughputPrecision>(THROUGHPUT_PRECISION_VALUES);
 
 export function defaultConfig(): GlanceConfig {
 	return {
@@ -87,7 +85,7 @@ export function defaultConfig(): GlanceConfig {
 			cache: "auto",
 		},
 		throughput: {
-			precision: "auto",
+			precision: THROUGHPUT_PRECISION_DESCRIPTOR.defaultValue,
 		},
 	};
 }
@@ -113,10 +111,6 @@ function parseBool(value: unknown, fallback: boolean): boolean {
 
 function parseStringEnum<T extends string>(value: unknown, allowed: ReadonlySet<T>, fallback: T): T {
 	return typeof value === "string" && allowed.has(value as T) ? (value as T) : fallback;
-}
-
-function parseThroughputPrecision(value: unknown, fallback: ThroughputPrecision): ThroughputPrecision {
-	return THROUGHPUT_PRECISIONS.has(value as ThroughputPrecision) ? (value as ThroughputPrecision) : fallback;
 }
 
 function parseIntInRange(value: unknown, fallback: number, min: number, max: number): number {
@@ -237,7 +231,7 @@ export function normalizeConfig(raw: unknown): GlanceConfig {
 			cache: parseStringEnum(tokens.cache, TOKENS_CACHE_MODES, defaults.tokens.cache),
 		},
 		throughput: {
-			precision: parseThroughputPrecision(throughput.precision, defaults.throughput.precision),
+			precision: THROUGHPUT_PRECISION_DESCRIPTOR.normalize(throughput.precision),
 		},
 	};
 }

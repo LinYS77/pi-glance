@@ -348,6 +348,7 @@ function assertConfigOptionsPureModule(files: SourceFile[]): void {
 			if (!isTypeOnly) fail(`${configOptions.path}: config-options may only type-import from ./types.js`);
 			continue;
 		}
+		if (specifier === "./config-schema.js") continue;
 		if (specifier.startsWith("@earendil-works/pi-")) fail(`${configOptions.path}: pure option source must not import pi package ${specifier}`);
 		if (IO_NETWORK_PROCESS_IMPORTS.has(specifier)) fail(`${configOptions.path}: pure option source must not import IO/network/process module ${specifier}`);
 		if (forbiddenLocalModules.has(specifier)) fail(`${configOptions.path}: pure option source must not import runtime/config/catalog module ${specifier}`);

@@ -1,5 +1,6 @@
 import { strict as assert } from "node:assert";
 import { cloneConfig, configFromText, configToText, defaultConfig, normalizeConfig } from "../config.js";
+import { THROUGHPUT_PRECISION_DESCRIPTOR } from "../config-schema.js";
 
 type SegmentLike = { id: string; enabled: boolean };
 type ThroughputPrecision = "auto" | 0 | 1;
@@ -21,16 +22,17 @@ const defaults = defaultConfig();
 assert.equal(defaults.version, 5, "Reply speed UX v2 adds throughput.precision, so CONFIG_VERSION should be 5");
 assert.equal(normalizeConfig({ version: 0 }).version, 5, "old raw versions should normalize to schema version 5");
 assert.equal(normalizeConfig({ version: 999 }).version, 5, "future raw versions should normalize to current schema version 5");
-assert.deepEqual((defaults as unknown as { throughput?: unknown }).throughput, { precision: "auto" }, "defaultConfig should include throughput.precision=auto");
+assert.equal(defaults.throughput.precision, THROUGHPUT_PRECISION_DESCRIPTOR.defaultValue, "defaultConfig should use descriptor throughput precision default");
+assert.deepEqual((defaults as unknown as { throughput?: unknown }).throughput, { precision: THROUGHPUT_PRECISION_DESCRIPTOR.defaultValue }, "defaultConfig should include throughput.precision=auto");
 
-for (const precision of ["auto", 1, 0] as const) {
+for (const precision of THROUGHPUT_PRECISION_DESCRIPTOR.values) {
 	assert.equal(precisionOf(normalizeConfig({ throughput: { precision } })), precision, `${precision} should normalize as a valid throughput precision`);
 }
 for (const precision of ["1", "0", "manual", 2, -1, Number.NaN, null, undefined, true, false]) {
-	assert.equal(precisionOf(normalizeConfig({ throughput: { precision } })), "auto", `${JSON.stringify(precision)} should fall back to throughput precision auto`);
+	assert.equal(precisionOf(normalizeConfig({ throughput: { precision } })), THROUGHPUT_PRECISION_DESCRIPTOR.defaultValue, `${JSON.stringify(precision)} should fall back to throughput precision auto`);
 }
-assert.equal(precisionOf(normalizeConfig({ throughput: null })), "auto", "non-object throughput config should fall back to default precision");
-assert.equal(precisionOf(normalizeConfig({})), "auto", "missing throughput config should fall back to default precision");
+assert.equal(precisionOf(normalizeConfig({ throughput: null })), THROUGHPUT_PRECISION_DESCRIPTOR.defaultValue, "non-object throughput config should fall back to default precision");
+assert.equal(precisionOf(normalizeConfig({})), THROUGHPUT_PRECISION_DESCRIPTOR.defaultValue, "missing throughput config should fall back to default precision");
 
 {
 	const config = normalizeConfig({ throughput: { precision: 1 } });
