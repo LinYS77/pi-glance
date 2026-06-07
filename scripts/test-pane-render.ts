@@ -92,9 +92,38 @@ function assertNotContains(text: string, fragment: string, message?: string): vo
 	assert.ok(!text.includes(fragment), message ?? `expected render not to include ${JSON.stringify(fragment)}`);
 }
 
+function lineContainingAll(text: string, fragments: string[]): string | undefined {
+	return text.split("\n").find((line) => fragments.every((fragment) => line.includes(fragment)));
+}
+
 function assertLineContainsAll(text: string, fragments: string[], message?: string): void {
-	const found = text.split("\n").some((line) => fragments.every((fragment) => line.includes(fragment)));
-	assert.ok(found, message ?? `expected one render line to include ${fragments.map((f) => JSON.stringify(f)).join(", ")}`);
+	assert.ok(lineContainingAll(text, fragments), message ?? `expected one render line to include ${fragments.map((f) => JSON.stringify(f)).join(", ")}`);
+}
+
+function themeRowLabel(line: string): string | undefined {
+	return [...GLANCE_THEMES]
+		.map((theme) => theme.label)
+		.sort((a, b) => b.length - a.length)
+		.find((label) => line.trimEnd().endsWith(label));
+}
+
+function themeListRows(text: string): string[] {
+	return text.split("\n").filter((line) => Boolean(themeRowLabel(line)) && !line.includes("Theme · preview") && !line.includes("Selected ·") && !line.includes("saved "));
+}
+
+function themeListLabels(text: string): string[] {
+	return themeListRows(text).map((line) => {
+		const label = themeRowLabel(line);
+		assert.ok(label, `expected theme row label in ${JSON.stringify(line)}`);
+		return label;
+	});
+}
+
+function assertThemeMarkerColumns(text: string, message: string): void {
+	for (const line of themeListRows(text)) {
+		const markerStart = line.search(/[»\s][●\s] [✓\s][↩\s] /);
+		assert.notEqual(markerStart, -1, `${message}: marker columns should align in ${JSON.stringify(line)}`);
+	}
 }
 
 function findLineContaining(text: string, fragment: string): string {
@@ -116,8 +145,8 @@ function assertNoRawThemeIds(text: string, context: string): void {
 }
 
 function assertThemeRow(text: string, label: string): void {
-	const line = findLineContaining(text, "Theme");
-	assert.ok(line.includes(label), `Theme row should show ${label}`);
+	const line = text.split("\n").find((candidate) => candidate.includes("Theme") && candidate.includes(label));
+	assert.ok(line, `Theme row should show ${label}`);
 	assertNoRawThemeIds(line, "Theme row");
 }
 
@@ -181,15 +210,151 @@ const themePane = await makePane();
 press(themePane.component, "\x1b[C");
 press(themePane.component, "\x1b[B");
 press(themePane.component, "\x1b[C");
-for (let i = 1; i <= GLANCE_THEMES.length; i++) {
-	const expectedTheme = GLANCE_THEMES[i % GLANCE_THEMES.length]!;
-	const expectedLabel = themeLabel(expectedTheme.id);
-	press(themePane.component, "\r");
-	const themeText = plainText(themePane.component);
-	assertThemeRow(themeText, expectedLabel);
-	if (expectedTheme.id !== "light") {
-		assertContains(themeText, `Theme → ${expectedLabel}. Press S to save.`, "theme status should use friendly label");
-		assertNoRawThemeIds(findLineContaining(themeText, "Theme →"), "Theme status");
+press(themePane.component, "\r");
+const themeBrowserText = plainText(themePane.component, 160);
+assertContains(themeBrowserText, "Theme · preview Light", "enter on Theme value should open the calm theme browser");
+assertContains(themeBrowserText, "saved Light", "theme browser should show concise saved copy");
+assertContains(themeBrowserText, "1/22", "theme browser should show position/count");
+assertContains(themeBrowserText, "Selected · Core · default · bright · neutral", "selected detail should show highlighted theme metadata");
+assertContains(themeBrowserText, "Bright neutral palette", "selected detail should show highlighted theme description");
+assertLineContainsAll(themeBrowserText, ["»", "●", "✓", "Light"], "initial browser row should mark the focused saved preview theme");
+assertLineContainsAll(themeBrowserText, ["Dark"], "theme browser should render other friendly labels");
+assert.equal(themeListRows(themeBrowserText).length, GLANCE_THEMES.length, "theme browser should render all theme labels in catalog order");
+assert.deepEqual(themeListLabels(themeBrowserText), GLANCE_THEMES.map((theme) => theme.label), "theme browser list should preserve catalog order");
+assert.ok(!lineContainingAll(themeBrowserText, ["Dark", "default"]), "ordinary rows should contain labels only without metadata");
+assertNotContains(themeBrowserText, "○", "theme browser should not render hollow markers for non-preview rows");
+assertNotContains(themeBrowserText, "\nCore\n", "theme browser should not render group headers");
+assertNotContains(themeBrowserText, "\nCatppuccin\n", "theme browser should not render group headers");
+assertNotContains(themeBrowserText, "\nAccessible\n", "theme browser should not render group headers");
+assertThemeMarkerColumns(themeBrowserText, "initial theme browser");
+assertNoRawThemeIds(themeBrowserText, "Theme browser");
+
+press(themePane.component, "\x1b[B");
+const previewedThemeBrowserText = plainText(themePane.component, 160);
+assertLineContainsAll(previewedThemeBrowserText, ["»", "●", "Dark"], "moving highlight should preview and focus Dark");
+assertLineContainsAll(previewedThemeBrowserText, ["✓", "Light"], "pre-browser saved marker should remain on Light while previewing Dark");
+assertContains(previewedThemeBrowserText, "● Unsaved changes", "previewing a different theme should dirty the pane");
+assertContains(previewedThemeBrowserText, "Theme · preview Dark", "preview movement should show the friendly preview label");
+assertContains(previewedThemeBrowserText, "Selected · Core", "selected detail should update with the highlighted theme group");
+assertNotContains(previewedThemeBrowserText, "Theme → Dark. Press S to save.", "preview movement should not accept the theme yet");
+assertNotContains(previewedThemeBrowserText, "○", "previewed browser should not render hollow markers");
+assertNoRawThemeIds(previewedThemeBrowserText, "Previewed theme browser");
+
+const lowerWindowPane = await makePane();
+press(lowerWindowPane.component, "\x1b[C");
+press(lowerWindowPane.component, "\x1b[B");
+press(lowerWindowPane.component, "\x1b[C");
+press(lowerWindowPane.component, "\r");
+for (let i = 0; i < 20; i++) press(lowerWindowPane.component, "\x1b[B");
+const lowerWindowText = plainText(lowerWindowPane.component, 160);
+assertContains(lowerWindowText, "21/22", "moving near lower themes should update position/count");
+assertContains(lowerWindowText, "High Contrast Dark", "full list should render the highlighted lower theme");
+assertContains(lowerWindowText, "Light", "full list should keep the first theme visible when far down the catalog");
+assertContains(lowerWindowText, "Selected · Accessible", "selected detail should use display group labels for lower themes");
+assertContains(lowerWindowText, "High-contrast palette", "selected detail should update for lower themes");
+assert.equal(themeListRows(lowerWindowText).length, GLANCE_THEMES.length, "lower browser should still render the full ungrouped list");
+assertThemeMarkerColumns(lowerWindowText, "lower theme browser");
+assertNoRawThemeIds(lowerWindowText, "Lower theme browser");
+
+const activeBrowserSavePane = await makePane();
+press(activeBrowserSavePane.component, "\x1b[C");
+press(activeBrowserSavePane.component, "\x1b[B");
+press(activeBrowserSavePane.component, "\x1b[C");
+press(activeBrowserSavePane.component, "\r");
+press(activeBrowserSavePane.component, "\x1b[B");
+press(activeBrowserSavePane.component, "s");
+const activeBrowserSaveResult = activeBrowserSavePane.done();
+assert.deepEqual((activeBrowserSaveResult as { action?: string; config?: GlanceConfig }).action, "save", "S should save directly from an active theme browser preview");
+assert.equal((activeBrowserSaveResult as { config: GlanceConfig }).config.theme, "dark", "active browser save should include the previewed draft theme");
+
+const activeBrowserCancelPane = await makePane();
+press(activeBrowserCancelPane.component, "\x1b[C");
+press(activeBrowserCancelPane.component, "\x1b[B");
+press(activeBrowserCancelPane.component, "\x1b[C");
+press(activeBrowserCancelPane.component, "\r");
+press(activeBrowserCancelPane.component, "\x1b[B");
+press(activeBrowserCancelPane.component, "\x03");
+assert.deepEqual((activeBrowserCancelPane.done() as { action?: string }).action, "cancel", "Ctrl-C should cancel from an active theme browser preview");
+
+const dirtyBeforeBrowserPane = await makePane();
+press(dirtyBeforeBrowserPane.component, "\x1b[C");
+press(dirtyBeforeBrowserPane.component, "\x1b[B");
+press(dirtyBeforeBrowserPane.component, "\x1b[C");
+press(dirtyBeforeBrowserPane.component, "\r");
+press(dirtyBeforeBrowserPane.component, "\x1b[B");
+press(dirtyBeforeBrowserPane.component, "\r");
+press(dirtyBeforeBrowserPane.component, "\r");
+const dirtyBeforeBrowserText = plainText(dirtyBeforeBrowserPane.component, 160);
+assertContains(dirtyBeforeBrowserText, "Theme · preview Dark", "dirty draft Theme row should reopen the browser");
+assertContains(dirtyBeforeBrowserText, "saved Light", "browser saved copy should name the actual initial theme");
+assertContains(dirtyBeforeBrowserText, "Esc returns Dark", "browser restore copy should name the pre-browser draft theme separately");
+assertNotContains(dirtyBeforeBrowserText, "saved Dark", "browser should not label the pre-browser draft theme as saved");
+assertLineContainsAll(dirtyBeforeBrowserText, ["✓", "Light"], "saved marker should remain on the initial theme when browser opens from a dirty draft");
+assertLineContainsAll(dirtyBeforeBrowserText, ["↩", "●", "Dark"], "restore/preview marker should be on the pre-browser draft theme");
+assertNotContains(dirtyBeforeBrowserText, "○", "dirty browser should not render hollow markers");
+press(dirtyBeforeBrowserPane.component, "\x1b[B");
+const dirtyBeforeBrowserPreviewText = plainText(dirtyBeforeBrowserPane.component, 160);
+assertLineContainsAll(dirtyBeforeBrowserPreviewText, ["✓", "Light"], "saved marker should remain on initial theme while preview changes from dirty draft");
+assertLineContainsAll(dirtyBeforeBrowserPreviewText, ["↩", "Dark"], "restore marker should remain on pre-browser draft while preview changes");
+assertLineContainsAll(dirtyBeforeBrowserPreviewText, ["»", "●", "Catppuccin Latte"], "preview marker should move independently from restore and saved markers");
+assertContains(dirtyBeforeBrowserPreviewText, "Selected · Catppuccin", "dirty browser selected detail should update after preview movement");
+assertNotContains(dirtyBeforeBrowserPreviewText, "saved Dark", "preview movement should not create misleading saved draft copy");
+assertNotContains(dirtyBeforeBrowserPreviewText, "○", "dirty preview browser should not render hollow markers");
+press(dirtyBeforeBrowserPane.component, "\x1b[D");
+const dirtyBeforeBrowserRestoredText = plainText(dirtyBeforeBrowserPane.component, 160);
+assertThemeRow(dirtyBeforeBrowserRestoredText, "Dark");
+assertContains(dirtyBeforeBrowserRestoredText, "● Unsaved changes", "Left restore should return to the dirty pre-browser draft, not the saved theme");
+
+press(themePane.component, "\r");
+const acceptedThemeText = plainText(themePane.component, 160);
+assertContains(acceptedThemeText, "Theme → Dark. Press S to save.", "enter in the browser should accept the highlighted theme");
+assertNotContains(acceptedThemeText, "Choose a palette", "accepted browser should return to normal settings");
+assertThemeRow(acceptedThemeText, "Dark");
+press(themePane.component, "s");
+const themeSaveResult = themePane.done();
+assert.deepEqual((themeSaveResult as { action?: string; config?: GlanceConfig }).action, "save", "S should save accepted browser theme through existing path");
+assert.equal((themeSaveResult as { config: GlanceConfig }).config.theme, "dark", "saved browser config should include the accepted theme");
+
+const restoreBrowserPane = await makePane();
+press(restoreBrowserPane.component, "\x1b[C");
+press(restoreBrowserPane.component, "\x1b[B");
+press(restoreBrowserPane.component, "\x1b[C");
+press(restoreBrowserPane.component, "\r");
+press(restoreBrowserPane.component, "\x1b[B");
+press(restoreBrowserPane.component, "\x1b[D");
+const leftRestoredText = plainText(restoreBrowserPane.component, 160);
+assertContains(leftRestoredText, "Theme preview discarded.", "left in the browser should restore and return");
+assertNotContains(leftRestoredText, "Choose a palette", "left restore should return to normal settings");
+assertContains(leftRestoredText, "✓ Saved", "left restore should clear preview-only dirty state");
+assertThemeRow(leftRestoredText, "Light");
+
+const escRestoreBrowserPane = await makePane();
+press(escRestoreBrowserPane.component, "\x1b[C");
+press(escRestoreBrowserPane.component, "\x1b[B");
+press(escRestoreBrowserPane.component, "\x1b[C");
+press(escRestoreBrowserPane.component, "\r");
+press(escRestoreBrowserPane.component, "\x1b[B");
+press(escRestoreBrowserPane.component, "\x1b");
+const escRestoredText = plainText(escRestoreBrowserPane.component, 160);
+assertContains(escRestoredText, "Theme preview discarded.", "Esc in the browser should restore and return");
+assertThemeRow(escRestoredText, "Light");
+
+for (const width of [56, 64, 80, 120, 160]) {
+	const widthThemePane = await makePane();
+	press(widthThemePane.component, "\x1b[C");
+	press(widthThemePane.component, "\x1b[B");
+	press(widthThemePane.component, "\x1b[C");
+	press(widthThemePane.component, "\r");
+	const widthLines = plainRender(widthThemePane.component, width);
+	assertContains(widthLines.join("\n"), "Theme · preview", `theme browser should render at width ${width}`);
+	assertContains(widthLines.join("\n"), "Light", `theme browser should keep labels at width ${width}`);
+	assertContains(widthLines.join("\n"), "Selected", `theme browser should keep selected detail at width ${width}`);
+	assertNotContains(widthLines.join("\n"), "○", `theme browser should not render hollow markers at width ${width}`);
+	if (width >= 120) {
+		assert.equal(themeListRows(widthLines.join("\n")).length, GLANCE_THEMES.length, `theme browser should render all labels at width ${width}`);
+	}
+	for (const line of widthLines) {
+		assert.ok(visibleWidth(line) <= width, `theme browser line should fit width ${width}: ${stripAnsi(line)}`);
 	}
 }
 

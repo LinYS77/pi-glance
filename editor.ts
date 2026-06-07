@@ -41,6 +41,13 @@ function isHorizontalBorder(line: string, borderColor: (text: string) => string)
 	);
 }
 
+function stripControlsPreservingSpaces(text: string): string {
+	return text
+		.replace(/\x1b\][^\x07]*(?:\x07|\x1b\\)/g, "")
+		.replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, "")
+		.replace(/[\r\n\t]/g, " ");
+}
+
 function normalizeRenderedLine(line: string, width: number): string {
 	const lineWidth = visibleWidth(line);
 	if (lineWidth === width) return line;
@@ -128,7 +135,7 @@ export class GlanceEditor extends CustomEditor {
 
 	private dimStatus(status: string, isFocused: boolean, config: GlanceConfig): string {
 		if (isFocused || !status) return status;
-		return fg(PALETTES[config.theme].dim, stripControls(status));
+		return fg(PALETTES[config.theme].dim, stripControlsPreservingSpaces(status));
 	}
 
 	private makeTopBorder(width: number, original: string, isFocused: boolean): string {

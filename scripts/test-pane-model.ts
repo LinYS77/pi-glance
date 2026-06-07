@@ -1,15 +1,18 @@
 import { strict as assert } from "node:assert";
 import { cloneConfig, defaultConfig } from "../config.js";
 import { getSettingsCategories } from "../settings-catalog.js";
-import type { GlanceConfig, SegmentId } from "../types.js";
+import { GLANCE_THEMES, themeLabel } from "../themes.js";
+import type { GlanceConfig, GlanceThemeName, SegmentId } from "../types.js";
 
 type PaneFocus = "categories" | "settings" | "values";
+type PaneSubview = "settings" | "themeBrowser";
 type MoveDirection = "left" | "right" | "up" | "down";
 type PaneIntent =
 	| { type: "cancel" }
 	| { type: "back" }
 	| { type: "move"; direction: MoveDirection }
 	| { type: "activate" }
+	| { type: "openThemeBrowser" }
 	| { type: "save" }
 	| { type: "resetDefaults" }
 	| { type: "reorderSegment"; direction: -1 | 1 }
@@ -18,6 +21,14 @@ type PaneCompletion = { action: "save"; config: GlanceConfig } | { action: "canc
 type HelpShortcut = { key: string; label: string };
 type SettingsRowKind = "toggle" | "cycle" | "info";
 
+interface ThemeBrowserState {
+	highlightedThemeIndex: number;
+	restoreTheme: GlanceThemeName;
+	returnFocus: PaneFocus;
+	returnCategoryIndex: number;
+	returnSettingIndex: number;
+}
+
 interface PaneModelState {
 	initial: GlanceConfig;
 	draft: GlanceConfig;
@@ -25,6 +36,8 @@ interface PaneModelState {
 	categoryIndex: number;
 	settingIndex: number;
 	status: string;
+	subview: PaneSubview;
+	themeBrowser?: ThemeBrowserState;
 }
 
 interface PaneUpdateResult {
@@ -53,14 +66,36 @@ interface SettingViewModel {
 	valueHasFocus: boolean;
 }
 
+interface ThemeBrowserThemeViewModel {
+	id: GlanceThemeName;
+	label: string;
+	selected: boolean;
+	previewed: boolean;
+	restored: boolean;
+	saved: boolean;
+}
+
+interface ThemeBrowserViewModel {
+	highlightedThemeIndex: number;
+	savedTheme: GlanceThemeName;
+	savedLabel: string;
+	restoreTheme: GlanceThemeName;
+	restoreLabel: string;
+	previewTheme: GlanceThemeName;
+	previewLabel: string;
+	themes: ThemeBrowserThemeViewModel[];
+}
+
 interface GlancePaneViewModel {
 	dirty: boolean;
 	status: string;
+	subview: PaneSubview;
 	categories: CategoryViewModel[];
 	selectedCategory?: CategoryViewModel;
 	settingsTitle: string;
 	settings: SettingViewModel[];
 	selectedHint?: string;
+	themeBrowser?: ThemeBrowserViewModel;
 	help: HelpShortcut[];
 }
 
@@ -107,6 +142,10 @@ function withFocus(model: PaneModelState, focus: PaneFocus, categoryIndex = mode
 	return { ...model, focus, categoryIndex, settingIndex };
 }
 
+function openThemeBrowser(model: PaneModelState): ReturnType<typeof updatePaneModel> {
+	return updatePaneModel(withFocus(model, "values", 0, 1), { type: "openThemeBrowser" });
+}
+
 function segmentOrder(config: GlanceConfig): SegmentId[] {
 	return config.segments.map((segment) => segment.id);
 }
@@ -124,6 +163,8 @@ const config = defaultConfig();
 const model = createPaneModel(config);
 
 assert.equal(model.focus, "categories", "initial focus should be categories");
+assert.equal(model.subview, "settings", "initial subview should be normal settings");
+assert.equal(model.themeBrowser, undefined, "initial model should not carry theme browser state");
 assert.equal(model.categoryIndex, 0, "initial category index should select General");
 assert.equal(model.settingIndex, 0, "initial setting index should select the first row");
 assert.equal(model.status, "", "initial status should be empty");
@@ -143,6 +184,8 @@ const initialView = view(model);
 assert.equal(initialView.dirty, false, "initial view should not be dirty");
 assert.equal(paneIsDirty(model), false, "initial model should not be dirty");
 assert.equal(initialView.status, "", "initial view status should be empty");
+assert.equal(initialView.subview, "settings", "initial view should expose the normal settings subview");
+assert.equal(initialView.themeBrowser, undefined, "initial view should not expose theme browser data");
 assert.equal(initialView.selectedCategory?.id, "general", "initial view should select General");
 assert.equal(initialView.settingsTitle, "General", "initial settings title should be General");
 assert.deepEqual(
@@ -274,6 +317,137 @@ assert.equal(leftBoundary.model.categoryIndex, 0, "left boundary should preserve
 const rightBoundary = move(withFocus(model, "values"), "right");
 assert.equal(rightBoundary.requestRender, true, "right boundary should still request render to match pane behavior");
 assert.equal(rightBoundary.model.focus, "values", "right boundary should remain on values");
+
+const openBrowserFromEnabled = updatePaneModel(withFocus(model, "values", 0, 0), { type: "openThemeBrowser" });
+assert.equal(openBrowserFromEnabled.requestRender, false, "opening theme browser outside the Theme row should be a no-op");
+assert.deepEqual(openBrowserFromEnabled.model, withFocus(model, "values", 0, 0), "opening theme browser outside the Theme row should not change model state");
+
+const openedThemeBrowser = openThemeBrowser(model);
+assert.equal(openedThemeBrowser.requestRender, true, "opening theme browser should request render");
+assert.equal(openedThemeBrowser.completion, undefined, "opening theme browser should not complete the pane");
+assert.equal(openedThemeBrowser.model.subview, "themeBrowser", "Theme row action should open the theme browser subview");
+assert.deepEqual(openedThemeBrowser.model.themeBrowser, {
+	highlightedThemeIndex: 0,
+	restoreTheme: "light",
+	returnFocus: "values",
+	returnCategoryIndex: 0,
+	returnSettingIndex: 1,
+});
+assert.equal(openedThemeBrowser.model.draft.theme, "light", "opening should keep the current draft theme previewed");
+const openedBrowserView = view(openedThemeBrowser.model);
+assert.equal(openedBrowserView.subview, "themeBrowser", "theme browser view should expose the active browser subview");
+assert.equal(openedBrowserView.themeBrowser?.highlightedThemeIndex, 0, "theme browser view should highlight the draft theme");
+assert.equal(openedBrowserView.themeBrowser?.savedTheme, "light", "theme browser view should keep the initial saved theme");
+assert.equal(openedBrowserView.themeBrowser?.savedLabel, themeLabel("light"), "theme browser view should use friendly saved labels");
+assert.equal(openedBrowserView.themeBrowser?.restoreTheme, "light", "theme browser view should keep the restore theme");
+assert.equal(openedBrowserView.themeBrowser?.restoreLabel, themeLabel("light"), "theme browser view should use friendly restore labels");
+assert.equal(openedBrowserView.themeBrowser?.previewTheme, "light", "theme browser view should preview the draft theme");
+assert.equal(openedBrowserView.themeBrowser?.previewLabel, themeLabel("light"), "theme browser view should use friendly preview labels");
+assert.deepEqual(
+	openedBrowserView.themeBrowser?.themes.map((theme) => ({ id: theme.id, label: theme.label, selected: theme.selected, previewed: theme.previewed, restored: theme.restored, saved: theme.saved })),
+	GLANCE_THEMES.map((theme, index) => ({ id: theme.id, label: theme.label, selected: index === 0, previewed: index === 0, restored: index === 0, saved: index === 0 })),
+	"theme browser view should expose the existing curated themes with friendly labels and markers",
+);
+
+const previewedDarkTheme = move(openedThemeBrowser.model, "down");
+assert.equal(previewedDarkTheme.requestRender, true, "moving theme browser highlight should request render");
+assert.equal(previewedDarkTheme.model.subview, "themeBrowser", "moving highlight should stay in the theme browser");
+assert.equal(previewedDarkTheme.model.themeBrowser?.highlightedThemeIndex, 1, "down should highlight the next curated theme");
+assert.equal(previewedDarkTheme.model.draft.theme, "dark", "moving highlight should preview the highlighted theme in draft config");
+assert.equal(previewedDarkTheme.model.themeBrowser?.restoreTheme, "light", "preview movement should preserve the pre-browser restore theme");
+assert.equal(view(previewedDarkTheme.model).themeBrowser?.previewLabel, themeLabel("dark"), "preview movement should expose the highlighted friendly label");
+assert.equal(paneIsDirty(previewedDarkTheme.model), true, "previewing a different initial theme should make the draft dirty");
+const previewedLightTheme = move(previewedDarkTheme.model, "up");
+assert.equal(previewedLightTheme.model.themeBrowser?.highlightedThemeIndex, 0, "up should return to the previous curated theme");
+assert.equal(previewedLightTheme.model.draft.theme, "light", "moving back to the restore theme should preview it again");
+assert.equal(paneIsDirty(previewedLightTheme.model), false, "previewing the initial theme again should clear dirty state");
+
+const acceptedDarkTheme = updatePaneModel(previewedDarkTheme.model, { type: "activate" });
+assert.equal(acceptedDarkTheme.requestRender, true, "accepting a browser theme should request render");
+assert.equal(acceptedDarkTheme.completion, undefined, "accepting a browser theme should not complete the pane");
+assert.equal(acceptedDarkTheme.model.subview, "settings", "accepting a browser theme should return to normal settings");
+assert.equal(acceptedDarkTheme.model.themeBrowser, undefined, "accepting should clear theme browser state");
+assert.equal(acceptedDarkTheme.model.draft.theme, "dark", "accepting should keep the previewed theme in the draft config");
+assert.equal(acceptedDarkTheme.model.focus, "values", "accepting should restore the Theme row value focus");
+assert.equal(acceptedDarkTheme.model.categoryIndex, 0, "accepting should restore the General category");
+assert.equal(acceptedDarkTheme.model.settingIndex, 1, "accepting should restore the Theme row");
+assert.equal(acceptedDarkTheme.model.status, "Theme → Dark. Press S to save.", "accepting should describe the accepted friendly theme label");
+assert.equal(selectedSetting(view(acceptedDarkTheme.model)).value, "Dark", "Theme row should show the accepted friendly label");
+assert.equal(paneIsDirty(acceptedDarkTheme.model), true, "accepting a different initial theme should leave the pane dirty");
+const saveAcceptedDarkTheme = updatePaneModel(acceptedDarkTheme.model, { type: "save" });
+assert.equal(saveAcceptedDarkTheme.completion?.action, "save", "saving after browser accept should use the existing save path");
+if (saveAcceptedDarkTheme.completion?.action !== "save") throw new Error("theme browser save completion missing");
+assert.equal(saveAcceptedDarkTheme.completion.config.theme, "dark", "saving after browser accept should include the accepted draft theme");
+
+const savePreviewedDarkTheme = updatePaneModel(previewedDarkTheme.model, { type: "save" });
+assert.equal(savePreviewedDarkTheme.completion?.action, "save", "saving while browser previews should still use existing draft save path");
+if (savePreviewedDarkTheme.completion?.action !== "save") throw new Error("theme browser preview save completion missing");
+assert.equal(savePreviewedDarkTheme.completion.config.theme, "dark", "saving while browser previews should include the previewed draft theme");
+
+const resetFromThemeBrowser = updatePaneModel(previewedDarkTheme.model, { type: "resetDefaults" });
+assert.equal(resetFromThemeBrowser.requestRender, true, "reset from theme browser should request render");
+assert.equal(resetFromThemeBrowser.model.subview, "settings", "reset from theme browser should return to normal settings");
+assert.equal(resetFromThemeBrowser.model.themeBrowser, undefined, "reset from theme browser should clear browser state");
+assert.deepEqual(resetFromThemeBrowser.model.draft, defaultConfig(), "reset from theme browser should restore default config through the existing reset path");
+assert.equal(resetFromThemeBrowser.model.focus, "categories", "reset from theme browser should restore category focus like existing reset");
+assert.equal(resetFromThemeBrowser.model.status, "Defaults restored locally. Press S to save or Esc to discard.", "reset from theme browser should keep existing reset status copy");
+
+const restoredFromBack = updatePaneModel(previewedDarkTheme.model, { type: "back" });
+assert.equal(restoredFromBack.requestRender, true, "Esc/back in theme browser should request render");
+assert.equal(restoredFromBack.completion, undefined, "Esc/back in theme browser should not cancel the pane");
+assert.equal(restoredFromBack.model.subview, "settings", "Esc/back should return to normal settings");
+assert.equal(restoredFromBack.model.themeBrowser, undefined, "Esc/back should clear theme browser state");
+assert.equal(restoredFromBack.model.draft.theme, "light", "Esc/back should restore the pre-browser draft theme");
+assert.equal(restoredFromBack.model.focus, "values", "Esc/back should restore Theme row value focus");
+assert.equal(restoredFromBack.model.categoryIndex, 0, "Esc/back should restore the General category");
+assert.equal(restoredFromBack.model.settingIndex, 1, "Esc/back should restore the Theme row");
+assert.equal(paneIsDirty(restoredFromBack.model), false, "restoring the initial theme should clear preview-only dirty state");
+
+const restoredFromLeft = move(previewedDarkTheme.model, "left");
+assert.equal(restoredFromLeft.requestRender, true, "Left in theme browser should request render");
+assert.equal(restoredFromLeft.model.subview, "settings", "Left should return to normal settings");
+assert.equal(restoredFromLeft.model.draft.theme, "light", "Left should restore the pre-browser draft theme");
+assert.equal(paneIsDirty(restoredFromLeft.model), false, "Left restore should clear preview-only dirty state");
+
+const dirtyBeforeBrowser = cloneConfig(config);
+dirtyBeforeBrowser.theme = "tokyo-night";
+const dirtyBrowserModel = createPaneModel(dirtyBeforeBrowser);
+const dirtyBrowserOpened = openThemeBrowser(dirtyBrowserModel);
+const dirtyBrowserPreview = move(dirtyBrowserOpened.model, "down");
+const dirtyBrowserRestored = updatePaneModel(dirtyBrowserPreview.model, { type: "back" });
+assert.equal(dirtyBrowserRestored.model.draft.theme, "tokyo-night", "restore should use the dirty draft theme active when browser opened");
+assert.equal(paneIsDirty(dirtyBrowserRestored.model), false, "restoring to a non-default initial draft should preserve existing dirty comparison semantics");
+const dirtyBrowserBackToCategories = updatePaneModel(dirtyBrowserRestored.model, { type: "back" });
+assert.equal(dirtyBrowserBackToCategories.requestRender, true, "Esc/q after returning from theme browser should use existing values-column back behavior");
+assert.equal(dirtyBrowserBackToCategories.completion, undefined, "values-column back after browser restore should not cancel immediately");
+assert.equal(dirtyBrowserBackToCategories.model.focus, "categories", "values-column back after browser restore should return to categories");
+assertCancel(updatePaneModel(dirtyBrowserBackToCategories.model, { type: "back" }), "Esc/q from categories after returning from theme browser");
+
+let preDirtyThemeModel = withFocus(createPaneModel(config), "values", 0, 1);
+for (const theme of ["dark", "catppuccin-latte", "catppuccin-mocha", "nord", "tokyo-night"] as const) {
+	preDirtyThemeModel = updatePaneModel(preDirtyThemeModel, { type: "activate" }).model;
+	assert.equal(preDirtyThemeModel.draft.theme, theme, `theme row cycle should reach ${theme}`);
+}
+assert.equal(paneIsDirty(preDirtyThemeModel), true, "cycling to a non-initial theme should make the pane dirty before opening browser");
+const preDirtyBrowserOpened = openThemeBrowser(preDirtyThemeModel);
+assert.equal(preDirtyBrowserOpened.model.themeBrowser?.restoreTheme, "tokyo-night", "browser should remember the pre-existing dirty draft theme");
+const preDirtyBrowserView = view(preDirtyBrowserOpened.model);
+assert.equal(preDirtyBrowserView.themeBrowser?.savedTheme, "light", "dirty browser should keep the original saved theme separate from restore theme");
+assert.deepEqual(
+	preDirtyBrowserView.themeBrowser?.themes.filter((theme) => theme.saved).map((theme) => theme.id),
+	["light"],
+	"dirty browser should mark only the original initial theme as saved",
+);
+assert.deepEqual(
+	preDirtyBrowserView.themeBrowser?.themes.filter((theme) => theme.restored).map((theme) => theme.id),
+	["tokyo-night"],
+	"dirty browser should mark the pre-browser draft theme as restore target",
+);
+const preDirtyBrowserPreview = move(preDirtyBrowserOpened.model, "down");
+assert.notEqual(preDirtyBrowserPreview.model.draft.theme, "tokyo-night", "pre-existing dirty case should preview a different theme");
+const preDirtyBrowserRestored = updatePaneModel(preDirtyBrowserPreview.model, { type: "back" });
+assert.equal(preDirtyBrowserRestored.model.draft.theme, "tokyo-night", "restore should preserve the dirty draft theme active when browser opened");
+assert.equal(paneIsDirty(preDirtyBrowserRestored.model), true, "restoring to a pre-existing dirty draft theme should keep the pane dirty");
 
 const enterInCategories = updatePaneModel(model, { type: "activate" });
 assert.equal(enterInCategories.requestRender, false, "Enter in categories should be a no-op without render");

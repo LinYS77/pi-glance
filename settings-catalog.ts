@@ -5,8 +5,8 @@ import {
 	WORKSPACE_LABEL_MODE_VALUES,
 } from "./config-options.js";
 import { getSegmentSettings, segmentLabel, type SegmentSettingDescriptor } from "./segment-registry.js";
-import { GLANCE_THEME_IDS, themeLabel } from "./themes.js";
-import type { EditorTopMarginRows, GlanceConfig, SegmentId } from "./types.js";
+import { GLANCE_THEMES, GLANCE_THEME_IDS, themeLabel as glanceThemeLabel } from "./themes.js";
+import type { EditorTopMarginRows, GlanceConfig, GlanceThemeName, SegmentId } from "./types.js";
 
 export type SettingsCategoryId = "general" | SegmentId;
 type SettingsRowKind = "toggle" | "cycle" | "info";
@@ -24,6 +24,15 @@ export interface SettingsRow {
 	hint: string;
 	kind: SettingsRowKind;
 	apply?: (config: GlanceConfig) => GlanceConfig;
+}
+
+export interface ThemeBrowserCatalogItem {
+	id: GlanceThemeName;
+	label: string;
+	group: string;
+	tone: string;
+	tags: readonly string[];
+	description: string;
 }
 
 const MIN_CONTENT_ROWS = [2, 3, 4] as const;
@@ -62,6 +71,26 @@ function cycleRow(id: string, label: string, value: string, hint: string, apply:
 
 function infoRow(id: string, label: string, value: string, hint: string): SettingsRow {
 	return { id, label, value, hint, kind: "info" };
+}
+
+export function getThemeCatalog(): readonly ThemeBrowserCatalogItem[] {
+	return GLANCE_THEMES;
+}
+
+export function getThemeCount(): number {
+	return GLANCE_THEME_IDS.length;
+}
+
+export function getThemeIndex(theme: GlanceThemeName): number {
+	return Math.max(0, GLANCE_THEME_IDS.indexOf(theme));
+}
+
+export function getThemeIdByIndex(index: number): GlanceThemeName | undefined {
+	return GLANCE_THEME_IDS[index];
+}
+
+export function getThemeLabel(theme: GlanceThemeName): string {
+	return glanceThemeLabel(theme);
 }
 
 function descriptorRow(config: GlanceConfig, descriptor: SegmentSettingDescriptor): SettingsRow {
@@ -111,7 +140,7 @@ export function getSettingsRows(config: GlanceConfig, categoryId: SettingsCatego
 						next.enabled = !next.enabled;
 					}),
 				),
-				cycleRow("general.theme", "Theme", themeLabel(config.theme), "Switch the palette.", (draft) =>
+				cycleRow("general.theme", "Theme", getThemeLabel(config.theme), "Switch the palette.", (draft) =>
 					withConfig(draft, (next) => {
 						next.theme = nextIn(next.theme, GLANCE_THEME_IDS);
 					}),

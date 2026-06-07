@@ -8,10 +8,14 @@ function displayForMode(data: SegmentData, widthMode: SegmentRenderContext["widt
 	return `${data.primary}${secondary}`.trim();
 }
 
+function iconGapForSegment(ctx: SegmentRenderContext, segment: SegmentDefinition): string {
+	return segment.id === "throughput" && ctx.config.icons === "nerd" ? "  " : " ";
+}
+
 function renderCollectedSegment(ctx: SegmentRenderContext, segment: SegmentDefinition, data: SegmentData): SegmentRenderResult {
 	const icon = ctx.icons[segment.id];
 	const value = displayForMode(data, ctx.widthMode);
-	const prefix = icon ? `${icon} ` : "";
+	const prefix = icon ? `${icon}${iconGapForSegment(ctx, segment)}` : "";
 	return {
 		id: segment.id,
 		text: `${prefix}${value}`.trim(),

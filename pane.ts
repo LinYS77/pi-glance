@@ -10,8 +10,10 @@ import {
 	type PaneIntent,
 	type PaneModelState,
 	type SettingViewModel,
+	type ThemeBrowserThemeViewModel,
 } from "./pane-model.js";
 import { renderInputSurface, renderInputSurfacePreview } from "./renderer.js";
+import { GLANCE_THEME_IDS, themeLabel } from "./themes.js";
 import type { GlanceConfig, GlanceState } from "./types.js";
 
 type PaneResult = { action: "save"; config: GlanceConfig } | { action: "cancel" };
@@ -131,6 +133,44 @@ function helpText(help: HelpShortcut[], colors: PaneColors): string {
 	return help.map((item) => shortcut(colors, item.key, item.label)).join(colors.dim("  ·  "));
 }
 
+function escapeRegExp(text: string): string {
+	return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function displayThemeDetailText(text: string): string {
+	let display = text.replace(/low-light/g, "dim");
+	for (const id of GLANCE_THEME_IDS) {
+		const replacement = id === "light" ? "bright" : id === "dark" ? "dim" : themeLabel(id);
+		display = display.replace(new RegExp(`\\b${escapeRegExp(id)}\\b`, "g"), replacement);
+	}
+	return display;
+}
+
+function displayThemeGroup(group: string): string {
+	switch (group) {
+		case "core":
+			return "Core";
+		case "catppuccin":
+			return "Catppuccin";
+		case "classic":
+			return "Classics";
+		case "editor":
+			return "Editor";
+		case "kanagawa":
+			return "Japanese";
+		case "everforest":
+			return "Forest";
+		case "accessibility":
+			return "Accessible";
+		default:
+			return group;
+	}
+}
+
+function displayThemeTags(tags: readonly string[]): string {
+	return tags.filter((tag) => !GLANCE_THEME_IDS.includes(tag as (typeof GLANCE_THEME_IDS)[number])).map(displayThemeDetailText).join(" · ");
+}
+
 function focusGap(gap: string, colors: PaneColors): string {
 	const gapWidth = visibleWidth(gap);
 	if (gapWidth <= 1) return colors.accent("›");
@@ -168,8 +208,21 @@ class GlanceConfigPane implements Component {
 
 	invalidate(): void {}
 
-	handleInput(data: string): void {
+	private intentForInput(data: string): PaneIntent | undefined {
 		const intent = paneIntentFromKey(data);
+		if (!intent) return undefined;
+		if (intent.type === "activate") {
+			const viewModel = createPaneViewModel(this.model, 120);
+			const selectedRow = viewModel.settings.find((row) => row.selected);
+			if (this.model.subview !== "themeBrowser" && this.model.focus === "values" && viewModel.selectedCategory?.id === "general" && selectedRow?.id === "general.theme") {
+				return { type: "openThemeBrowser" };
+			}
+		}
+		return intent;
+	}
+
+	handleInput(data: string): void {
+		const intent = this.intentForInput(data);
 		if (!intent) return;
 
 		const update = updatePaneModel(this.model, intent);
@@ -256,6 +309,47 @@ class GlanceConfigPane implements Component {
 		return model.settings.map((row) => this.renderSettingRow(row, layout, colors));
 	}
 
+	private renderThemeBrowserRow(theme: ThemeBrowserThemeViewModel, layout: PaneLayout, colors: PaneColors): string {
+		const cursor = theme.selected ? colors.accent("» ") : "  ";
+		const previewMarker = theme.previewed ? colors.accent("●") : " ";
+		const savedMarker = theme.saved ? colors.success("✓") : " ";
+		const restoreMarker = theme.restored && !theme.saved ? colors.muted("↩") : " ";
+		const labelTone = theme.selected ? colors.accent : theme.previewed ? colors.muted : colors.dim;
+		const markers = `${cursor}${previewMarker} ${savedMarker}${restoreMarker} `;
+		const markerWidth = visibleWidth(markers);
+		const label = truncateToWidth(theme.label, Math.max(8, layout.contentWidth - markerWidth), "…");
+		return paneLine(layout, [`${markers}${labelTone(label)}`]);
+	}
+
+	private renderThemeBrowserDetail(theme: ThemeBrowserThemeViewModel, layout: PaneLayout, colors: PaneColors): string[] {
+		const group = displayThemeGroup(theme.group);
+		const tags = displayThemeTags(theme.tags);
+		const summary = ["Selected", group, tags].filter(Boolean).join(" · ");
+		const description = displayThemeDetailText(theme.description);
+		return [paneLine(layout, [colors.muted(summary)]), paneLine(layout, [colors.dim(description)])];
+	}
+
+	private renderThemeBrowser(lines: string[], model: GlancePaneViewModel, layout: PaneLayout, colors: PaneColors): void {
+		const browser = model.themeBrowser;
+		if (!browser) return;
+
+		const selected = browser.themes[browser.highlightedThemeIndex] ?? browser.themes.find((theme) => theme.selected);
+		const title = `Theme · preview ${browser.previewLabel}`;
+		const restore = browser.restoreTheme === browser.savedTheme ? `saved ${browser.savedLabel}` : `saved ${browser.savedLabel} · Esc returns ${browser.restoreLabel}`;
+		const position = `${browser.highlightedThemeIndex + 1}/${browser.themes.length}`;
+		lines.push(paneLine(layout, [spreadAnsi(colors.muted(title), colors.dim(position), layout.contentWidth)]));
+		lines.push(paneLine(layout, [colors.dim(restore)]));
+
+		for (const theme of browser.themes) {
+			lines.push(this.renderThemeBrowserRow(theme, layout, colors));
+		}
+
+		if (selected) {
+			lines.push("");
+			lines.push(...this.renderThemeBrowserDetail(selected, layout, colors));
+		}
+	}
+
 	private renderAsidePane(model: GlancePaneViewModel, layout: PaneLayout, colors: PaneColors): string[] {
 		const hint = model.selectedHint ? truncateToWidth(model.selectedHint, layout.asideWidth - 2, "…") : "";
 		return [colors.muted(model.settingsTitle), hint ? colors.dim(`“${hint}”`) : ""];
@@ -279,6 +373,11 @@ class GlanceConfigPane implements Component {
 	}
 
 	private renderSettings(lines: string[], model: GlancePaneViewModel, layout: PaneLayout, colors: PaneColors): void {
+		if (model.subview === "themeBrowser") {
+			this.renderThemeBrowser(lines, model, layout, colors);
+			return;
+		}
+
 		this.renderSettingsColumns(lines, model, layout, colors);
 		if (!layout.showAside && model.selectedHint) {
 			const hint = truncateToWidth(model.selectedHint, layout.contentWidth, "…");

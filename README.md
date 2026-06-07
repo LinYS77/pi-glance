@@ -68,11 +68,11 @@ That's the only command — opens a calm settings pane with a real input-surface
 | 📊 | **Inline status** | Git · cost · Reply speed · context · optional tokens · model — top-right |
 | ⚙️ | **`/glance` pane** | General settings, segment order, and per-segment detail settings in a calm grid |
 | 💤 | **Dim unfocused** | Surface quiets down when you scroll the chat |
-| 🎨 | **Themes** | 10 built-in palettes, from Light/Dark to Catppuccin, Nord, Tokyo Night, Gruvbox, Solarized, Rosé Pine, and One Dark |
+| 🎨 | **Themes** | 22 built-in palettes, from Light/Dark to Catppuccin, Solarized, Gruvbox, Rosé Pine, One, Kanagawa, Everforest, and High Contrast |
 
 ## Notes
 
-- To switch themes, open `/glance` → **General** → `Theme`. Built-ins: Light, Dark, Catppuccin Latte/Mocha, Nord, Tokyo Night, Gruvbox Dark, Solarized Dark, Rosé Pine, and One Dark.
+- To switch themes, open `/glance` → **General** → `Theme`, press Enter, preview palettes in the browser, then press Enter to accept or Esc/Left to return. Built-ins: Light, Dark, Catppuccin Latte/Mocha/Frappé/Macchiato, Nord, Tokyo Night, Gruvbox Light/Dark, Solarized Light/Dark, Rosé Pine/Dawn, One Light/Dark, Kanagawa Wave/Lotus, Everforest Light/Dark, and High Contrast Light/Dark.
 - Icons default to `plain` so pi-glance works with normal terminal fonts.
 - Editor top spacing is configurable: open `/glance` → **General** → `Top spacing` and choose `none`, `1 row`, or `2 rows`.
 - `nerd` icons are opt-in: open `/glance` → **General** → `Icons` and choose `nerd` for richer symbols.

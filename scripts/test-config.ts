@@ -194,7 +194,12 @@ assert.deepEqual(normalizeConfig({ enabled: false, theme: "dark" }).cost, defaul
 assert.deepEqual(normalizeConfig({ enabled: false, theme: "dark" }).tokens, defaults.tokens, "missing tokens group should fill defaults");
 assert.deepEqual((normalizeConfig({ enabled: false, theme: "dark" }) as unknown as { throughput: unknown }).throughput, { precision: "auto" }, "missing throughput group should fill defaults");
 
-assert.equal(normalizeConfig({ theme: "catppuccin-macchiato" }).theme, defaults.theme, "unknown theme should fall back to default theme");
+assert.equal(normalizeConfig({ theme: "catppuccin-macchiato" }).theme, "catppuccin-macchiato", "curated Catppuccin Macchiato theme should normalize as valid");
+assert.equal(normalizeConfig({ theme: "high-contrast-light" }).theme, "high-contrast-light", "new counterpart High Contrast Light theme should normalize as valid");
+assert.equal(normalizeConfig({ theme: "one-light" }).theme, "one-light", "new counterpart One Light theme should normalize as valid");
+assert.equal(normalizeConfig({ theme: "kanagawa-lotus" }).theme, "kanagawa-lotus", "new counterpart Kanagawa Lotus theme should normalize as valid");
+assert.equal(normalizeConfig({ theme: "everforest-light" }).theme, "everforest-light", "new counterpart Everforest Light theme should normalize as valid");
+assert.equal(normalizeConfig({ theme: "dracula" }).theme, defaults.theme, "unknown theme should fall back to default theme");
 assert.equal(normalizeConfig({ theme: null }).theme, defaults.theme, "non-string theme should fall back to default theme");
 assert.equal(normalizeConfig({ icons: "emoji" }).icons, defaults.icons, "unknown icon mode should fall back to default icons");
 assert.equal(normalizeConfig({ icons: null }).icons, defaults.icons, "non-string icon mode should fall back to default icons");

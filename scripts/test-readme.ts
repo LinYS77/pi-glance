@@ -14,10 +14,11 @@ assert.ok(readme.includes("Nerd icons need a Nerd Font or Symbols Nerd Font fall
 assert.ok(readme.includes("If icons look like boxes, choose `plain`"), "README should explain the plain fallback when icons render as boxes");
 assert.ok(readme.includes("does not auto-detect, install, or bundle terminal fonts"), "README should avoid implying font detection/install/bundling");
 
-assert.equal(GLANCE_THEMES.length, 10, "README theme copy should describe the curated 10-theme collection");
-assert.ok(readme.includes("10 built-in palettes"), "README should describe the curated 10-theme count");
+assert.equal(GLANCE_THEMES.length, 22, "README theme copy should describe the curated 22-theme collection");
+assert.ok(readme.includes("22 built-in palettes"), "README should describe the curated 22-theme count");
+assert.ok(readme.includes("press Enter, preview palettes in the browser"), "README should describe the theme browser flow");
 assert.ok(
-	readme.includes("Built-ins: Light, Dark, Catppuccin Latte/Mocha, Nord, Tokyo Night, Gruvbox Dark, Solarized Dark, Rosé Pine, and One Dark."),
+	readme.includes("Built-ins: Light, Dark, Catppuccin Latte/Mocha/Frappé/Macchiato, Nord, Tokyo Night, Gruvbox Light/Dark, Solarized Light/Dark, Rosé Pine/Dawn, One Light/Dark, Kanagawa Wave/Lotus, Everforest Light/Dark, and High Contrast Light/Dark."),
 	"README should keep the curated built-in theme expression",
 );
 

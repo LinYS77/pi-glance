@@ -43,6 +43,14 @@ function plain(state: GlanceState, config: GlanceConfig, width: number): string 
 	return stripControls(renderGlanceLine(state, config, width));
 }
 
+function plainPreservingSpaces(state: GlanceState, config: GlanceConfig, width: number): string {
+	return renderGlanceLine(state, config, width)
+		.replace(/\x1b\][^\x07]*(?:\x07|\x1b\\)/g, "")
+		.replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, "")
+		.replace(/[\r\n\t]/g, " ")
+		.trim();
+}
+
 const sample: ThroughputTurnFixture = {
 	startedAtMs: 1_000,
 	endedAtMs: 3_500,
@@ -109,6 +117,9 @@ function turn(rate: number): ThroughputTurnFixture {
 	assert.equal(plain(withThroughput(testState(), null), config, 120), "spd ? tok/s", "enabled throughput full status should render unknown ? placeholder when both slots are null");
 	assert.equal(plain(withThroughput(testState(), null), config, 80), "spd ?/s", "enabled throughput compact status should render compact ?/s placeholder");
 	assert.equal(plain(withThroughput(testState(), null), config, 48), "spd ?/s", "enabled throughput minimal status should render compact ?/s placeholder");
+
+	const nerdConfig = setSegments({ ...defaultConfig(), icons: "nerd" }, [{ id: "throughput", enabled: true }]);
+	assert.equal(plainPreservingSpaces(withThroughput(testState(), null), nerdConfig, 120), "  ? tok/s", "nerd Reply speed icon should keep extra visual spacing before the placeholder");
 }
 
 {

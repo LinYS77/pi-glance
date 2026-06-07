@@ -1,8 +1,20 @@
 import { cloneConfig, defaultConfig, moveSegment } from "./config.js";
-import { getSettingsCategories, getSettingsRows, type SettingsCategory, type SettingsCategoryId, type SettingsRow } from "./settings-catalog.js";
-import type { GlanceConfig } from "./types.js";
+import {
+	getSettingsCategories,
+	getSettingsRows,
+	getThemeCatalog,
+	getThemeCount,
+	getThemeIdByIndex,
+	getThemeIndex,
+	getThemeLabel,
+	type SettingsCategory,
+	type SettingsCategoryId,
+	type SettingsRow,
+} from "./settings-catalog.js";
+import type { GlanceConfig, GlanceThemeName } from "./types.js";
 
 export type PaneFocus = "categories" | "settings" | "values";
+export type PaneSubview = "settings" | "themeBrowser";
 export type PaneMoveDirection = "left" | "right" | "up" | "down";
 
 export type PaneIntent =
@@ -10,12 +22,21 @@ export type PaneIntent =
 	| { type: "back" }
 	| { type: "move"; direction: PaneMoveDirection }
 	| { type: "activate" }
+	| { type: "openThemeBrowser" }
 	| { type: "save" }
 	| { type: "resetDefaults" }
 	| { type: "reorderSegment"; direction: -1 | 1 }
 	| { type: "noop" };
 
 export type PaneCompletion = { action: "save"; config: GlanceConfig } | { action: "cancel" };
+
+export interface ThemeBrowserState {
+	highlightedThemeIndex: number;
+	restoreTheme: GlanceThemeName;
+	returnFocus: PaneFocus;
+	returnCategoryIndex: number;
+	returnSettingIndex: number;
+}
 
 export interface PaneModelState {
 	initial: GlanceConfig;
@@ -24,6 +45,8 @@ export interface PaneModelState {
 	categoryIndex: number;
 	settingIndex: number;
 	status: string;
+	subview: PaneSubview;
+	themeBrowser?: ThemeBrowserState;
 }
 
 export interface PaneUpdateResult {
@@ -56,14 +79,40 @@ export interface SettingViewModel {
 	valueHasFocus: boolean;
 }
 
+export interface ThemeBrowserThemeViewModel {
+	id: GlanceThemeName;
+	label: string;
+	group: string;
+	tone: string;
+	tags: readonly string[];
+	description: string;
+	selected: boolean;
+	previewed: boolean;
+	restored: boolean;
+	saved: boolean;
+}
+
+export interface ThemeBrowserViewModel {
+	highlightedThemeIndex: number;
+	savedTheme: GlanceThemeName;
+	savedLabel: string;
+	restoreTheme: GlanceThemeName;
+	restoreLabel: string;
+	previewTheme: GlanceThemeName;
+	previewLabel: string;
+	themes: ThemeBrowserThemeViewModel[];
+}
+
 export interface GlancePaneViewModel {
 	dirty: boolean;
 	status: string;
+	subview: PaneSubview;
 	categories: CategoryViewModel[];
 	selectedCategory?: SettingsCategory;
 	settingsTitle: string;
 	settings: SettingViewModel[];
 	selectedHint?: string;
+	themeBrowser?: ThemeBrowserViewModel;
 	help: HelpShortcut[];
 }
 
@@ -132,7 +181,50 @@ function helpShortcuts(focus: PaneFocus, width: number): HelpShortcut[] {
 	}
 }
 
+function closeThemeBrowser(model: PaneModelState, draft: GlanceConfig, status: string): PaneModelState {
+	const browser = model.themeBrowser;
+	if (!browser) return model;
+	return withModel(model, {
+		draft,
+		focus: browser.returnFocus,
+		categoryIndex: browser.returnCategoryIndex,
+		settingIndex: browser.returnSettingIndex,
+		status,
+		subview: "settings",
+		themeBrowser: undefined,
+	});
+}
+
+function acceptThemeBrowser(model: PaneModelState): PaneModelState {
+	return closeThemeBrowser(model, model.draft, `Theme → ${getThemeLabel(model.draft.theme)}. Press S to save.`);
+}
+
+function restoreThemeBrowser(model: PaneModelState): PaneModelState {
+	if (!model.themeBrowser) return model;
+	return closeThemeBrowser(model, { ...model.draft, theme: model.themeBrowser.restoreTheme }, "Theme preview discarded.");
+}
+
+function moveThemeBrowserHighlight(model: PaneModelState, direction: PaneMoveDirection): PaneModelState {
+	if (!model.themeBrowser) return model;
+	if (direction === "left") return restoreThemeBrowser(model);
+	if (direction === "right") return model;
+
+	const count = getThemeCount();
+	const step = direction === "up" ? -1 : 1;
+	const highlightedThemeIndex = (model.themeBrowser.highlightedThemeIndex + step + count) % count;
+	const theme = getThemeIdByIndex(highlightedThemeIndex) ?? model.draft.theme;
+	return withModel(model, {
+		draft: { ...model.draft, theme },
+		themeBrowser: {
+			...model.themeBrowser,
+			highlightedThemeIndex,
+		},
+	});
+}
+
 function moveFocus(model: PaneModelState, direction: PaneMoveDirection): PaneModelState {
+	if (model.subview === "themeBrowser") return moveThemeBrowserHighlight(model, direction);
+
 	const categories = categoriesFor(model);
 	let next = model;
 
@@ -220,6 +312,29 @@ function activateCurrent(model: PaneModelState): PaneModelState {
 	});
 }
 
+function selectedRow(model: PaneModelState): SettingsRow | undefined {
+	const category = selectedCategory(model);
+	if (!category) return undefined;
+	return rowsFor(model, category.id)[model.settingIndex];
+}
+
+function openThemeBrowser(model: PaneModelState): PaneModelState {
+	const row = selectedRow(model);
+	if (selectedCategory(model)?.id !== "general" || row?.id !== "general.theme") return model;
+
+	const highlightedThemeIndex = getThemeIndex(model.draft.theme);
+	return withModel(model, {
+		subview: "themeBrowser",
+		themeBrowser: {
+			highlightedThemeIndex,
+			restoreTheme: model.draft.theme,
+			returnFocus: model.focus,
+			returnCategoryIndex: model.categoryIndex,
+			returnSettingIndex: model.settingIndex,
+		},
+	});
+}
+
 function reorderCurrentSegment(model: PaneModelState, direction: -1 | 1): PaneModelState {
 	if (model.categoryIndex === 0) {
 		return withModel(model, { status: "Cannot move General settings." });
@@ -248,11 +363,37 @@ export function createPaneModel(initial: GlanceConfig): PaneModelState {
 		categoryIndex: 0,
 		settingIndex: 0,
 		status: "",
+		subview: "settings",
 	};
 }
 
 export function paneIsDirty(model: PaneModelState): boolean {
 	return !sameConfig(model.draft, model.initial);
+}
+
+function createThemeBrowserViewModel(model: PaneModelState): ThemeBrowserViewModel | undefined {
+	if (model.subview !== "themeBrowser" || !model.themeBrowser) return undefined;
+	return {
+		highlightedThemeIndex: model.themeBrowser.highlightedThemeIndex,
+		savedTheme: model.initial.theme,
+		savedLabel: getThemeLabel(model.initial.theme),
+		restoreTheme: model.themeBrowser.restoreTheme,
+		restoreLabel: getThemeLabel(model.themeBrowser.restoreTheme),
+		previewTheme: model.draft.theme,
+		previewLabel: getThemeLabel(model.draft.theme),
+		themes: getThemeCatalog().map((theme, index) => ({
+			id: theme.id,
+			label: theme.label,
+			group: theme.group,
+			tone: theme.tone,
+			tags: theme.tags,
+			description: theme.description,
+			selected: index === model.themeBrowser?.highlightedThemeIndex,
+			previewed: theme.id === model.draft.theme,
+			restored: theme.id === model.themeBrowser?.restoreTheme,
+			saved: theme.id === model.initial.theme,
+		})),
+	};
 }
 
 export function createPaneViewModel(model: PaneModelState, width: number): GlancePaneViewModel {
@@ -263,6 +404,7 @@ export function createPaneViewModel(model: PaneModelState, width: number): Glanc
 	return {
 		dirty: paneIsDirty(model),
 		status: model.status,
+		subview: model.subview,
 		categories: categories.map((category, index) => ({
 			...category,
 			selected: index === model.categoryIndex,
@@ -282,6 +424,7 @@ export function createPaneViewModel(model: PaneModelState, width: number): Glanc
 			valueHasFocus: model.focus === "values",
 		})),
 		selectedHint: settings[model.settingIndex]?.hint,
+		themeBrowser: createThemeBrowserViewModel(model),
 		help: helpShortcuts(model.focus, width),
 	};
 }
@@ -291,13 +434,19 @@ export function updatePaneModel(model: PaneModelState, intent: PaneIntent): Pane
 		case "cancel":
 			return result(model, false, { action: "cancel" });
 		case "back":
+			if (model.subview === "themeBrowser") return result(restoreThemeBrowser(model), true);
 			if (model.focus === "categories") return result(model, false, { action: "cancel" });
 			return result(withModel(model, { focus: "categories" }), true);
 		case "move":
 			return result(moveFocus(model, intent.direction), true);
 		case "activate":
+			if (model.subview === "themeBrowser") return result(acceptThemeBrowser(model), true);
 			if (model.focus !== "values") return result(model, false);
 			return result(activateCurrent(model), true);
+		case "openThemeBrowser": {
+			const next = openThemeBrowser(model);
+			return result(next, next !== model);
+		}
 		case "save":
 			return result(model, false, { action: "save", config: cloneConfig(model.draft) });
 		case "resetDefaults":
@@ -308,6 +457,8 @@ export function updatePaneModel(model: PaneModelState, intent: PaneIntent): Pane
 					categoryIndex: 0,
 					settingIndex: 0,
 					status: "Defaults restored locally. Press S to save or Esc to discard.",
+					subview: "settings",
+					themeBrowser: undefined,
 				}),
 				true,
 			);
