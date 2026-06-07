@@ -12,8 +12,17 @@ import {
 	WORKSPACE_LABEL_MODE_VALUES,
 } from "../config-options.js";
 import { defaultConfig } from "../config.js";
-import { getSettingsCategories, getSettingsRows, type SettingsCategoryId, type SettingsRow } from "../settings-catalog.js";
-import { GLANCE_THEMES } from "../themes.js";
+import {
+	getSettingsCategories,
+	getSettingsRows,
+	getThemeCatalog,
+	getThemeCount,
+	getThemeIdByIndex,
+	getThemeIndex,
+	type SettingsCategoryId,
+	type SettingsRow,
+} from "../settings-catalog.js";
+import { GLANCE_THEMES, GLANCE_THEME_IDS } from "../themes.js";
 import type { GlanceConfig, SegmentId } from "../types.js";
 
 function clone<T>(value: T): T {
@@ -89,6 +98,21 @@ function assertCycleUsesValues<T extends string | number>(
 
 const config = defaultConfig();
 const THROUGHPUT_PRECISION_VALUES = ["auto", 1, 0] as const;
+const themeCatalog = getThemeCatalog();
+assert.equal(themeCatalog.length, 22, "theme catalog helper should expose the curated 22-theme collection");
+assert.deepEqual(themeCatalog, GLANCE_THEMES, "theme catalog helper should return shared GLANCE_THEMES metadata exactly");
+assert.equal(getThemeCount(), 22, "theme count helper should reflect the curated theme count");
+for (const item of themeCatalog) {
+	assert.equal("palette" in item, false, `${item.id} catalog item should not expose palette data`);
+}
+for (const [index, themeId] of GLANCE_THEME_IDS.entries()) {
+	assert.equal(getThemeIndex(themeId), index, `${themeId} index helper should match GLANCE_THEME_IDS order`);
+	assert.equal(getThemeIdByIndex(index), themeId, `${themeId} id lookup should round-trip by index`);
+}
+assert.equal(getThemeIndex("unknown" as never), 0, "unknown theme index should safely fall back to 0");
+assert.equal(getThemeIdByIndex(-1), undefined, "negative theme index should return undefined");
+assert.equal(getThemeIdByIndex(GLANCE_THEME_IDS.length), undefined, "out-of-range theme index should return undefined");
+
 const categories = getSettingsCategories(config);
 assert.deepEqual(
 	categories,
