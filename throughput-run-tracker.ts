@@ -32,7 +32,7 @@ export class ThroughputRunTracker {
 		this.startedAtMs = startedAtMs;
 		this.completedAssistantMessages = [];
 		this.seenTurnIndexes.clear();
-		return NONE_INTENT;
+		return { kind: "clear-current-run" };
 	}
 
 	checkpoint(turnIndex: unknown, message: unknown, nowMs: ThroughputClock): ThroughputRunStateIntent {

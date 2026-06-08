@@ -163,9 +163,11 @@ const firstFinal: TurnThroughputExpectation = {
 	const afterFinal = await captureState(runtime, test, capturedStates);
 	assertSlots(afterFinal, { lastTurn: firstFinal, currentRun: null }, "valid agentEnd should store final lastTurn and keep currentRun clear");
 
+	const renderAfterFinal = test.getRenderRequests();
 	runtime.events.agentStart({}, test.ctx);
 	const afterNextStart = await captureState(runtime, test, capturedStates);
 	assertSlots(afterNextStart, { lastTurn: firstFinal, currentRun: null }, "previous final should remain visible after a new agentStart until a valid turn_end checkpoint exists");
+	assert.equal(test.getRenderRequests(), renderAfterFinal, "agentStart with no currentRun should not request an extra render while preserving lastTurn");
 }
 
 {
@@ -197,6 +199,76 @@ const firstFinal: TurnThroughputExpectation = {
 		},
 		"valid assistant turn_end should create a provisional currentRun measurement using agent_start -> turn_end wall time",
 	);
+}
+
+{
+	const test = createContext();
+	const { runtime, capturedStates } = createRuntime([5_000, 6_000, 7_000]);
+	runtime.events.sessionStart({}, test.ctx);
+
+	runtime.events.agentStart({}, test.ctx);
+	await runtime.events.turnEnd(turnEnd(0, assistant(30)), test.ctx);
+	assertSlots(
+		await captureState(runtime, test, capturedStates),
+		{
+			lastTurn: null,
+			currentRun: {
+				startedAtMs: 5_000,
+				endedAtMs: 6_000,
+				elapsedMs: 1_000,
+				tokensPerSecond: 30,
+				usage: {
+					input: 0,
+					output: 30,
+					cacheRead: 0,
+					cacheWrite: 0,
+					totalTokens: 30,
+					assistantMessages: 1,
+				},
+			},
+		},
+		"explicit stale edge setup should create a provisional currentRun before agent_end",
+	);
+	const renderBeforeNextStart = test.getRenderRequests();
+	runtime.events.agentStart({}, test.ctx);
+	assertSlots(await captureState(runtime, test, capturedStates), { lastTurn: null, currentRun: null }, "new agentStart should clear stale provisional currentRun before any new checkpoint");
+	assert.equal(test.getRenderRequests(), renderBeforeNextStart + 1, "agentStart clearing a stale currentRun should request one render");
+}
+
+{
+	const test = createContext();
+	const { runtime, capturedStates } = createRuntime([1_000, 3_500, 5_000, 6_000, 7_000]);
+	runtime.events.sessionStart({}, test.ctx);
+
+	runtime.events.agentStart({}, test.ctx);
+	await runtime.events.agentEnd({ messages: [assistant(50)] }, test.ctx);
+	runtime.events.agentStart({}, test.ctx);
+	await runtime.events.turnEnd(turnEnd(0, assistant(30)), test.ctx);
+	assertSlots(
+		await captureState(runtime, test, capturedStates),
+		{
+			lastTurn: firstFinal,
+			currentRun: {
+				startedAtMs: 5_000,
+				endedAtMs: 6_000,
+				elapsedMs: 1_000,
+				tokensPerSecond: 30,
+				usage: {
+					input: 0,
+					output: 30,
+					cacheRead: 0,
+					cacheWrite: 0,
+					totalTokens: 30,
+					assistantMessages: 1,
+				},
+			},
+		},
+		"stale currentRun setup should preserve previous final while showing provisional throughput",
+	);
+	const renderBeforeClear = test.getRenderRequests();
+	runtime.events.agentStart({}, test.ctx);
+	assertSlots(await captureState(runtime, test, capturedStates), { lastTurn: firstFinal, currentRun: null }, "agentStart should clear stale currentRun and preserve previous trusted lastTurn");
+	assert.equal(test.getRenderRequests(), renderBeforeClear + 1, "agentStart clearing stale currentRun should request exactly one render when UI is installed");
 }
 
 {

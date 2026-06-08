@@ -83,9 +83,12 @@ export interface ThemeBrowserThemeViewModel {
 	id: GlanceThemeName;
 	label: string;
 	group: string;
+	groupLabel: string;
 	tone: string;
 	tags: readonly string[];
+	detailTags: readonly string[];
 	description: string;
+	detailDescription: string;
 	selected: boolean;
 	previewed: boolean;
 	restored: boolean;
@@ -385,9 +388,12 @@ function createThemeBrowserViewModel(model: PaneModelState): ThemeBrowserViewMod
 			id: theme.id,
 			label: theme.label,
 			group: theme.group,
+			groupLabel: theme.groupLabel,
 			tone: theme.tone,
 			tags: theme.tags,
+			detailTags: theme.detailTags,
 			description: theme.description,
+			detailDescription: theme.detailDescription,
 			selected: index === model.themeBrowser?.highlightedThemeIndex,
 			previewed: theme.id === model.draft.theme,
 			restored: theme.id === model.themeBrowser?.restoreTheme,

@@ -45,7 +45,6 @@ const FORBIDDEN_LOCAL_MODULES = new Set([
 	"./git.js",
 ]);
 const TYPE_ONLY_LOCAL_MODULES = new Set(["./segment-feature.js", "./types.js"]);
-const ALLOWED_VALUE_LOCAL_MODULES = new Set(["./config-options.js", "./config-schema.js"]);
 const EXPECTED_FEATURE_FILES = [
 	"context-segment-feature.ts",
 	"cost-segment-feature.ts",
@@ -54,6 +53,14 @@ const EXPECTED_FEATURE_FILES = [
 	"throughput-segment-feature.ts",
 	"tokens-segment-feature.ts",
 ] as const;
+const VALUE_LOCAL_IMPORT_POLICY = {
+	"context-segment-feature.ts": new Set(["./config-options.js"]),
+	"cost-segment-feature.ts": new Set<string>(),
+	"git-segment-feature.ts": new Set(["./config-options.js"]),
+	"model-segment-feature.ts": new Set(["./config-options.js"]),
+	"throughput-segment-feature.ts": new Set(["./config-schema.js"]),
+	"tokens-segment-feature.ts": new Set(["./config-options.js"]),
+} satisfies Record<(typeof EXPECTED_FEATURE_FILES)[number], ReadonlySet<string>>;
 
 interface SourceFile {
 	path: string;
@@ -73,13 +80,17 @@ function fail(message: string): never {
 	assert.fail(message);
 }
 
+function allowedValueLocalModules(file: SourceFile): ReadonlySet<string> {
+	return VALUE_LOCAL_IMPORT_POLICY[file.path as (typeof EXPECTED_FEATURE_FILES)[number]] ?? new Set<string>();
+}
+
 function assertAllowedImport(file: SourceFile, specifier: string, isTypeOnly: boolean): void {
 	if (specifier.startsWith("@earendil-works/pi-")) fail(`${file.path}: segment feature must not import pi package ${specifier}`);
 	if (IO_NETWORK_PROCESS_IMPORTS.has(specifier)) fail(`${file.path}: segment feature must not import IO/network/process module ${specifier}`);
 	if (FORBIDDEN_LOCAL_MODULES.has(specifier)) fail(`${file.path}: segment feature must not import runtime/UI/config/theme/state module ${specifier}`);
 	if (TYPE_ONLY_LOCAL_MODULES.has(specifier) && !isTypeOnly) fail(`${file.path}: segment feature may only type-import from ${specifier}`);
-	if (specifier.startsWith("./") && !TYPE_ONLY_LOCAL_MODULES.has(specifier) && !ALLOWED_VALUE_LOCAL_MODULES.has(specifier)) {
-		fail(`${file.path}: segment feature local deps should stay narrow; unexpected import ${specifier}`);
+	if (specifier.startsWith("./") && !TYPE_ONLY_LOCAL_MODULES.has(specifier) && !allowedValueLocalModules(file).has(specifier)) {
+		fail(`${file.path}: segment feature local deps should match its per-feature value import policy; unexpected import ${specifier}`);
 	}
 }
 
@@ -96,6 +107,11 @@ assert.deepEqual(
 	featureFiles.map((file) => file.path),
 	EXPECTED_FEATURE_FILES,
 	"segment feature boundary should cover exactly the six extracted root feature modules",
+);
+assert.deepEqual(
+	Object.keys(VALUE_LOCAL_IMPORT_POLICY).sort(),
+	[...EXPECTED_FEATURE_FILES].sort(),
+	"segment feature value import policy should explicitly cover every extracted feature module",
 );
 
 const importPattern = /(?:import|export)\s+(type\s+)?(?:[^"'`]*?\s+from\s+)?["']([^"']+)["']/g;

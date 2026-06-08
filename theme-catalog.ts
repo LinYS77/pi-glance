@@ -4,9 +4,12 @@ export type GlanceThemeCatalogEntry = {
 	id: string;
 	label: string;
 	group: "core" | "catppuccin" | "classic" | "editor" | "kanagawa" | "everforest" | "accessibility";
+	groupLabel: string;
 	tone: "light" | "dark";
 	tags: readonly string[];
+	detailTags: readonly string[];
 	description: string;
+	detailDescription: string;
 	palette: GlancePalette;
 };
 
@@ -15,13 +18,20 @@ export const GLANCE_THEME_CATALOG = [
 		"id": "light",
 		"label": "Light",
 		"group": "core",
+		"groupLabel": "Core",
 		"tone": "light",
 		"tags": [
 			"default",
 			"bright",
 			"neutral"
 		],
+		"detailTags": [
+			"default",
+			"bright",
+			"neutral"
+		],
 		"description": "Bright neutral palette for well-lit terminals.",
+		"detailDescription": "Bright neutral palette for well-lit terminals.",
 		"palette": {
 			"text": {
 				"r": 15,
@@ -108,13 +118,19 @@ export const GLANCE_THEME_CATALOG = [
 		"id": "dark",
 		"label": "Dark",
 		"group": "core",
+		"groupLabel": "Core",
 		"tone": "dark",
 		"tags": [
 			"default",
 			"dark",
 			"neutral"
 		],
+		"detailTags": [
+			"default",
+			"neutral"
+		],
 		"description": "Neutral dark palette for low-light terminals.",
+		"detailDescription": "Neutral dim palette for dim terminals.",
 		"palette": {
 			"text": {
 				"r": 229,
@@ -201,13 +217,20 @@ export const GLANCE_THEME_CATALOG = [
 		"id": "catppuccin-latte",
 		"label": "Catppuccin Latte",
 		"group": "catppuccin",
+		"groupLabel": "Catppuccin",
 		"tone": "light",
 		"tags": [
 			"pastel",
 			"warm",
 			"gentle"
 		],
+		"detailTags": [
+			"pastel",
+			"warm",
+			"gentle"
+		],
 		"description": "Soft Catppuccin palette with warm light tones.",
+		"detailDescription": "Soft Catppuccin palette with warm bright tones.",
 		"palette": {
 			"text": {
 				"r": 76,
@@ -294,13 +317,20 @@ export const GLANCE_THEME_CATALOG = [
 		"id": "catppuccin-mocha",
 		"label": "Catppuccin Mocha",
 		"group": "catppuccin",
+		"groupLabel": "Catppuccin",
 		"tone": "dark",
 		"tags": [
 			"pastel",
 			"warm",
 			"gentle"
 		],
+		"detailTags": [
+			"pastel",
+			"warm",
+			"gentle"
+		],
 		"description": "Soft Catppuccin palette with warm dark tones.",
+		"detailDescription": "Soft Catppuccin palette with warm dim tones.",
 		"palette": {
 			"text": {
 				"r": 205,
@@ -387,13 +417,20 @@ export const GLANCE_THEME_CATALOG = [
 		"id": "nord",
 		"label": "Nord",
 		"group": "editor",
+		"groupLabel": "Editor",
 		"tone": "dark",
 		"tags": [
 			"cool",
 			"arctic",
 			"muted"
 		],
+		"detailTags": [
+			"cool",
+			"arctic",
+			"muted"
+		],
 		"description": "Cool arctic palette with muted blues.",
+		"detailDescription": "Cool arctic palette with muted blues.",
 		"palette": {
 			"text": {
 				"r": 216,
@@ -480,13 +517,20 @@ export const GLANCE_THEME_CATALOG = [
 		"id": "tokyo-night",
 		"label": "Tokyo Night",
 		"group": "editor",
+		"groupLabel": "Editor",
 		"tone": "dark",
 		"tags": [
 			"cool",
 			"vivid",
 			"night"
 		],
+		"detailTags": [
+			"cool",
+			"vivid",
+			"night"
+		],
 		"description": "Deep blue palette with vivid accents.",
+		"detailDescription": "Deep blue palette with vivid accents.",
 		"palette": {
 			"text": {
 				"r": 192,
@@ -573,13 +617,20 @@ export const GLANCE_THEME_CATALOG = [
 		"id": "gruvbox-dark",
 		"label": "Gruvbox Dark",
 		"group": "classic",
+		"groupLabel": "Classics",
 		"tone": "dark",
 		"tags": [
 			"warm",
 			"retro",
 			"earthy"
 		],
+		"detailTags": [
+			"warm",
+			"retro",
+			"earthy"
+		],
 		"description": "Warm retro palette with earthy contrast.",
+		"detailDescription": "Warm retro palette with earthy contrast.",
 		"palette": {
 			"text": {
 				"r": 235,
@@ -666,13 +717,20 @@ export const GLANCE_THEME_CATALOG = [
 		"id": "solarized-dark",
 		"label": "Solarized Dark",
 		"group": "classic",
+		"groupLabel": "Classics",
 		"tone": "dark",
 		"tags": [
 			"classic",
 			"low-contrast",
 			"cyan"
 		],
+		"detailTags": [
+			"classic",
+			"low-contrast",
+			"cyan"
+		],
 		"description": "Classic dark palette with restrained contrast.",
+		"detailDescription": "Classic dim palette with restrained contrast.",
 		"palette": {
 			"text": {
 				"r": 131,
@@ -759,13 +817,20 @@ export const GLANCE_THEME_CATALOG = [
 		"id": "rose-pine",
 		"label": "Rosé Pine",
 		"group": "editor",
+		"groupLabel": "Editor",
 		"tone": "dark",
 		"tags": [
 			"soft",
 			"rose",
 			"muted"
 		],
+		"detailTags": [
+			"soft",
+			"rose",
+			"muted"
+		],
 		"description": "Muted rosy palette with gentle contrast.",
+		"detailDescription": "Muted rosy palette with gentle contrast.",
 		"palette": {
 			"text": {
 				"r": 224,
@@ -852,13 +917,20 @@ export const GLANCE_THEME_CATALOG = [
 		"id": "one-dark",
 		"label": "One Dark",
 		"group": "editor",
+		"groupLabel": "Editor",
 		"tone": "dark",
 		"tags": [
 			"editor",
 			"balanced",
 			"blue"
 		],
+		"detailTags": [
+			"editor",
+			"balanced",
+			"blue"
+		],
 		"description": "Balanced dark editor palette with blue accents.",
+		"detailDescription": "Balanced dim editor palette with blue accents.",
 		"palette": {
 			"text": {
 				"r": 171,
@@ -945,13 +1017,20 @@ export const GLANCE_THEME_CATALOG = [
 		"id": "one-light",
 		"label": "One Light",
 		"group": "editor",
+		"groupLabel": "Editor",
 		"tone": "light",
 		"tags": [
 			"editor",
 			"balanced",
 			"bright"
 		],
+		"detailTags": [
+			"editor",
+			"balanced",
+			"bright"
+		],
 		"description": "Balanced bright editor palette with crisp blue accents.",
+		"detailDescription": "Balanced bright editor palette with crisp blue accents.",
 		"palette": {
 			"text": {
 				"r": 56,
@@ -1038,13 +1117,20 @@ export const GLANCE_THEME_CATALOG = [
 		"id": "solarized-light",
 		"label": "Solarized Light",
 		"group": "classic",
+		"groupLabel": "Classics",
 		"tone": "light",
 		"tags": [
 			"classic",
 			"low-contrast",
 			"cyan"
 		],
+		"detailTags": [
+			"classic",
+			"low-contrast",
+			"cyan"
+		],
 		"description": "Classic bright palette with restrained contrast.",
+		"detailDescription": "Classic bright palette with restrained contrast.",
 		"palette": {
 			"text": {
 				"r": 101,
@@ -1131,13 +1217,20 @@ export const GLANCE_THEME_CATALOG = [
 		"id": "gruvbox-light",
 		"label": "Gruvbox Light",
 		"group": "classic",
+		"groupLabel": "Classics",
 		"tone": "light",
 		"tags": [
 			"warm",
 			"retro",
 			"parchment"
 		],
+		"detailTags": [
+			"warm",
+			"retro",
+			"parchment"
+		],
 		"description": "Warm retro palette with parchment tones.",
+		"detailDescription": "Warm retro palette with parchment tones.",
 		"palette": {
 			"text": {
 				"r": 60,
@@ -1224,13 +1317,20 @@ export const GLANCE_THEME_CATALOG = [
 		"id": "rose-pine-dawn",
 		"label": "Rosé Pine Dawn",
 		"group": "editor",
+		"groupLabel": "Editor",
 		"tone": "light",
 		"tags": [
 			"soft",
 			"rose",
 			"dawn"
 		],
+		"detailTags": [
+			"soft",
+			"rose",
+			"dawn"
+		],
 		"description": "Soft dawn palette with rosy accents.",
+		"detailDescription": "Soft dawn palette with rosy accents.",
 		"palette": {
 			"text": {
 				"r": 87,
@@ -1317,13 +1417,20 @@ export const GLANCE_THEME_CATALOG = [
 		"id": "catppuccin-frappe",
 		"label": "Catppuccin Frappé",
 		"group": "catppuccin",
+		"groupLabel": "Catppuccin",
 		"tone": "dark",
 		"tags": [
 			"pastel",
 			"muted",
 			"gentle"
 		],
+		"detailTags": [
+			"pastel",
+			"muted",
+			"gentle"
+		],
 		"description": "Muted Catppuccin palette with cool dusk tones.",
+		"detailDescription": "Muted Catppuccin palette with cool dusk tones.",
 		"palette": {
 			"text": {
 				"r": 198,
@@ -1410,13 +1517,20 @@ export const GLANCE_THEME_CATALOG = [
 		"id": "catppuccin-macchiato",
 		"label": "Catppuccin Macchiato",
 		"group": "catppuccin",
+		"groupLabel": "Catppuccin",
 		"tone": "dark",
 		"tags": [
 			"pastel",
 			"balanced",
 			"gentle"
 		],
+		"detailTags": [
+			"pastel",
+			"balanced",
+			"gentle"
+		],
 		"description": "Balanced Catppuccin palette with medium contrast.",
+		"detailDescription": "Balanced Catppuccin palette with medium contrast.",
 		"palette": {
 			"text": {
 				"r": 202,
@@ -1503,13 +1617,20 @@ export const GLANCE_THEME_CATALOG = [
 		"id": "kanagawa-wave",
 		"label": "Kanagawa Wave",
 		"group": "kanagawa",
+		"groupLabel": "Japanese",
 		"tone": "dark",
 		"tags": [
 			"ink",
 			"wave",
 			"muted"
 		],
+		"detailTags": [
+			"ink",
+			"wave",
+			"muted"
+		],
 		"description": "Ink-toned palette with calm blue-green accents.",
+		"detailDescription": "Ink-toned palette with calm blue-green accents.",
 		"palette": {
 			"text": {
 				"r": 220,
@@ -1596,13 +1717,20 @@ export const GLANCE_THEME_CATALOG = [
 		"id": "kanagawa-lotus",
 		"label": "Kanagawa Lotus",
 		"group": "kanagawa",
+		"groupLabel": "Japanese",
 		"tone": "light",
 		"tags": [
 			"lotus",
 			"warm",
 			"calm"
 		],
+		"detailTags": [
+			"lotus",
+			"warm",
+			"calm"
+		],
 		"description": "Warm paper-toned palette with calm ink accents.",
+		"detailDescription": "Warm paper-toned palette with calm ink accents.",
 		"palette": {
 			"text": {
 				"r": 84,
@@ -1689,13 +1817,20 @@ export const GLANCE_THEME_CATALOG = [
 		"id": "everforest-dark",
 		"label": "Everforest Dark",
 		"group": "everforest",
+		"groupLabel": "Forest",
 		"tone": "dark",
 		"tags": [
 			"forest",
 			"warm",
 			"muted"
 		],
+		"detailTags": [
+			"forest",
+			"warm",
+			"muted"
+		],
 		"description": "Warm forest palette with softened contrast.",
+		"detailDescription": "Warm forest palette with softened contrast.",
 		"palette": {
 			"text": {
 				"r": 211,
@@ -1782,13 +1917,20 @@ export const GLANCE_THEME_CATALOG = [
 		"id": "everforest-light",
 		"label": "Everforest Light",
 		"group": "everforest",
+		"groupLabel": "Forest",
 		"tone": "light",
 		"tags": [
 			"forest",
 			"warm",
 			"soft"
 		],
+		"detailTags": [
+			"forest",
+			"warm",
+			"soft"
+		],
 		"description": "Soft forest palette with warm daylight tones.",
+		"detailDescription": "Soft forest palette with warm daylight tones.",
 		"palette": {
 			"text": {
 				"r": 92,
@@ -1875,13 +2017,20 @@ export const GLANCE_THEME_CATALOG = [
 		"id": "high-contrast-dark",
 		"label": "High Contrast Dark",
 		"group": "accessibility",
+		"groupLabel": "Accessible",
 		"tone": "dark",
 		"tags": [
 			"contrast",
 			"clear",
 			"accessible"
 		],
+		"detailTags": [
+			"contrast",
+			"clear",
+			"accessible"
+		],
 		"description": "High-contrast palette for maximum terminal clarity.",
+		"detailDescription": "High-contrast palette for maximum terminal clarity.",
 		"palette": {
 			"text": {
 				"r": 245,
@@ -1968,13 +2117,20 @@ export const GLANCE_THEME_CATALOG = [
 		"id": "high-contrast-light",
 		"label": "High Contrast Light",
 		"group": "accessibility",
+		"groupLabel": "Accessible",
 		"tone": "light",
 		"tags": [
 			"contrast",
 			"clear",
 			"accessible"
 		],
+		"detailTags": [
+			"contrast",
+			"clear",
+			"accessible"
+		],
 		"description": "High-contrast bright palette for maximum terminal clarity.",
+		"detailDescription": "High-contrast bright palette for maximum terminal clarity.",
 		"palette": {
 			"text": {
 				"r": 0,

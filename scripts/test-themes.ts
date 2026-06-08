@@ -10,265 +10,418 @@ const EXPECTED_THEMES = [
 		"id": "light",
 		"label": "Light",
 		"group": "core",
+		"groupLabel": "Core",
 		"tone": "light",
 		"tags": [
 			"default",
 			"bright",
 			"neutral"
 		],
-		"description": "Bright neutral palette for well-lit terminals."
+		"detailTags": [
+			"default",
+			"bright",
+			"neutral"
+		],
+		"description": "Bright neutral palette for well-lit terminals.",
+		"detailDescription": "Bright neutral palette for well-lit terminals."
 	},
 	{
 		"id": "dark",
 		"label": "Dark",
 		"group": "core",
+		"groupLabel": "Core",
 		"tone": "dark",
 		"tags": [
 			"default",
 			"dark",
 			"neutral"
 		],
-		"description": "Neutral dark palette for low-light terminals."
+		"detailTags": [
+			"default",
+			"neutral"
+		],
+		"description": "Neutral dark palette for low-light terminals.",
+		"detailDescription": "Neutral dim palette for dim terminals."
 	},
 	{
 		"id": "catppuccin-latte",
 		"label": "Catppuccin Latte",
 		"group": "catppuccin",
+		"groupLabel": "Catppuccin",
 		"tone": "light",
 		"tags": [
 			"pastel",
 			"warm",
 			"gentle"
 		],
-		"description": "Soft Catppuccin palette with warm light tones."
+		"detailTags": [
+			"pastel",
+			"warm",
+			"gentle"
+		],
+		"description": "Soft Catppuccin palette with warm light tones.",
+		"detailDescription": "Soft Catppuccin palette with warm bright tones."
 	},
 	{
 		"id": "catppuccin-mocha",
 		"label": "Catppuccin Mocha",
 		"group": "catppuccin",
+		"groupLabel": "Catppuccin",
 		"tone": "dark",
 		"tags": [
 			"pastel",
 			"warm",
 			"gentle"
 		],
-		"description": "Soft Catppuccin palette with warm dark tones."
+		"detailTags": [
+			"pastel",
+			"warm",
+			"gentle"
+		],
+		"description": "Soft Catppuccin palette with warm dark tones.",
+		"detailDescription": "Soft Catppuccin palette with warm dim tones."
 	},
 	{
 		"id": "nord",
 		"label": "Nord",
 		"group": "editor",
+		"groupLabel": "Editor",
 		"tone": "dark",
 		"tags": [
 			"cool",
 			"arctic",
 			"muted"
 		],
-		"description": "Cool arctic palette with muted blues."
+		"detailTags": [
+			"cool",
+			"arctic",
+			"muted"
+		],
+		"description": "Cool arctic palette with muted blues.",
+		"detailDescription": "Cool arctic palette with muted blues."
 	},
 	{
 		"id": "tokyo-night",
 		"label": "Tokyo Night",
 		"group": "editor",
+		"groupLabel": "Editor",
 		"tone": "dark",
 		"tags": [
 			"cool",
 			"vivid",
 			"night"
 		],
-		"description": "Deep blue palette with vivid accents."
+		"detailTags": [
+			"cool",
+			"vivid",
+			"night"
+		],
+		"description": "Deep blue palette with vivid accents.",
+		"detailDescription": "Deep blue palette with vivid accents."
 	},
 	{
 		"id": "gruvbox-dark",
 		"label": "Gruvbox Dark",
 		"group": "classic",
+		"groupLabel": "Classics",
 		"tone": "dark",
 		"tags": [
 			"warm",
 			"retro",
 			"earthy"
 		],
-		"description": "Warm retro palette with earthy contrast."
+		"detailTags": [
+			"warm",
+			"retro",
+			"earthy"
+		],
+		"description": "Warm retro palette with earthy contrast.",
+		"detailDescription": "Warm retro palette with earthy contrast."
 	},
 	{
 		"id": "solarized-dark",
 		"label": "Solarized Dark",
 		"group": "classic",
+		"groupLabel": "Classics",
 		"tone": "dark",
 		"tags": [
 			"classic",
 			"low-contrast",
 			"cyan"
 		],
-		"description": "Classic dark palette with restrained contrast."
+		"detailTags": [
+			"classic",
+			"low-contrast",
+			"cyan"
+		],
+		"description": "Classic dark palette with restrained contrast.",
+		"detailDescription": "Classic dim palette with restrained contrast."
 	},
 	{
 		"id": "rose-pine",
 		"label": "Rosé Pine",
 		"group": "editor",
+		"groupLabel": "Editor",
 		"tone": "dark",
 		"tags": [
 			"soft",
 			"rose",
 			"muted"
 		],
-		"description": "Muted rosy palette with gentle contrast."
+		"detailTags": [
+			"soft",
+			"rose",
+			"muted"
+		],
+		"description": "Muted rosy palette with gentle contrast.",
+		"detailDescription": "Muted rosy palette with gentle contrast."
 	},
 	{
 		"id": "one-dark",
 		"label": "One Dark",
 		"group": "editor",
+		"groupLabel": "Editor",
 		"tone": "dark",
 		"tags": [
 			"editor",
 			"balanced",
 			"blue"
 		],
-		"description": "Balanced dark editor palette with blue accents."
+		"detailTags": [
+			"editor",
+			"balanced",
+			"blue"
+		],
+		"description": "Balanced dark editor palette with blue accents.",
+		"detailDescription": "Balanced dim editor palette with blue accents."
 	},
 	{
 		"id": "one-light",
 		"label": "One Light",
 		"group": "editor",
+		"groupLabel": "Editor",
 		"tone": "light",
 		"tags": [
 			"editor",
 			"balanced",
 			"bright"
 		],
-		"description": "Balanced bright editor palette with crisp blue accents."
+		"detailTags": [
+			"editor",
+			"balanced",
+			"bright"
+		],
+		"description": "Balanced bright editor palette with crisp blue accents.",
+		"detailDescription": "Balanced bright editor palette with crisp blue accents."
 	},
 	{
 		"id": "solarized-light",
 		"label": "Solarized Light",
 		"group": "classic",
+		"groupLabel": "Classics",
 		"tone": "light",
 		"tags": [
 			"classic",
 			"low-contrast",
 			"cyan"
 		],
-		"description": "Classic bright palette with restrained contrast."
+		"detailTags": [
+			"classic",
+			"low-contrast",
+			"cyan"
+		],
+		"description": "Classic bright palette with restrained contrast.",
+		"detailDescription": "Classic bright palette with restrained contrast."
 	},
 	{
 		"id": "gruvbox-light",
 		"label": "Gruvbox Light",
 		"group": "classic",
+		"groupLabel": "Classics",
 		"tone": "light",
 		"tags": [
 			"warm",
 			"retro",
 			"parchment"
 		],
-		"description": "Warm retro palette with parchment tones."
+		"detailTags": [
+			"warm",
+			"retro",
+			"parchment"
+		],
+		"description": "Warm retro palette with parchment tones.",
+		"detailDescription": "Warm retro palette with parchment tones."
 	},
 	{
 		"id": "rose-pine-dawn",
 		"label": "Rosé Pine Dawn",
 		"group": "editor",
+		"groupLabel": "Editor",
 		"tone": "light",
 		"tags": [
 			"soft",
 			"rose",
 			"dawn"
 		],
-		"description": "Soft dawn palette with rosy accents."
+		"detailTags": [
+			"soft",
+			"rose",
+			"dawn"
+		],
+		"description": "Soft dawn palette with rosy accents.",
+		"detailDescription": "Soft dawn palette with rosy accents."
 	},
 	{
 		"id": "catppuccin-frappe",
 		"label": "Catppuccin Frappé",
 		"group": "catppuccin",
+		"groupLabel": "Catppuccin",
 		"tone": "dark",
 		"tags": [
 			"pastel",
 			"muted",
 			"gentle"
 		],
-		"description": "Muted Catppuccin palette with cool dusk tones."
+		"detailTags": [
+			"pastel",
+			"muted",
+			"gentle"
+		],
+		"description": "Muted Catppuccin palette with cool dusk tones.",
+		"detailDescription": "Muted Catppuccin palette with cool dusk tones."
 	},
 	{
 		"id": "catppuccin-macchiato",
 		"label": "Catppuccin Macchiato",
 		"group": "catppuccin",
+		"groupLabel": "Catppuccin",
 		"tone": "dark",
 		"tags": [
 			"pastel",
 			"balanced",
 			"gentle"
 		],
-		"description": "Balanced Catppuccin palette with medium contrast."
+		"detailTags": [
+			"pastel",
+			"balanced",
+			"gentle"
+		],
+		"description": "Balanced Catppuccin palette with medium contrast.",
+		"detailDescription": "Balanced Catppuccin palette with medium contrast."
 	},
 	{
 		"id": "kanagawa-wave",
 		"label": "Kanagawa Wave",
 		"group": "kanagawa",
+		"groupLabel": "Japanese",
 		"tone": "dark",
 		"tags": [
 			"ink",
 			"wave",
 			"muted"
 		],
-		"description": "Ink-toned palette with calm blue-green accents."
+		"detailTags": [
+			"ink",
+			"wave",
+			"muted"
+		],
+		"description": "Ink-toned palette with calm blue-green accents.",
+		"detailDescription": "Ink-toned palette with calm blue-green accents."
 	},
 	{
 		"id": "kanagawa-lotus",
 		"label": "Kanagawa Lotus",
 		"group": "kanagawa",
+		"groupLabel": "Japanese",
 		"tone": "light",
 		"tags": [
 			"lotus",
 			"warm",
 			"calm"
 		],
-		"description": "Warm paper-toned palette with calm ink accents."
+		"detailTags": [
+			"lotus",
+			"warm",
+			"calm"
+		],
+		"description": "Warm paper-toned palette with calm ink accents.",
+		"detailDescription": "Warm paper-toned palette with calm ink accents."
 	},
 	{
 		"id": "everforest-dark",
 		"label": "Everforest Dark",
 		"group": "everforest",
+		"groupLabel": "Forest",
 		"tone": "dark",
 		"tags": [
 			"forest",
 			"warm",
 			"muted"
 		],
-		"description": "Warm forest palette with softened contrast."
+		"detailTags": [
+			"forest",
+			"warm",
+			"muted"
+		],
+		"description": "Warm forest palette with softened contrast.",
+		"detailDescription": "Warm forest palette with softened contrast."
 	},
 	{
 		"id": "everforest-light",
 		"label": "Everforest Light",
 		"group": "everforest",
+		"groupLabel": "Forest",
 		"tone": "light",
 		"tags": [
 			"forest",
 			"warm",
 			"soft"
 		],
-		"description": "Soft forest palette with warm daylight tones."
+		"detailTags": [
+			"forest",
+			"warm",
+			"soft"
+		],
+		"description": "Soft forest palette with warm daylight tones.",
+		"detailDescription": "Soft forest palette with warm daylight tones."
 	},
 	{
 		"id": "high-contrast-dark",
 		"label": "High Contrast Dark",
 		"group": "accessibility",
+		"groupLabel": "Accessible",
 		"tone": "dark",
 		"tags": [
 			"contrast",
 			"clear",
 			"accessible"
 		],
-		"description": "High-contrast palette for maximum terminal clarity."
+		"detailTags": [
+			"contrast",
+			"clear",
+			"accessible"
+		],
+		"description": "High-contrast palette for maximum terminal clarity.",
+		"detailDescription": "High-contrast palette for maximum terminal clarity."
 	},
 	{
 		"id": "high-contrast-light",
 		"label": "High Contrast Light",
 		"group": "accessibility",
+		"groupLabel": "Accessible",
 		"tone": "light",
 		"tags": [
 			"contrast",
 			"clear",
 			"accessible"
 		],
-		"description": "High-contrast bright palette for maximum terminal clarity."
+		"detailTags": [
+			"contrast",
+			"clear",
+			"accessible"
+		],
+		"description": "High-contrast bright palette for maximum terminal clarity.",
+		"detailDescription": "High-contrast bright palette for maximum terminal clarity."
 	}
 ] as const;
 
@@ -2101,6 +2254,15 @@ const FORBIDDEN_THEME_CATALOG_LOCAL_IMPORTS = new Set([
 	"./config-options",
 ]);
 const FORBIDDEN_THEME_CATALOG_IMPORT_PREFIXES = ["@earendil-works/pi-"] as const;
+const EXPECTED_THEME_GROUP_LABELS: Record<string, string> = {
+	core: "Core",
+	catppuccin: "Catppuccin",
+	classic: "Classics",
+	editor: "Editor",
+	kanagawa: "Japanese",
+	everforest: "Forest",
+	accessibility: "Accessible",
+};
 const FORBIDDEN_THEMES_SOURCE_SNIPPETS = [
 	"id: \"light\"",
 	"label: \"Light\"",
@@ -2132,6 +2294,14 @@ function assertSourceExcludes(path: string, source: string, snippet: string): vo
 	assert.equal(source.includes(snippet), false, `${path} should not contain source snippet ${snippet}`);
 }
 
+function escapeRegExp(text: string): string {
+	return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function includesRawThemeId(text: string, themeId: string): boolean {
+	return new RegExp(`\\b${escapeRegExp(themeId)}\\b`).test(text);
+}
+
 const themeCatalogSource = await readFile("theme-catalog.ts", "utf8");
 const themesSource = await readFile("themes.ts", "utf8");
 const paletteSource = await readFile("palette.ts", "utf8");
@@ -2158,7 +2328,7 @@ const catalogMetadata = GLANCE_THEME_CATALOG.map(({ palette, ...metadata }) => m
 const catalogPalettes = Object.fromEntries(GLANCE_THEME_CATALOG.map((entry) => [entry.id, entry.palette]));
 
 assert.equal(GLANCE_THEMES.length, 22, "theme metadata should keep the curated 22-theme collection");
-assert.deepEqual(GLANCE_THEMES, EXPECTED_THEMES, "theme metadata should preserve exact current id/label/group/tone/tags/description snapshot");
+assert.deepEqual(GLANCE_THEMES, EXPECTED_THEMES, "theme metadata should preserve exact current id/label/group/tone/tags/detail display snapshot");
 assert.deepEqual(GLANCE_THEME_IDS, EXPECTED_THEME_IDS, "theme id helper should preserve exact GLANCE_THEMES order");
 assert.deepEqual(Object.keys(PALETTES), EXPECTED_THEME_IDS, "palette object key order should exactly match GLANCE_THEME_IDS");
 assert.deepEqual(PALETTES, EXPECTED_PALETTES, "palette RGB snapshot should preserve exact current theme colors");
@@ -2171,9 +2341,10 @@ const themeLabels = GLANCE_THEMES.map((theme) => theme.label);
 assert.equal(new Set(themeIds).size, themeIds.length, "theme ids should be unique");
 assert.equal(new Set(themeLabels).size, themeLabels.length, "theme labels should be unique");
 
-for (const { id, label, group, tone, tags, description } of GLANCE_THEMES) {
+for (const { id, label, group, groupLabel, tone, tags, detailTags, description, detailDescription } of GLANCE_THEMES) {
 	assert.ok(label.trim(), `${id} should have a non-empty user-facing label`);
 	assert.ok(group.trim(), `${id} should have a non-empty metadata group`);
+	assert.equal(groupLabel, EXPECTED_THEME_GROUP_LABELS[group], `${id} browser group label should come from catalog display copy`);
 	assert.ok(tone === "light" || tone === "dark", `${id} should declare a stable light/dark tone`);
 	assert.ok(tags.length > 0, `${id} should have at least one metadata tag`);
 	assert.equal(new Set(tags).size, tags.length, `${id} metadata tags should be unique`);
@@ -2181,11 +2352,29 @@ for (const { id, label, group, tone, tags, description } of GLANCE_THEMES) {
 		assert.equal(tag, tag.trim(), `${id} metadata tag should be trimmed`);
 		assert.match(tag, /^[a-z0-9-]+$/, `${id} metadata tag should be lowercase kebab text`);
 	}
+	assert.ok(detailTags.length > 0, `${id} should have browser detail tags`);
+	assert.equal(new Set(detailTags).size, detailTags.length, `${id} browser detail tags should be unique`);
+	for (const tag of detailTags) {
+		assert.equal(tag, tag.trim(), `${id} browser detail tag should be trimmed`);
+		assert.equal(themeIds.includes(tag as never), false, `${id} browser detail tag should not expose raw theme id ${tag}`);
+	}
 	assert.ok(description.trim(), `${id} should have a non-empty metadata description`);
+	assert.ok(detailDescription.trim(), `${id} should have a non-empty browser detail description`);
+	for (const themeId of themeIds) {
+		assert.equal(includesRawThemeId(detailDescription, themeId), false, `${id} browser detail description should not expose raw theme id ${themeId}`);
+	}
 	assert.ok(PALETTES[id], `${id} palette should exist`);
 	assert.equal(themeLabel(id), label, `${id} label should come from shared metadata`);
 	assert.equal(isGlanceThemeName(id), true, `${id} should validate as a theme name`);
 }
+
+const themesById = new Map(GLANCE_THEMES.map((theme) => [theme.id, theme]));
+assert.deepEqual(themesById.get("dark")?.detailTags, ["default", "neutral"], "dark browser detail tags should keep raw id suppression");
+assert.equal(themesById.get("dark")?.detailDescription, "Neutral dim palette for dim terminals.", "dark browser detail should keep low-light/friendly text behavior");
+assert.equal(themesById.get("catppuccin-latte")?.detailDescription, "Soft Catppuccin palette with warm bright tones.", "light raw id should be friendly in browser detail copy");
+assert.equal(themesById.get("kanagawa-wave")?.groupLabel, "Japanese", "kanagawa browser group label should stay friendly");
+assert.equal(themesById.get("everforest-dark")?.groupLabel, "Forest", "everforest browser group label should stay friendly");
+assert.equal(themesById.get("high-contrast-dark")?.groupLabel, "Accessible", "accessibility browser group label should stay friendly");
 
 assert.equal(themeLabel("dracula" as never), "dracula", "unknown theme label should fall back to the provided id");
 assert.equal(isGlanceThemeName("catppuccin-macchiato"), true, "curated Catppuccin Macchiato theme should validate");

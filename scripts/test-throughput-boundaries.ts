@@ -97,15 +97,29 @@ for (const match of throughputRunTracker.text.matchAll(importPattern)) {
 	if (!["./throughput.js", "./types.js"].includes(specifier)) fail(`${throughputRunTracker.path}: throughput run tracker may only import throughput calculation and types, not ${specifier}`);
 }
 
-for (const match of throughputSegmentFeature.text.matchAll(importPattern)) {
-	const isTypeOnly = match[1] === "type ";
-	const specifier = match[2]!;
+const throughputFeatureImports = [...throughputSegmentFeature.text.matchAll(importPattern)].map((match) => ({
+	isTypeOnly: match[1] === "type ",
+	specifier: match[2]!,
+}));
+
+for (const { isTypeOnly, specifier } of throughputFeatureImports) {
 	if (specifier.startsWith("@earendil-works/pi-")) fail(`${throughputSegmentFeature.path}: throughput feature must not import pi package ${specifier}`);
 	if (IO_NETWORK_PROCESS_IMPORTS.has(specifier)) fail(`${throughputSegmentFeature.path}: throughput feature must not import IO/network/process module ${specifier}`);
 	if (forbiddenThroughputFeatureLocalModules.has(specifier)) fail(`${throughputSegmentFeature.path}: throughput feature must not import runtime/UI/config/theme module ${specifier}`);
 	if (specifier.startsWith("./") && !throughputFeatureAllowedLocalModules.has(specifier)) fail(`${throughputSegmentFeature.path}: throughput feature local deps should stay narrow; unexpected import ${specifier}`);
 	if (["./segment-feature.js", "./types.js"].includes(specifier) && !isTypeOnly) fail(`${throughputSegmentFeature.path}: throughput feature may only type-import from ${specifier}`);
 }
+
+assert.equal(
+	throughputFeatureImports.some((record) => record.specifier === "./config-schema.js" && !record.isTypeOnly),
+	true,
+	"throughput feature should value-import config-schema descriptor for precision settings",
+);
+assert.equal(
+	throughputFeatureImports.some((record) => record.specifier === "./config-options.js"),
+	false,
+	"throughput feature should not import config-options precision values",
+);
 
 if (/function\s+throughputPrecisionLabel\b/.test(throughputSegmentFeature.text)) {
 	fail(`${throughputSegmentFeature.path}: throughput precision settings label should come from config-schema descriptor`);

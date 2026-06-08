@@ -70,20 +70,19 @@ function createDefaultGitRefresher(options: CreateGitRefresherOptions): RuntimeG
 	return new GitRefresher(options.getConfig, options.getCwd, options.onSnapshot);
 }
 
-function applyThroughputIntent(state: GlanceState, intent: ThroughputRunStateIntent): void {
+function applyThroughputIntent(state: GlanceState, intent: ThroughputRunStateIntent): boolean {
 	switch (intent.kind) {
 		case "none":
-			return;
+			return false;
 		case "set-current-run":
-			setCurrentRunThroughput(state, intent.currentRun);
-			return;
+			return setCurrentRunThroughput(state, intent.currentRun);
 		case "clear-current-run":
-			clearCurrentRunThroughput(state);
-			return;
-		case "set-last-turn-and-clear-current-run":
-			setLastTurnThroughput(state, intent.lastTurn);
-			clearCurrentRunThroughput(state);
-			return;
+			return clearCurrentRunThroughput(state);
+		case "set-last-turn-and-clear-current-run": {
+			const lastTurnChanged = setLastTurnThroughput(state, intent.lastTurn);
+			const currentRunChanged = clearCurrentRunThroughput(state);
+			return lastTurnChanged || currentRunChanged;
+		}
 	}
 }
 
@@ -268,7 +267,8 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 				});
 			},
 			agentStart: (_event, _ctx) => {
-				throughputTracker.start(nowMs());
+				const intent = throughputTracker.start(nowMs());
+				if (state && applyThroughputIntent(state, intent)) renderNow();
 			},
 			agentEnd: async (event, ctx) => {
 				const intent = throughputTracker.finish(event.messages, nowMs);

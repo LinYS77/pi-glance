@@ -92,7 +92,7 @@ function expectFinal(intent: ThroughputRunStateIntent, expected: TurnThroughputE
 
 {
 	const run = tracker();
-	assert.deepEqual(run.start(1_000), { kind: "none" }, "start should only reset local lifecycle state and return no visible intent");
+	assert.deepEqual(run.start(1_000), { kind: "clear-current-run" }, "start should reset local lifecycle state and request stale currentRun clearing");
 }
 
 {

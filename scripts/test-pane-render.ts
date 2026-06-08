@@ -1,4 +1,5 @@
 import { strict as assert } from "node:assert";
+import { readFile } from "node:fs/promises";
 import { visibleWidth, type Component, type TUI } from "@earendil-works/pi-tui";
 import type { Theme } from "@earendil-works/pi-coding-agent";
 import { defaultConfig } from "../config.js";
@@ -90,6 +91,10 @@ function assertContains(text: string, fragment: string, message?: string): void 
 
 function assertNotContains(text: string, fragment: string, message?: string): void {
 	assert.ok(!text.includes(fragment), message ?? `expected render not to include ${JSON.stringify(fragment)}`);
+}
+
+function assertSourceExcludes(path: string, source: string, snippet: string, message?: string): void {
+	assert.equal(source.includes(snippet), false, message ?? `${path} should not contain source snippet ${snippet}`);
 }
 
 function lineContainingAll(text: string, fragments: string[]): string | undefined {
@@ -217,6 +222,7 @@ assertContains(themeBrowserText, "saved Light", "theme browser should show conci
 assertContains(themeBrowserText, "1/22", "theme browser should show position/count");
 assertContains(themeBrowserText, "Selected · Core · default · bright · neutral", "selected detail should show highlighted theme metadata");
 assertContains(themeBrowserText, "Bright neutral palette", "selected detail should show highlighted theme description");
+assertNotContains(themeBrowserText, "Selected · core", "selected detail should not expose raw group ids");
 assertLineContainsAll(themeBrowserText, ["»", "●", "✓", "Light"], "initial browser row should mark the focused saved preview theme");
 assertLineContainsAll(themeBrowserText, ["Dark"], "theme browser should render other friendly labels");
 assert.equal(themeListRows(themeBrowserText).length, GLANCE_THEMES.length, "theme browser should render all theme labels in catalog order");
@@ -235,7 +241,9 @@ assertLineContainsAll(previewedThemeBrowserText, ["»", "●", "Dark"], "moving 
 assertLineContainsAll(previewedThemeBrowserText, ["✓", "Light"], "pre-browser saved marker should remain on Light while previewing Dark");
 assertContains(previewedThemeBrowserText, "● Unsaved changes", "previewing a different theme should dirty the pane");
 assertContains(previewedThemeBrowserText, "Theme · preview Dark", "preview movement should show the friendly preview label");
-assertContains(previewedThemeBrowserText, "Selected · Core", "selected detail should update with the highlighted theme group");
+assertContains(previewedThemeBrowserText, "Selected · Core · default · neutral", "selected detail should update with catalog-sourced raw id suppression");
+assertContains(previewedThemeBrowserText, "Neutral dim palette for dim terminals.", "selected detail should update with catalog-sourced friendly description copy");
+assertNotContains(previewedThemeBrowserText, "Selected · Core · default · dark · neutral", "selected detail should suppress the selected raw theme id tag");
 assertNotContains(previewedThemeBrowserText, "Theme → Dark. Press S to save.", "preview movement should not accept the theme yet");
 assertNotContains(previewedThemeBrowserText, "○", "previewed browser should not render hollow markers");
 assertNoRawThemeIds(previewedThemeBrowserText, "Previewed theme browser");
@@ -252,6 +260,7 @@ assertContains(lowerWindowText, "High Contrast Dark", "full list should render t
 assertContains(lowerWindowText, "Light", "full list should keep the first theme visible when far down the catalog");
 assertContains(lowerWindowText, "Selected · Accessible", "selected detail should use display group labels for lower themes");
 assertContains(lowerWindowText, "High-contrast palette", "selected detail should update for lower themes");
+assertNotContains(lowerWindowText, "Selected · accessibility", "lower theme detail should not expose raw group ids");
 assert.equal(themeListRows(lowerWindowText).length, GLANCE_THEMES.length, "lower browser should still render the full ungrouped list");
 assertThemeMarkerColumns(lowerWindowText, "lower theme browser");
 assertNoRawThemeIds(lowerWindowText, "Lower theme browser");
@@ -621,6 +630,13 @@ const selText3 = plainText(selPane.component);
 assertContains(selText3, "› General", "inactive selected category still has '›' marker");
 assertContains(selText3, "› Enabled", "inactive selected setting row has '›' marker");
 assertContains(selText3, "[ on ]", "active focused value has lightweight wrapper '[ value ]'");
+
+const paneSource = await readFile("pane.ts", "utf8");
+assertSourceExcludes("pane.ts", paneSource, "displayThemeGroup", "pane.ts should not own Theme browser group labels");
+assertSourceExcludes("pane.ts", paneSource, "displayThemeDetailText", "pane.ts should not own Theme browser detail text rewrites");
+assertSourceExcludes("pane.ts", paneSource, "displayThemeTags", "pane.ts should not own Theme browser detail tag rewrites");
+assertSourceExcludes("pane.ts", paneSource, "case \"core\":", "pane.ts should not own Theme browser group mapping switch logic");
+assertSourceExcludes("pane.ts", paneSource, "low-light", "pane.ts should not own Theme browser friendly detail rewrites");
 
 for (const width of [56, 64, 72, 96, 120, 160]) {
 	const widthPane = await makePane();

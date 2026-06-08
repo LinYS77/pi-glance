@@ -4,18 +4,24 @@ type ThemeCatalogMetadataShape = {
 	readonly id: string;
 	readonly label: string;
 	readonly group: string;
+	readonly groupLabel: string;
 	readonly tone: string;
 	readonly tags: readonly string[];
+	readonly detailTags: readonly string[];
 	readonly description: string;
+	readonly detailDescription: string;
 };
 
 type ThemeMetadataProjection<Entry extends ThemeCatalogMetadataShape> = {
 	readonly id: Entry["id"];
 	readonly label: Entry["label"];
 	readonly group: Entry["group"];
+	readonly groupLabel: Entry["groupLabel"];
 	readonly tone: Entry["tone"];
 	readonly tags: Entry["tags"];
+	readonly detailTags: Entry["detailTags"];
 	readonly description: Entry["description"];
+	readonly detailDescription: Entry["detailDescription"];
 };
 
 type ThemeMetadataCatalog<Catalog extends readonly ThemeCatalogMetadataShape[]> = {
@@ -30,13 +36,16 @@ export type GlanceThemeGroup = (typeof GLANCE_THEME_CATALOG)[number]["group"];
 export type GlanceThemeTone = (typeof GLANCE_THEME_CATALOG)[number]["tone"];
 
 // Curated user-facing theme order; this is intentionally not a theme marketplace.
-export const GLANCE_THEMES = GLANCE_THEME_CATALOG.map(({ id, label, group, tone, tags, description }) => ({
+export const GLANCE_THEMES = GLANCE_THEME_CATALOG.map(({ id, label, group, groupLabel, tone, tags, detailTags, description, detailDescription }) => ({
 	id,
 	label,
 	group,
+	groupLabel,
 	tone,
 	tags,
+	detailTags,
 	description,
+	detailDescription,
 })) as unknown as ThemeMetadataCatalog<typeof GLANCE_THEME_CATALOG>;
 
 export type GlanceThemeMetadata = (typeof GLANCE_THEMES)[number];

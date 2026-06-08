@@ -13,7 +13,6 @@ import {
 	type ThemeBrowserThemeViewModel,
 } from "./pane-model.js";
 import { renderInputSurface, renderInputSurfacePreview } from "./renderer.js";
-import { GLANCE_THEME_IDS, themeLabel } from "./themes.js";
 import type { GlanceConfig, GlanceState } from "./types.js";
 
 type PaneResult = { action: "save"; config: GlanceConfig } | { action: "cancel" };
@@ -131,44 +130,6 @@ function shortcut(colors: PaneColors, key: string, label: string): string {
 
 function helpText(help: HelpShortcut[], colors: PaneColors): string {
 	return help.map((item) => shortcut(colors, item.key, item.label)).join(colors.dim("  ·  "));
-}
-
-function escapeRegExp(text: string): string {
-	return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function displayThemeDetailText(text: string): string {
-	let display = text.replace(/low-light/g, "dim");
-	for (const id of GLANCE_THEME_IDS) {
-		const replacement = id === "light" ? "bright" : id === "dark" ? "dim" : themeLabel(id);
-		display = display.replace(new RegExp(`\\b${escapeRegExp(id)}\\b`, "g"), replacement);
-	}
-	return display;
-}
-
-function displayThemeGroup(group: string): string {
-	switch (group) {
-		case "core":
-			return "Core";
-		case "catppuccin":
-			return "Catppuccin";
-		case "classic":
-			return "Classics";
-		case "editor":
-			return "Editor";
-		case "kanagawa":
-			return "Japanese";
-		case "everforest":
-			return "Forest";
-		case "accessibility":
-			return "Accessible";
-		default:
-			return group;
-	}
-}
-
-function displayThemeTags(tags: readonly string[]): string {
-	return tags.filter((tag) => !GLANCE_THEME_IDS.includes(tag as (typeof GLANCE_THEME_IDS)[number])).map(displayThemeDetailText).join(" · ");
 }
 
 function focusGap(gap: string, colors: PaneColors): string {
@@ -322,11 +283,9 @@ class GlanceConfigPane implements Component {
 	}
 
 	private renderThemeBrowserDetail(theme: ThemeBrowserThemeViewModel, layout: PaneLayout, colors: PaneColors): string[] {
-		const group = displayThemeGroup(theme.group);
-		const tags = displayThemeTags(theme.tags);
-		const summary = ["Selected", group, tags].filter(Boolean).join(" · ");
-		const description = displayThemeDetailText(theme.description);
-		return [paneLine(layout, [colors.muted(summary)]), paneLine(layout, [colors.dim(description)])];
+		const tags = theme.detailTags.join(" · ");
+		const summary = ["Selected", theme.groupLabel, tags].filter(Boolean).join(" · ");
+		return [paneLine(layout, [colors.muted(summary)]), paneLine(layout, [colors.dim(theme.detailDescription)])];
 	}
 
 	private renderThemeBrowser(lines: string[], model: GlancePaneViewModel, layout: PaneLayout, colors: PaneColors): void {

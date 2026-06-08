@@ -30,9 +30,12 @@ export interface ThemeBrowserCatalogItem {
 	id: GlanceThemeName;
 	label: string;
 	group: string;
+	groupLabel: string;
 	tone: string;
 	tags: readonly string[];
+	detailTags: readonly string[];
 	description: string;
+	detailDescription: string;
 }
 
 const MIN_CONTENT_ROWS = [2, 3, 4] as const;
