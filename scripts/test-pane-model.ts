@@ -12,7 +12,6 @@ type PaneIntent =
 	| { type: "back" }
 	| { type: "move"; direction: MoveDirection }
 	| { type: "activate" }
-	| { type: "openThemeBrowser" }
 	| { type: "save" }
 	| { type: "resetDefaults" }
 	| { type: "reorderSegment"; direction: -1 | 1 }
@@ -60,6 +59,7 @@ interface SettingViewModel {
 	value: string;
 	hint: string;
 	kind: SettingsRowKind;
+	opensSubview?: PaneSubview;
 	editable: boolean;
 	selected: boolean;
 	labelHasFocus: boolean;
@@ -142,8 +142,8 @@ function withFocus(model: PaneModelState, focus: PaneFocus, categoryIndex = mode
 	return { ...model, focus, categoryIndex, settingIndex };
 }
 
-function openThemeBrowser(model: PaneModelState): ReturnType<typeof updatePaneModel> {
-	return updatePaneModel(withFocus(model, "values", 0, 1), { type: "openThemeBrowser" });
+function activateThemeRow(model: PaneModelState): ReturnType<typeof updatePaneModel> {
+	return updatePaneModel(withFocus(model, "values", 0, 1), { type: "activate" });
 }
 
 function segmentOrder(config: GlanceConfig): SegmentId[] {
@@ -233,10 +233,10 @@ assertHelp(
 		{ key: "←→↑↓", label: "move" },
 		{ key: "S", label: "save" },
 		{ key: "R", label: "reset" },
-		{ key: "J/K", label: "switch" },
+		{ key: "J/K", label: "reorder" },
 		{ key: "Esc", label: "cancel" },
 	],
-	"wide category help should include movement, save/reset, segment switch, and cancel",
+	"wide category help should include movement, save/reset, segment reorder, and cancel",
 );
 
 const reorderedConfig = cloneConfig(config);
@@ -318,12 +318,11 @@ const rightBoundary = move(withFocus(model, "values"), "right");
 assert.equal(rightBoundary.requestRender, true, "right boundary should still request render to match pane behavior");
 assert.equal(rightBoundary.model.focus, "values", "right boundary should remain on values");
 
-const openBrowserFromEnabled = updatePaneModel(withFocus(model, "values", 0, 0), { type: "openThemeBrowser" });
-assert.equal(openBrowserFromEnabled.requestRender, false, "opening theme browser outside the Theme row should be a no-op");
-assert.deepEqual(openBrowserFromEnabled.model, withFocus(model, "values", 0, 0), "opening theme browser outside the Theme row should not change model state");
+const themeValueView = view(withFocus(model, "values", 0, 1));
+assert.equal(selectedSetting(themeValueView).opensSubview, "themeBrowser", "Theme row view should declare it opens the theme browser subview");
 
-const openedThemeBrowser = openThemeBrowser(model);
-assert.equal(openedThemeBrowser.requestRender, true, "opening theme browser should request render");
+const openedThemeBrowser = activateThemeRow(model);
+assert.equal(openedThemeBrowser.requestRender, true, "activating Theme row should request render");
 assert.equal(openedThemeBrowser.completion, undefined, "opening theme browser should not complete the pane");
 assert.equal(openedThemeBrowser.model.subview, "themeBrowser", "Theme row action should open the theme browser subview");
 assert.deepEqual(openedThemeBrowser.model.themeBrowser, {
@@ -343,6 +342,16 @@ assert.equal(openedBrowserView.themeBrowser?.restoreTheme, "light", "theme brows
 assert.equal(openedBrowserView.themeBrowser?.restoreLabel, themeLabel("light"), "theme browser view should use friendly restore labels");
 assert.equal(openedBrowserView.themeBrowser?.previewTheme, "light", "theme browser view should preview the draft theme");
 assert.equal(openedBrowserView.themeBrowser?.previewLabel, themeLabel("light"), "theme browser view should use friendly preview labels");
+assertHelp(
+	openedBrowserView.help,
+	[
+		{ key: "↑↓", label: "preview" },
+		{ key: "Enter", label: "accept" },
+		{ key: "Esc/Left", label: "restore" },
+		{ key: "S", label: "save" },
+	],
+	"theme browser help should describe preview, accept, restore, and save",
+);
 assert.deepEqual(
 	openedBrowserView.themeBrowser?.themes.map((theme) => ({ id: theme.id, label: theme.label, selected: theme.selected, previewed: theme.previewed, restored: theme.restored, saved: theme.saved })),
 	GLANCE_THEMES.map((theme, index) => ({ id: theme.id, label: theme.label, selected: index === 0, previewed: index === 0, restored: index === 0, saved: index === 0 })),
@@ -412,7 +421,7 @@ assert.equal(paneIsDirty(restoredFromLeft.model), false, "Left restore should cl
 const dirtyBeforeBrowser = cloneConfig(config);
 dirtyBeforeBrowser.theme = "tokyo-night";
 const dirtyBrowserModel = createPaneModel(dirtyBeforeBrowser);
-const dirtyBrowserOpened = openThemeBrowser(dirtyBrowserModel);
+const dirtyBrowserOpened = activateThemeRow(dirtyBrowserModel);
 const dirtyBrowserPreview = move(dirtyBrowserOpened.model, "down");
 const dirtyBrowserRestored = updatePaneModel(dirtyBrowserPreview.model, { type: "back" });
 assert.equal(dirtyBrowserRestored.model.draft.theme, "tokyo-night", "restore should use the dirty draft theme active when browser opened");
@@ -424,12 +433,12 @@ assert.equal(dirtyBrowserBackToCategories.model.focus, "categories", "values-col
 assertCancel(updatePaneModel(dirtyBrowserBackToCategories.model, { type: "back" }), "Esc/q from categories after returning from theme browser");
 
 let preDirtyThemeModel = withFocus(createPaneModel(config), "values", 0, 1);
-for (const theme of ["dark", "catppuccin-latte", "catppuccin-mocha", "nord", "tokyo-night"] as const) {
-	preDirtyThemeModel = updatePaneModel(preDirtyThemeModel, { type: "activate" }).model;
-	assert.equal(preDirtyThemeModel.draft.theme, theme, `theme row cycle should reach ${theme}`);
-}
-assert.equal(paneIsDirty(preDirtyThemeModel), true, "cycling to a non-initial theme should make the pane dirty before opening browser");
-const preDirtyBrowserOpened = openThemeBrowser(preDirtyThemeModel);
+const preDirtyThemeDraft = cloneConfig(preDirtyThemeModel.draft);
+preDirtyThemeDraft.theme = "tokyo-night";
+preDirtyThemeModel = { ...preDirtyThemeModel, draft: preDirtyThemeDraft };
+assert.equal(preDirtyThemeModel.draft.theme, "tokyo-night", "pre-existing dirty theme setup should start from Tokyo Night");
+assert.equal(paneIsDirty(preDirtyThemeModel), true, "dirty draft theme setup should be dirty before opening browser");
+const preDirtyBrowserOpened = updatePaneModel(preDirtyThemeModel, { type: "activate" });
 assert.equal(preDirtyBrowserOpened.model.themeBrowser?.restoreTheme, "tokyo-night", "browser should remember the pre-existing dirty draft theme");
 const preDirtyBrowserView = view(preDirtyBrowserOpened.model);
 assert.equal(preDirtyBrowserView.themeBrowser?.savedTheme, "light", "dirty browser should keep the original saved theme separate from restore theme");
@@ -569,7 +578,7 @@ assertHelp(
 		{ key: "R", label: "reset" },
 		{ key: "Esc", label: "back" },
 	],
-	"wide settings help should include back but no segment switch or Enter change",
+	"wide settings help should include back but no segment reorder or Enter change",
 );
 
 const gitValuesView = view(move(gitSettings.model, "right").model, 120);
@@ -592,10 +601,10 @@ assertHelp(
 	view(model, 56).help,
 	[
 		{ key: "S", label: "save" },
-		{ key: "J/K", label: "switch" },
+		{ key: "J/K", label: "reorder" },
 		{ key: "Esc", label: "cancel" },
 	],
-	"narrow category help should collapse to save/switch/cancel",
+	"narrow category help should collapse to save/reorder/cancel",
 );
 assertHelp(
 	view(gitSettings.model, 56).help,

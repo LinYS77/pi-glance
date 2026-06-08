@@ -49,17 +49,19 @@ function applyRow(config: GlanceConfig, row: SettingsRow): GlanceConfig {
 	return next;
 }
 
-function rowSummary(row: SettingsRow): Pick<SettingsRow, "id" | "label" | "value" | "hint" | "kind"> {
-	return {
+function rowSummary(row: SettingsRow): Pick<SettingsRow, "id" | "label" | "value" | "hint" | "kind" | "opensSubview"> {
+	const summary: Pick<SettingsRow, "id" | "label" | "value" | "hint" | "kind" | "opensSubview"> = {
 		id: row.id,
 		label: row.label,
 		value: row.value,
 		hint: row.hint,
 		kind: row.kind,
 	};
+	if (row.opensSubview) summary.opensSubview = row.opensSubview;
+	return summary;
 }
 
-function assertRows(config: GlanceConfig, categoryId: SettingsCategoryId, expected: Array<Pick<SettingsRow, "id" | "label" | "value" | "hint" | "kind">>): SettingsRow[] {
+function assertRows(config: GlanceConfig, categoryId: SettingsCategoryId, expected: Array<Pick<SettingsRow, "id" | "label" | "value" | "hint" | "kind" | "opensSubview">>): SettingsRow[] {
 	const rows = getSettingsRows(config, categoryId);
 	assert.deepEqual(rows.map(rowSummary), expected, `${categoryId} rows should preserve pane copy/order/value/kind`);
 	return rows;
@@ -168,12 +170,13 @@ const generalRows = assertRows(config, "general", [
 		value: "Light",
 		hint: "Switch the palette.",
 		kind: "cycle",
+		opensSubview: "themeBrowser",
 	},
 	{
 		id: "general.icons",
 		label: "Icons",
 		value: "plain",
-		hint: "Nerd icons need a Nerd Font or Symbols Nerd Font fallback. If icons look like boxes, choose plain.",
+		hint: "Plain text or Nerd Font icons with fallback.",
 		kind: "cycle",
 	},
 	{
@@ -194,14 +197,14 @@ const generalRows = assertRows(config, "general", [
 		id: "general.adaptiveWidth",
 		label: "Adaptive width",
 		value: "on",
-		hint: "Drop later segments first.",
+		hint: "Hide later segments first when space is tight.",
 		kind: "toggle",
 	},
 	{
 		id: "general.workspaceLabel",
 		label: "Workspace label",
 		value: "name",
-		hint: "Use ~/ path when space allows.",
+		hint: "Show name, smart ~/ path, or safe path.",
 		kind: "cycle",
 	},
 ]);
@@ -263,7 +266,7 @@ const contextRows = assertRows(config, "context", [
 		id: "context.unknown",
 		label: "Unknown",
 		value: "show",
-		hint: "Hide when usage is unknown.",
+		hint: "Show ? or hide when context is unknown.",
 		kind: "cycle",
 	},
 ]);
@@ -352,13 +355,14 @@ const throughputRows = assertRows(config, "throughput", [
 		id: "throughput.precision",
 		label: "Precision",
 		value: "auto",
-		hint: "Controls Reply speed decimals. Output tokens / wall time; includes tools, waiting, network, and thinking; not a benchmark.",
+		hint: "Decimals for tok/s; wall time, not a benchmark.",
 		kind: "cycle",
 	},
 ]);
 
 assert.equal(rowById(generalRows, "general.enabled").apply!(config).enabled, false, "general enabled should toggle off");
-assert.equal(rowById(generalRows, "general.theme").apply!(config).theme, GLANCE_THEMES[1]!.id, "theme should cycle to next theme id");
+assert.equal(rowById(generalRows, "general.theme").opensSubview, "themeBrowser", "theme row should declare the theme browser subview as its activation target");
+assert.equal(rowById(generalRows, "general.theme").apply!(config).theme, GLANCE_THEMES[1]!.id, "theme row apply should preserve existing draft cycle behavior for model-owned callers");
 assert.equal(
 	getSettingsRows({ ...config, theme: "catppuccin-mocha" }, "general").find((row) => row.id === "general.theme")?.value,
 	"Catppuccin Mocha",

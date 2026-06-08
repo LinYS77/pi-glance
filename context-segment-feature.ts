@@ -87,7 +87,7 @@ export const contextSegmentFeature = {
 		{
 			id: "context.unknown",
 			label: "Unknown",
-			hint: "Hide when usage is unknown.",
+			hint: "Show ? or hide when context is unknown.",
 			kind: "cycle",
 			value: (config: GlanceConfig) => config.context.unknown,
 			mutate: (config: GlanceConfig) => {

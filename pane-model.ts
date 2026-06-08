@@ -22,7 +22,6 @@ export type PaneIntent =
 	| { type: "back" }
 	| { type: "move"; direction: PaneMoveDirection }
 	| { type: "activate" }
-	| { type: "openThemeBrowser" }
 	| { type: "save" }
 	| { type: "resetDefaults" }
 	| { type: "reorderSegment"; direction: -1 | 1 }
@@ -73,6 +72,7 @@ export interface SettingViewModel {
 	value: string;
 	hint: string;
 	kind: SettingsRowKind;
+	opensSubview?: PaneSubview;
 	editable: boolean;
 	selected: boolean;
 	labelHasFocus: boolean;
@@ -145,6 +145,15 @@ function result(model: PaneModelState, requestRender: boolean, completion?: Pane
 	return completion ? { model, requestRender, completion } : { model, requestRender };
 }
 
+function themeBrowserHelpShortcuts(): HelpShortcut[] {
+	return [
+		{ key: "↑↓", label: "preview" },
+		{ key: "Enter", label: "accept" },
+		{ key: "Esc/Left", label: "restore" },
+		{ key: "S", label: "save" },
+	];
+}
+
 function helpShortcuts(focus: PaneFocus, width: number): HelpShortcut[] {
 	const stable: HelpShortcut[] = [
 		{ key: "←→↑↓", label: "move" },
@@ -159,11 +168,11 @@ function helpShortcuts(focus: PaneFocus, width: number): HelpShortcut[] {
 			if (isNarrow) {
 				return [
 					{ key: "S", label: "save" },
-					{ key: "J/K", label: "switch" },
+					{ key: "J/K", label: "reorder" },
 					{ key: "Esc", label: "cancel" },
 				];
 			}
-			return [...stable, { key: "J/K", label: "switch" }, { key: "Esc", label: "cancel" }];
+			return [...stable, { key: "J/K", label: "reorder" }, { key: "Esc", label: "cancel" }];
 		case "settings":
 			if (isNarrow) {
 				return [
@@ -295,26 +304,6 @@ function moveFocus(model: PaneModelState, direction: PaneMoveDirection): PaneMod
 	}
 }
 
-function activateCurrent(model: PaneModelState): PaneModelState {
-	const category = selectedCategory(model);
-	if (!category) return model;
-
-	const rows = rowsFor(model, category.id);
-	const row = rows[model.settingIndex];
-	if (!row) return model;
-
-	if (!row.apply) {
-		return withModel(model, { status: row.hint ?? `${row.label} is informational.` });
-	}
-
-	const draft = row.apply(model.draft);
-	const nextRow = getSettingsRows(draft, category.id)[model.settingIndex];
-	return withModel(model, {
-		draft,
-		status: `${row.label} → ${nextRow?.value ?? "updated"}. Press S to save.`,
-	});
-}
-
 function selectedRow(model: PaneModelState): SettingsRow | undefined {
 	const category = selectedCategory(model);
 	if (!category) return undefined;
@@ -322,9 +311,6 @@ function selectedRow(model: PaneModelState): SettingsRow | undefined {
 }
 
 function openThemeBrowser(model: PaneModelState): PaneModelState {
-	const row = selectedRow(model);
-	if (selectedCategory(model)?.id !== "general" || row?.id !== "general.theme") return model;
-
 	const highlightedThemeIndex = getThemeIndex(model.draft.theme);
 	return withModel(model, {
 		subview: "themeBrowser",
@@ -335,6 +321,27 @@ function openThemeBrowser(model: PaneModelState): PaneModelState {
 			returnCategoryIndex: model.categoryIndex,
 			returnSettingIndex: model.settingIndex,
 		},
+	});
+}
+
+function activateCurrent(model: PaneModelState): PaneModelState {
+	const category = selectedCategory(model);
+	if (!category) return model;
+
+	const row = selectedRow(model);
+	if (!row) return model;
+
+	if (row.opensSubview === "themeBrowser") return openThemeBrowser(model);
+
+	if (!row.apply) {
+		return withModel(model, { status: row.hint ?? `${row.label} is informational.` });
+	}
+
+	const draft = row.apply(model.draft);
+	const nextRow = getSettingsRows(draft, category.id)[model.settingIndex];
+	return withModel(model, {
+		draft,
+		status: `${row.label} → ${nextRow?.value ?? "updated"}. Press S to save.`,
 	});
 }
 
@@ -424,6 +431,7 @@ export function createPaneViewModel(model: PaneModelState, width: number): Glanc
 			value: row.value,
 			hint: row.hint,
 			kind: row.kind,
+			opensSubview: row.opensSubview,
 			editable: Boolean(row.apply),
 			selected: index === model.settingIndex,
 			labelHasFocus: model.focus === "settings",
@@ -431,7 +439,7 @@ export function createPaneViewModel(model: PaneModelState, width: number): Glanc
 		})),
 		selectedHint: settings[model.settingIndex]?.hint,
 		themeBrowser: createThemeBrowserViewModel(model),
-		help: helpShortcuts(model.focus, width),
+		help: model.subview === "themeBrowser" ? themeBrowserHelpShortcuts() : helpShortcuts(model.focus, width),
 	};
 }
 
@@ -449,10 +457,6 @@ export function updatePaneModel(model: PaneModelState, intent: PaneIntent): Pane
 			if (model.subview === "themeBrowser") return result(acceptThemeBrowser(model), true);
 			if (model.focus !== "values") return result(model, false);
 			return result(activateCurrent(model), true);
-		case "openThemeBrowser": {
-			const next = openThemeBrowser(model);
-			return result(next, next !== model);
-		}
 		case "save":
 			return result(model, false, { action: "save", config: cloneConfig(model.draft) });
 		case "resetDefaults":

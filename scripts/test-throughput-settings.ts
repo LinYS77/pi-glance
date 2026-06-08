@@ -60,7 +60,7 @@ assert.deepEqual(
 			id: "throughput.precision",
 			label: "Precision",
 			value: "auto",
-			hint: "Controls Reply speed decimals. Output tokens / wall time; includes tools, waiting, network, and thinking; not a benchmark.",
+			hint: "Decimals for tok/s; wall time, not a benchmark.",
 			kind: "cycle",
 		},
 	],

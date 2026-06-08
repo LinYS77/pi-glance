@@ -63,7 +63,7 @@ export const throughputSegmentFeature = {
 		{
 			id: "throughput.precision",
 			label: "Precision",
-			hint: "Controls Reply speed decimals. Output tokens / wall time; includes tools, waiting, network, and thinking; not a benchmark.",
+			hint: "Decimals for tok/s; wall time, not a benchmark.",
 			kind: "cycle",
 			value: (config: GlanceConfig) => THROUGHPUT_PRECISION_DESCRIPTOR.label(config.throughput.precision),
 			mutate: (config: GlanceConfig) => {

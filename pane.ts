@@ -169,21 +169,8 @@ class GlanceConfigPane implements Component {
 
 	invalidate(): void {}
 
-	private intentForInput(data: string): PaneIntent | undefined {
-		const intent = paneIntentFromKey(data);
-		if (!intent) return undefined;
-		if (intent.type === "activate") {
-			const viewModel = createPaneViewModel(this.model, 120);
-			const selectedRow = viewModel.settings.find((row) => row.selected);
-			if (this.model.subview !== "themeBrowser" && this.model.focus === "values" && viewModel.selectedCategory?.id === "general" && selectedRow?.id === "general.theme") {
-				return { type: "openThemeBrowser" };
-			}
-		}
-		return intent;
-	}
-
 	handleInput(data: string): void {
-		const intent = this.intentForInput(data);
+		const intent = paneIntentFromKey(data);
 		if (!intent) return;
 
 		const update = updatePaneModel(this.model, intent);

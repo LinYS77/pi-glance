@@ -171,7 +171,8 @@ assertContains(initial, "» General", "general category should be selected initi
 assertContains(initial, "Git", "git category should render");
 assertContains(initial, "Tokens", "tokens category should render");
 assertContains(initial, "[←→↑↓] move  ·  [S] save  ·  [R] reset", "stable help shortcuts should stay first");
-assertContains(initial, "[J/K] switch", "category help should describe segment switching");
+assertContains(initial, "[J/K] reorder", "category help should describe segment reordering");
+assertNotContains(initial, "[J/K] switch", "category help should not describe reordering as switching");
 assertNotContains(initial, "Changes stay local", "empty default status copy should stay removed");
 assertNotContains(initial, "NOTES", "old notes section should stay removed");
 assertNotContains(initial, "[Tab]", "tab navigation should stay removed");
@@ -220,6 +221,8 @@ const themeBrowserText = plainText(themePane.component, 160);
 assertContains(themeBrowserText, "Theme · preview Light", "enter on Theme value should open the calm theme browser");
 assertContains(themeBrowserText, "saved Light", "theme browser should show concise saved copy");
 assertContains(themeBrowserText, "1/22", "theme browser should show position/count");
+assertContains(themeBrowserText, "[↑↓] preview  ·  [Enter] accept  ·  [Esc/Left] restore  ·  [S] save", "theme browser footer help should describe preview, accept, restore, and save");
+assertNotContains(themeBrowserText, "[←→↑↓] move", "theme browser should replace general movement help with subview-specific preview help");
 assertContains(themeBrowserText, "Selected · Core · default · bright · neutral", "selected detail should show highlighted theme metadata");
 assertContains(themeBrowserText, "Bright neutral palette", "selected detail should show highlighted theme description");
 assertNotContains(themeBrowserText, "Selected · core", "selected detail should not expose raw group ids");
@@ -380,7 +383,7 @@ press(gridSettingPane.component, "\x1b[B");
 press(gridSettingPane.component, "\x1b[B");
 const iconsSelectedText = plainText(gridSettingPane.component);
 assertContains(iconsSelectedText, "» Icons", "down arrow should move within the setting column");
-assertContains(iconsSelectedText, "Nerd icons need", "Icons row hint should mention Nerd Font fallback guidance");
+assertContains(iconsSelectedText, "Plain text or Nerd Font icons with fallback.", "Icons row hint should mention plain and Nerd Font fallback guidance");
 press(gridSettingPane.component, "\x1b[D");
 assertContains(plainText(gridSettingPane.component), "» Cost", "left arrow should move to the category on the same visual row");
 
@@ -434,7 +437,7 @@ press(contextPane.component, "\x1b[B");
 press(contextPane.component, "\r");
 const contextUnknownChanged = plainText(contextPane.component);
 assertLineContainsAll(contextUnknownChanged, ["Unknown", "hide"], "enter should cycle context unknown behavior");
-assertContains(contextUnknownChanged, "Hide when usage is unknown.", "context unknown hint should render");
+assertContains(contextUnknownChanged, "Show ? or hide when context is unknown.", "context unknown hint should render");
 
 const costPane = await makePane();
 press(costPane.component, "\x1b[B");
@@ -531,7 +534,7 @@ press(generalHintPane.component, "\x1b[B");
 press(generalHintPane.component, "\x1b[B");
 const workspaceLabel = plainText(generalHintPane.component);
 assertLineContainsAll(workspaceLabel, ["Workspace label", "name"], "workspace label setting should render");
-assertContains(workspaceLabel, "Use ~/ path when space allows.", "workspace label hint should render");
+assertContains(workspaceLabel, "Show name, smart ~/ path, or safe path.", "workspace label hint should render");
 press(generalHintPane.component, "\r");
 assertLineContainsAll(plainText(generalHintPane.component), ["Workspace label", "name"], "enter should not cycle workspace label before value column");
 press(generalHintPane.component, "\x1b[C");
@@ -562,7 +565,8 @@ const gitSettings = plainText(gitPane.component);
 assertNotContains(gitSettings, "[Enter] change", "setting label column should not describe changing values");
 assertContains(gitSettings, "[←→↑↓] move  ·  [S] save  ·  [R] reset", "stable help shortcuts should stay first outside category column");
 assertContains(gitSettings, "[Esc] back", "settings help should describe returning to categories");
-assertNotContains(gitSettings, "[J/K] switch", "category segment switching help should be hidden outside category column");
+assertNotContains(gitSettings, "[J/K] reorder", "category segment reorder help should be hidden outside category column");
+assertNotContains(gitSettings, "[J/K] switch", "old category segment switching help should stay removed outside category column");
 press(gitPane.component, "\x1b[C");
 const gitValues = plainText(gitPane.component);
 assertContains(gitValues, "[←→↑↓] move  ·  [S] save  ·  [R] reset", "stable help shortcuts should stay first in value column");
@@ -609,7 +613,8 @@ assert.equal((saveResult as { config: GlanceConfig }).config.enabled, false, "sa
 const backPane = await makePane();
 press(backPane.component, "\x1b[C");
 press(backPane.component, "\x1b[D");
-assertContains(plainText(backPane.component), "[J/K] switch", "left arrow should return from settings to categories");
+assertContains(plainText(backPane.component), "[J/K] reorder", "left arrow should return from settings to categories");
+assertNotContains(plainText(backPane.component), "[J/K] switch", "left arrow category help should not use old switch copy");
 
 // Test selection markers and wrappers across category/settings/value focus
 const selPane = await makePane();
@@ -632,6 +637,8 @@ assertContains(selText3, "› Enabled", "inactive selected setting row has '›'
 assertContains(selText3, "[ on ]", "active focused value has lightweight wrapper '[ value ]'");
 
 const paneSource = await readFile("pane.ts", "utf8");
+assertSourceExcludes("pane.ts", paneSource, "general.theme", "pane.ts should not know the Theme row id for browser activation");
+assertSourceExcludes("pane.ts", paneSource, "openThemeBrowser", "pane.ts should not translate Enter into a Theme-browser intent");
 assertSourceExcludes("pane.ts", paneSource, "displayThemeGroup", "pane.ts should not own Theme browser group labels");
 assertSourceExcludes("pane.ts", paneSource, "displayThemeDetailText", "pane.ts should not own Theme browser detail text rewrites");
 assertSourceExcludes("pane.ts", paneSource, "displayThemeTags", "pane.ts should not own Theme browser detail tag rewrites");

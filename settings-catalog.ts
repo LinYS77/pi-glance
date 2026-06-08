@@ -10,6 +10,7 @@ import type { EditorTopMarginRows, GlanceConfig, GlanceThemeName, SegmentId } fr
 
 export type SettingsCategoryId = "general" | SegmentId;
 type SettingsRowKind = "toggle" | "cycle" | "info";
+export type SettingsRowSubview = "themeBrowser";
 
 export interface SettingsCategory {
 	id: SettingsCategoryId;
@@ -23,6 +24,7 @@ export interface SettingsRow {
 	value: string;
 	hint: string;
 	kind: SettingsRowKind;
+	opensSubview?: SettingsRowSubview;
 	apply?: (config: GlanceConfig) => GlanceConfig;
 }
 
@@ -68,8 +70,8 @@ function toggleRow(id: string, label: string, value: boolean, hint: string, appl
 	return { id, label, value: onOff(value), hint, kind: "toggle", apply };
 }
 
-function cycleRow(id: string, label: string, value: string, hint: string, apply: (config: GlanceConfig) => GlanceConfig): SettingsRow {
-	return { id, label, value, hint, kind: "cycle", apply };
+function cycleRow(id: string, label: string, value: string, hint: string, apply: (config: GlanceConfig) => GlanceConfig, options: Pick<SettingsRow, "opensSubview"> = {}): SettingsRow {
+	return { id, label, value, hint, kind: "cycle", ...options, apply };
 }
 
 function infoRow(id: string, label: string, value: string, hint: string): SettingsRow {
@@ -143,12 +145,18 @@ export function getSettingsRows(config: GlanceConfig, categoryId: SettingsCatego
 						next.enabled = !next.enabled;
 					}),
 				),
-				cycleRow("general.theme", "Theme", getThemeLabel(config.theme), "Switch the palette.", (draft) =>
-					withConfig(draft, (next) => {
-						next.theme = nextIn(next.theme, GLANCE_THEME_IDS);
-					}),
+				cycleRow(
+					"general.theme",
+					"Theme",
+					getThemeLabel(config.theme),
+					"Switch the palette.",
+					(draft) =>
+						withConfig(draft, (next) => {
+							next.theme = nextIn(next.theme, GLANCE_THEME_IDS);
+						}),
+					{ opensSubview: "themeBrowser" },
 				),
-				cycleRow("general.icons", "Icons", config.icons, "Nerd icons need a Nerd Font or Symbols Nerd Font fallback. If icons look like boxes, choose plain.", (draft) =>
+				cycleRow("general.icons", "Icons", config.icons, "Plain text or Nerd Font icons with fallback.", (draft) =>
 					withConfig(draft, (next) => {
 						next.icons = nextIn(next.icons, ICON_MODE_VALUES);
 					}),
@@ -163,12 +171,12 @@ export function getSettingsRows(config: GlanceConfig, categoryId: SettingsCatego
 						next.editor.topMarginRows = nextNumber(next.editor.topMarginRows, EDITOR_TOP_MARGIN_ROW_VALUES);
 					}),
 				),
-				toggleRow("general.adaptiveWidth", "Adaptive width", config.display.adaptive, "Drop later segments first.", (draft) =>
+				toggleRow("general.adaptiveWidth", "Adaptive width", config.display.adaptive, "Hide later segments first when space is tight.", (draft) =>
 					withConfig(draft, (next) => {
 						next.display.adaptive = !next.display.adaptive;
 					}),
 				),
-				cycleRow("general.workspaceLabel", "Workspace label", config.display.workspaceLabel, "Use ~/ path when space allows.", (draft) =>
+				cycleRow("general.workspaceLabel", "Workspace label", config.display.workspaceLabel, "Show name, smart ~/ path, or safe path.", (draft) =>
 					withConfig(draft, (next) => {
 						next.display.workspaceLabel = nextIn(next.display.workspaceLabel, WORKSPACE_LABEL_MODE_VALUES);
 					}),
