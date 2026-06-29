@@ -1,7 +1,6 @@
 import { CustomEditor, type KeybindingsManager } from "@earendil-works/pi-coding-agent";
 import { truncateToWidth, visibleWidth, type EditorOptions, type EditorTheme, type TUI } from "@earendil-works/pi-tui";
 import { stripControls } from "./format.js";
-import { PALETTES, fg } from "./palette.js";
 import { renderGlanceLine } from "./status-line.js";
 import {
 	formatSurfaceScrollIndicator,
@@ -17,6 +16,7 @@ import {
 	SURFACE_AUTOCOMPLETE_INDENT,
 	SURFACE_CONTENT_PADDING_X,
 } from "./surface-layout.js";
+import { resolveBuiltInGlanceStyles, type ResolvedGlanceStyles } from "./theme-adapter.js";
 import type { GlanceConfig, GlanceState } from "./types.js";
 
 function stripBorderColor(line: string, borderColor: (text: string) => string): string {
@@ -65,6 +65,7 @@ export class GlanceEditor extends CustomEditor {
 	private cachedConfig?: GlanceConfig;
 	private cachedWidth = -1;
 	private cachedProviderCount = -1;
+	private cachedStatusStyleKey = "";
 	private cachedStatus = "";
 
 	constructor(
@@ -85,14 +86,19 @@ export class GlanceEditor extends CustomEditor {
 		if (isThinkingCycle) this.onThinkingLevelMaybeChanged?.();
 	}
 
-	private renderStatus(width: number): string {
+	private currentStyles(config: GlanceConfig = this.getConfig()): ResolvedGlanceStyles {
+		return resolveBuiltInGlanceStyles(config.theme);
+	}
+
+	private renderStatus(width: number, styles: ResolvedGlanceStyles): string {
 		const state = this.getState();
 		const config = this.getConfig();
 		if (
 			this.cachedWidth === width &&
 			this.cachedVersion === state.version &&
 			this.cachedConfig === config &&
-			this.cachedProviderCount === state.providers.availableCount
+			this.cachedProviderCount === state.providers.availableCount &&
+			this.cachedStatusStyleKey === styles.cacheKey
 		) {
 			return this.cachedStatus;
 		}
@@ -101,18 +107,17 @@ export class GlanceEditor extends CustomEditor {
 		this.cachedVersion = state.version;
 		this.cachedConfig = config;
 		this.cachedProviderCount = state.providers.availableCount;
+		this.cachedStatusStyleKey = styles.cacheKey;
 		this.cachedStatus = status;
 		return status;
 	}
 
-	private border(text: string, isFocused: boolean): string {
-		const palette = PALETTES[this.getConfig().theme];
-		return fg(isFocused ? palette.border : palette.dim, text);
+	private border(text: string, isFocused: boolean, styles: ResolvedGlanceStyles): string {
+		return isFocused ? styles.border(text) : styles.dim(text);
 	}
 
-	private title(text: string, isFocused: boolean): string {
-		const palette = PALETTES[this.getConfig().theme];
-		return fg(isFocused ? palette.title : palette.dim, text);
+	private title(text: string, isFocused: boolean, styles: ResolvedGlanceStyles): string {
+		return isFocused ? styles.title(text) : styles.dim(text);
 	}
 
 	private topLeftPlan(width: number, innerWidth: number, original: string) {
@@ -133,31 +138,30 @@ export class GlanceEditor extends CustomEditor {
 		});
 	}
 
-	private dimStatus(status: string, isFocused: boolean, config: GlanceConfig): string {
+	private dimStatus(status: string, isFocused: boolean, styles: ResolvedGlanceStyles): string {
 		if (isFocused || !status) return status;
-		return fg(PALETTES[config.theme].dim, stripControlsPreservingSpaces(status));
+		return styles.dim(stripControlsPreservingSpaces(status));
 	}
 
-	private makeTopBorder(width: number, original: string, isFocused: boolean): string {
-		const config = this.getConfig();
+	private makeTopBorder(width: number, original: string, isFocused: boolean, styles: ResolvedGlanceStyles): string {
 		const { safeWidth, innerWidth } = surfaceMetrics(width);
 		const left = this.topLeftPlan(safeWidth, innerWidth, original);
 		const statusBudget = planSurfaceStatusBudget(innerWidth, left.width);
-		const status = this.dimStatus(this.renderStatus(statusBudget), isFocused, config);
+		const status = this.dimStatus(this.renderStatus(statusBudget, styles), isFocused, styles);
 		return renderSurfaceChunks(planSurfaceTopFrame({ width: safeWidth, left, status }).chunks, {
-			border: (text) => this.border(text, isFocused),
-			title: (text) => this.title(text, isFocused),
+			border: (text) => this.border(text, isFocused, styles),
+			title: (text) => this.title(text, isFocused, styles),
 			status: (text) => text,
 			text: (text) => text,
-			dim: (text) => this.border(text, isFocused),
+			dim: (text) => this.border(text, isFocused, styles),
 		});
 	}
 
-	private makeBottomBorder(width: number, original: string, isFocused: boolean): string {
+	private makeBottomBorder(width: number, original: string, isFocused: boolean, styles: ResolvedGlanceStyles): string {
 		return renderSurfaceChunks(
 			planSurfaceBottomFrame({ width, scrollIndicator: this.extractScrollIndicator(original, width) }).chunks,
 			{
-				border: (text) => this.border(text, isFocused),
+				border: (text) => this.border(text, isFocused, styles),
 			},
 		);
 	}
@@ -166,7 +170,7 @@ export class GlanceEditor extends CustomEditor {
 		return formatSurfaceScrollIndicator(stripBorderColor(line, this.borderColor), width);
 	}
 
-	private wrapContentLine(line: string, width: number, isFocused: boolean): string {
+	private wrapContentLine(line: string, width: number, isFocused: boolean, styles: ResolvedGlanceStyles): string {
 		return renderSurfaceChunks(
 			planSurfaceRow({
 				width,
@@ -176,7 +180,7 @@ export class GlanceEditor extends CustomEditor {
 				ellipsis: "",
 			}).chunks,
 			{
-				border: (text) => this.border(text, isFocused),
+				border: (text) => this.border(text, isFocused, styles),
 				content: (text) => text,
 				text: (text) => text,
 			},
@@ -189,6 +193,7 @@ export class GlanceEditor extends CustomEditor {
 			return super.render(width);
 		}
 
+		const styles = this.currentStyles(config);
 		const safeWidth = safeSurfaceWidth(width);
 		const renderWidth = Math.max(1, safeWidth - 2 - SURFACE_CONTENT_PADDING_X * 2);
 		const lines = super.render(renderWidth);
@@ -211,11 +216,11 @@ export class GlanceEditor extends CustomEditor {
 			contentLines.push("");
 		}
 
-		const output = [...renderSurfaceTopMargin(safeWidth, config.editor.topMarginRows), this.makeTopBorder(safeWidth, topOriginal, isFocused)];
+		const output = [...renderSurfaceTopMargin(safeWidth, config.editor.topMarginRows), this.makeTopBorder(safeWidth, topOriginal, isFocused, styles)];
 		for (const line of contentLines) {
-			output.push(this.wrapContentLine(line, safeWidth, isFocused));
+			output.push(this.wrapContentLine(line, safeWidth, isFocused, styles));
 		}
-		output.push(this.makeBottomBorder(safeWidth, bottomOriginal, isFocused));
+		output.push(this.makeBottomBorder(safeWidth, bottomOriginal, isFocused, styles));
 		for (const line of autocomplete) {
 			output.push(indentAutocompleteLine(line, safeWidth));
 		}

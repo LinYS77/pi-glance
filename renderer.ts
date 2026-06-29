@@ -1,5 +1,4 @@
 import { truncateToWidth } from "@earendil-works/pi-tui";
-import { PALETTES, fg } from "./palette.js";
 import {
 	planSurfaceBottomFrame,
 	planSurfaceRow,
@@ -11,32 +10,13 @@ import {
 	surfaceMetrics,
 } from "./surface-layout.js";
 import { renderGlanceLine } from "./status-line.js";
+import { resolveBuiltInGlanceStyles } from "./theme-adapter.js";
 import type { GlanceConfig, GlanceState } from "./types.js";
 
 interface InputSurfaceRenderOptions {
 	contentLines?: string[];
 	focused?: boolean;
 	showTitle?: boolean;
-}
-
-function borderColor(config: GlanceConfig, text: string): string {
-	const palette = PALETTES[config.theme];
-	return fg(palette.border, text);
-}
-
-function textColor(config: GlanceConfig, text: string): string {
-	const palette = PALETTES[config.theme];
-	return fg(palette.text, text);
-}
-
-function titleColor(config: GlanceConfig, text: string): string {
-	const palette = PALETTES[config.theme];
-	return fg(palette.title, text);
-}
-
-function dimColor(config: GlanceConfig, text: string): string {
-	const palette = PALETTES[config.theme];
-	return fg(palette.dim, text);
 }
 
 export function renderInputSurfacePreview(config: GlanceConfig, width: number, options: InputSurfaceRenderOptions = {}): string[] {
@@ -75,6 +55,7 @@ export function renderInputSurface(
 	options: InputSurfaceRenderOptions = {},
 ): string[] {
 	const { safeWidth, innerWidth } = surfaceMetrics(width);
+	const styles = resolveBuiltInGlanceStyles(config.theme);
 	const minRows = Math.max(2, Math.min(4, config.editor.minContentRows));
 	const contentLines = options.contentLines ?? [""];
 	const rows = Math.max(minRows, contentLines.length);
@@ -89,13 +70,13 @@ export function renderInputSurface(
 	const statusBudget = planSurfaceStatusBudget(innerWidth, title.width);
 	const status = renderGlanceLine(state, config, statusBudget, state.providers.availableCount);
 	const top = renderSurfaceChunks(planSurfaceTopFrame({ width: safeWidth, left: title, status }).chunks, {
-		border: (text) => borderColor(config, text),
-		title: (text) => titleColor(config, text),
+		border: styles.border,
+		title: styles.title,
 		status: (text) => text,
 		text: (text) => text,
-		dim: (text) => dimColor(config, text),
+		dim: styles.dim,
 	});
-	const lines = [...renderSurfaceTopMargin(safeWidth, config.editor.topMarginRows), truncateToWidth(top, safeWidth, borderColor(config, "…"))];
+	const lines = [...renderSurfaceTopMargin(safeWidth, config.editor.topMarginRows), truncateToWidth(top, safeWidth, styles.border("…"))];
 	for (let i = 0; i < rows; i++) {
 		const raw = contentLines[i] ?? "";
 		const focusedPrefix = i === 0 && options.focused;
@@ -103,21 +84,21 @@ export function renderInputSurface(
 			width: safeWidth,
 			text: raw,
 			prefix: focusedPrefix ? "› " : "  ",
-			ellipsis: dimColor(config, "…"),
+			ellipsis: styles.dim("…"),
 			prefixRole: focusedPrefix ? "dim" : "text",
 		});
 		lines.push(
 			renderSurfaceChunks(row.chunks, {
-				border: (text) => borderColor(config, text),
-				content: (text) => textColor(config, text),
-				dim: (text) => dimColor(config, text),
+				border: styles.border,
+				content: styles.text,
+				dim: styles.dim,
 				text: (text) => text,
 			}),
 		);
 	}
 	lines.push(
 		renderSurfaceChunks(planSurfaceBottomFrame({ width: safeWidth }).chunks, {
-			border: (text) => borderColor(config, text),
+			border: styles.border,
 		}),
 	);
 	return lines;

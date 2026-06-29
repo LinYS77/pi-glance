@@ -19,6 +19,7 @@ const STATE_MODULE = "state.ts";
 const SURFACE_LAYOUT_MODULE = "surface-layout.ts";
 const SETTINGS_CATALOG_MODULE = "settings-catalog.ts";
 const PANE_MODEL_MODULE = "pane-model.ts";
+const THEME_ADAPTER_MODULE = "theme-adapter.ts";
 const GUARD_SCRIPT = join("scripts", "test-boundaries.ts");
 const LEGACY_NAMESPACE = ["@mariozechner", ""].join("/");
 
@@ -170,6 +171,23 @@ function assertPaneModelSeamImports(files: SourceFile[]): void {
 	}
 }
 
+function assertThemeAdapterSeamImports(files: SourceFile[]): void {
+	const themeAdapter = files.find((candidate) => basename(candidate.path) === THEME_ADAPTER_MODULE);
+	assert.ok(themeAdapter, "theme-adapter.ts pure style adapter seam should exist");
+
+	const allowedLocalSpecifiers = new Set(["./palette.js", "./themes.js", "./types.js"]);
+	const forbiddenLocalModulePattern = /(?:^|\/)(?:runtime|runtime-snapshot|state|config|config-options|settings-catalog|pane|pane-model|editor|renderer|status-line|surface-layout|footer)(?:\.js)?$/;
+	const importPattern = /(?:import|export)\s+(?:type\s+)?(?:[^"'`]*?\s+from\s+)?["']([^"']+)["']/g;
+	for (const match of themeAdapter.text.matchAll(importPattern)) {
+		const specifier = match[1]!;
+		if (specifier.startsWith("@earendil-works/pi-")) fail(`${themeAdapter.path}: theme adapter must not import pi package ${specifier}`);
+		if (IO_NETWORK_PROCESS_IMPORTS.has(specifier)) fail(`${themeAdapter.path}: theme adapter must not import IO/network/process module ${specifier}`);
+		if (forbiddenLocalModulePattern.test(specifier)) fail(`${themeAdapter.path}: theme adapter must not import runtime/render/UI module ${specifier}`);
+		if (specifier.startsWith(".") && !allowedLocalSpecifiers.has(specifier)) fail(`${themeAdapter.path}: theme adapter may only import palette/theme/types helpers, not ${specifier}`);
+		if (!specifier.startsWith(".")) fail(`${themeAdapter.path}: theme adapter must not import external module ${specifier}`);
+	}
+}
+
 function assertRenderModulesHaveNoIo(files: SourceFile[]): void {
 	const importPattern = /(?:import|export)\s+(?:[^"'`]*?\s+from\s+)?["']([^"']+)["']/g;
 	const callPatterns: Array<[RegExp, string]> = [
@@ -247,7 +265,7 @@ function assertStatusLineSeamImports(files: SourceFile[]): void {
 	const statusLine = files.find((candidate) => basename(candidate.path) === STATUS_LINE_MODULE);
 	assert.ok(statusLine, "status-line.ts render seam should exist");
 
-	const allowedSpecifiers = new Set(["@earendil-works/pi-tui", "./palette.js", "./segment-registry.js", "./segments.js", "./types.js"]);
+	const allowedSpecifiers = new Set(["@earendil-works/pi-tui", "./palette.js", "./segment-registry.js", "./segments.js", "./theme-adapter.js", "./types.js"]);
 	const forbiddenLocalSpecifiers = new Set([
 		"./renderer.js",
 		"./surface-layout.js",
@@ -270,6 +288,69 @@ function assertStatusLineSeamImports(files: SourceFile[]): void {
 		if (forbiddenLocalSpecifiers.has(specifier)) fail(`${statusLine.path}: status-line must not import UI/runtime/state/config module ${specifier}`);
 		if (!allowedSpecifiers.has(specifier)) fail(`${statusLine.path}: status-line must not import ${specifier}`);
 	}
+	if (!statusLine.text.includes("resolveBuiltInGlanceStyles(config.theme)")) fail(`${statusLine.path}: status-line styling should resolve built-in styles through the adapter`);
+	if (/\bPALETTES\b|(^|[^.\w$])fg\s*\(/.test(statusLine.text)) fail(`${statusLine.path}: status-line must not style through direct palette/fg access after adapter wiring`);
+}
+
+function assertRendererSeamImports(files: SourceFile[]): void {
+	const renderer = files.find((candidate) => basename(candidate.path) === "renderer.ts");
+	assert.ok(renderer, "renderer.ts preview/static render seam should exist");
+
+	const allowedSpecifiers = new Set(["@earendil-works/pi-tui", "./surface-layout.js", "./status-line.js", "./theme-adapter.js", "./types.js"]);
+	const forbiddenLocalSpecifiers = new Set([
+		"./editor.js",
+		"./pane.js",
+		"./runtime.js",
+		"./runtime-snapshot.js",
+		"./state.js",
+		"./footer.js",
+		"./config.js",
+		"./settings-catalog.js",
+		"./palette.js",
+	]);
+	const importPattern = /(?:import|export)\s+(type\s+)?(?:[^"'`]*?\s+from\s+)?["']([^"']+)["']/g;
+	for (const match of renderer.text.matchAll(importPattern)) {
+		const specifier = match[2]!;
+		if (specifier.startsWith("@earendil-works/pi-") && specifier !== "@earendil-works/pi-tui") {
+			fail(`${renderer.path}: renderer may only import public pi-tui helpers, not ${specifier}`);
+		}
+		if (IO_NETWORK_PROCESS_IMPORTS.has(specifier)) fail(`${renderer.path}: renderer must not import IO/network/process module ${specifier}`);
+		if (forbiddenLocalSpecifiers.has(specifier)) fail(`${renderer.path}: renderer must not import UI/runtime/state/config/palette module ${specifier}`);
+		if (!allowedSpecifiers.has(specifier)) fail(`${renderer.path}: renderer must not import ${specifier}`);
+	}
+	if (!renderer.text.includes("resolveBuiltInGlanceStyles(config.theme)")) fail(`${renderer.path}: renderer styling should resolve built-in styles through the adapter`);
+	if (/\bPALETTES\b|(^|[^.\w$])fg\s*\(/.test(renderer.text)) fail(`${renderer.path}: renderer must not style through direct palette/fg access after adapter wiring`);
+}
+
+function assertEditorSeamImports(files: SourceFile[]): void {
+	const editor = files.find((candidate) => basename(candidate.path) === "editor.ts");
+	assert.ok(editor, "editor.ts live input surface seam should exist");
+
+	const allowedSpecifiers = new Set(["@earendil-works/pi-coding-agent", "@earendil-works/pi-tui", "./format.js", "./status-line.js", "./surface-layout.js", "./theme-adapter.js", "./types.js"]);
+	const forbiddenLocalSpecifiers = new Set([
+		"./renderer.js",
+		"./pane.js",
+		"./runtime.js",
+		"./runtime-snapshot.js",
+		"./state.js",
+		"./footer.js",
+		"./config.js",
+		"./settings-catalog.js",
+		"./palette.js",
+	]);
+	const importPattern = /(?:import|export)\s+(type\s+)?(?:[^"'`]*?\s+from\s+)?["']([^"']+)["']/g;
+	for (const match of editor.text.matchAll(importPattern)) {
+		const specifier = match[2]!;
+		if (specifier.startsWith("@earendil-works/pi-") && specifier !== "@earendil-works/pi-coding-agent" && specifier !== "@earendil-works/pi-tui") {
+			fail(`${editor.path}: editor may only import public pi coding-agent/pi-tui helpers, not ${specifier}`);
+		}
+		if (IO_NETWORK_PROCESS_IMPORTS.has(specifier)) fail(`${editor.path}: editor must not import IO/network/process module ${specifier}`);
+		if (forbiddenLocalSpecifiers.has(specifier)) fail(`${editor.path}: editor must not import UI/runtime/state/config/palette module ${specifier}`);
+		if (!allowedSpecifiers.has(specifier)) fail(`${editor.path}: editor must not import ${specifier}`);
+	}
+	if (!editor.text.includes("resolveBuiltInGlanceStyles(config.theme)")) fail(`${editor.path}: editor styling should resolve built-in styles through the adapter`);
+	if (!editor.text.includes("cachedStatusStyleKey") || !editor.text.includes("styles.cacheKey")) fail(`${editor.path}: editor status cache should include style cacheKey awareness`);
+	if (/\bPALETTES\b|(^|[^.\w$])fg\s*\(/.test(editor.text)) fail(`${editor.path}: editor must not style through direct palette/fg access after adapter wiring`);
 }
 
 function assertStatusLineConsumers(files: SourceFile[]): void {
@@ -370,10 +451,13 @@ assertNoCorePatching(sourceFiles);
 assertSurfaceLayoutSeamImports(sourceFiles);
 assertSettingsCatalogSeamImports(sourceFiles);
 assertPaneModelSeamImports(sourceFiles);
+assertThemeAdapterSeamImports(sourceFiles);
 assertRenderModulesHaveNoIo(sourceFiles);
 assertRuntimeSnapshotAdapterSeam(sourceFiles);
 assertRuntimePolicyPureModule(sourceFiles);
 assertStatusLineSeamImports(sourceFiles);
+assertRendererSeamImports(sourceFiles);
+assertEditorSeamImports(sourceFiles);
 assertStatusLineConsumers(sourceFiles);
 assertStateModulePiFree(sourceFiles);
 assertFooterSeams(sourceFiles);

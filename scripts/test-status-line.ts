@@ -1,12 +1,15 @@
 import { strict as assert } from "node:assert";
-import { visibleWidth } from "@earendil-works/pi-tui";
+import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import { defaultConfig } from "../config.js";
 import { stripControls } from "../format.js";
-import { PALETTES } from "../palette.js";
+import { PALETTES, fg } from "../palette.js";
+import { GLANCE_THEME_IDS } from "../themes.js";
 import { testState } from "./helpers.js";
 import type { GlanceConfig, GlanceState, SegmentId } from "../types.js";
 
 type RenderGlanceLine = (state: GlanceState, config: GlanceConfig, width: number, providerCount?: number) => string;
+
+const RESET = "\x1b[0m";
 
 interface StatusLineModule {
 	renderGlanceLine?: unknown;
@@ -75,6 +78,64 @@ function lastColorBefore(text: string, index: number): string | undefined {
 		last = match[0];
 	}
 	return last;
+}
+
+const singleSegmentParityCases: Array<{ id: SegmentId; state: GlanceState; text: string }> = [
+	{ id: "git", state: richState(), text: "git main *" },
+	{ id: "cost", state: richState(), text: "$ $0.042" },
+	{ id: "throughput", state: testState(), text: "spd ? tok/s" },
+	{ id: "context", state: richState(), text: "ctx 23% 47k/200k" },
+	{ id: "tokens", state: richState(), text: "tok ↑12k ↓3.1k R800 W20" },
+	{ id: "model", state: modelState(1), text: "ai GPT 5.5" },
+];
+
+for (const themeId of GLANCE_THEME_IDS) {
+	const palette = PALETTES[themeId];
+	for (const { id, state, text } of singleSegmentParityCases) {
+		const config = configWithSegments([id], (next) => {
+			next.theme = themeId;
+		});
+		assert.equal(
+			renderGlanceLine(state, config, 120, state.providers.availableCount),
+			`${fg(palette.segments[id].fg, text)}${RESET}`,
+			`${themeId}.${id} status segment should keep byte-equivalent legacy palette styling through adapter`,
+		);
+	}
+}
+
+for (const themeId of ["light", "dark", "high-contrast-light"] as const) {
+	const palette = PALETTES[themeId];
+	const joined = rawLine(
+		["context", "model"],
+		testState({ context: { tokens: 180_000, window: 200_000, percent: 90 }, model: { id: "gpt-5.5", provider: "openai", displayName: "GPT 5.5", thinking: "off" } }),
+		120,
+		1,
+		(config) => {
+			config.theme = themeId;
+			config.context.display = "percent";
+		},
+	);
+	assert.equal(
+		joined,
+		`${fg(palette.error, "ctx 90%")}${fg(palette.separator, " · ")}${fg(palette.segments.model.fg, "ai GPT 5.5")}${RESET}`,
+		`${themeId} context error + separator + model join should keep byte-equivalent legacy palette styling and reset behavior`,
+	);
+}
+
+for (const themeId of ["light", "dark"] as const) {
+	const palette = PALETTES[themeId];
+	const state = modelState(2);
+	const config = configWithSegments(["model"], (next) => {
+		next.theme = themeId;
+		next.display.showProvider = "always";
+	});
+	const width = 12;
+	const legacyLine = `${fg(palette.segments.model.fg, "ai openai/GPT 5.5")}${RESET}`;
+	assert.equal(
+		renderGlanceLine(state, config, width, 2),
+		truncateToWidth(legacyLine, width, fg(palette.dim, "…")),
+		`${themeId} truncation should keep byte-equivalent legacy dim ellipsis styling through adapter`,
+	);
 }
 
 {
@@ -156,6 +217,9 @@ function lastColorBefore(text: string, index: number): string | undefined {
 	assert.equal(lastColorBefore(normal, normal.indexOf("ctx")), fgSeq(palette.segments.context.fg), "context below warn threshold should use normal context color");
 	assert.equal(lastColorBefore(warn, warn.indexOf("ctx")), fgSeq(palette.warn), "context at warn threshold should use warning color");
 	assert.equal(lastColorBefore(error, error.indexOf("ctx")), fgSeq(palette.error), "context at error threshold should use error color");
+	assert.equal(normal, `${fg(palette.segments.context.fg, "ctx 74%")}${RESET}`, "context below warn threshold should preserve exact normal segment ANSI bytes");
+	assert.equal(warn, `${fg(palette.warn, "ctx 75%")}${RESET}`, "context at warn threshold should preserve exact warning ANSI bytes");
+	assert.equal(error, `${fg(palette.error, "ctx 90%")}${RESET}`, "context at error threshold should preserve exact error ANSI bytes");
 
 	const joined = rawLine(
 		["context", "model"],

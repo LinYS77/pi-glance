@@ -1,6 +1,7 @@
 import { strict as assert } from "node:assert";
 import { readFile } from "node:fs/promises";
-import { PALETTES } from "../palette.js";
+import { PALETTES, fg } from "../palette.js";
+import { resolveBuiltInGlanceStyles } from "../theme-adapter.js";
 import { GLANCE_THEME_CATALOG } from "../theme-catalog.js";
 import { GLANCE_THEMES, GLANCE_THEME_IDS, isGlanceThemeName, themeLabel } from "../themes.js";
 import type { GlancePalette, Rgb, SegmentId } from "../types.js";
@@ -2236,6 +2237,7 @@ const EXPECTED_PALETTES = {
 } as const;
 
 const PALETTE_KEYS = ["text", "dim", "warn", "error", "separator", "border", "title", "segments"] as const;
+const STYLE_ROLE_KEYS = ["text", "dim", "warn", "error", "separator", "border", "title"] as const;
 const SEGMENT_IDS = ["git", "model", "context", "tokens", "cost", "throughput"] as const satisfies readonly SegmentId[];
 const FORBIDDEN_THEME_CATALOG_LOCAL_IMPORTS = new Set([
 	"./palette",
@@ -2407,8 +2409,33 @@ function assertPalette(themeId: (typeof GLANCE_THEME_IDS)[number], theme: Glance
 	}
 }
 
+const styleCacheKeys = new Set<string>();
 for (const themeId of GLANCE_THEME_IDS) {
-	assertPalette(themeId, PALETTES[themeId]);
+	const palette: GlancePalette = PALETTES[themeId];
+	assertPalette(themeId, palette);
+
+	const styles = resolveBuiltInGlanceStyles(themeId);
+	const secondStyles = resolveBuiltInGlanceStyles(themeId);
+	assert.equal(styles.source, "glance", `${themeId} resolved style source should identify built-in pi-glance palette`);
+	assert.equal(styles.themeId, themeId, `${themeId} resolved style themeId should preserve selected built-in theme`);
+	assert.equal(styles.label, themeLabel(themeId), `${themeId} resolved style label should match theme metadata`);
+	assert.equal(styles.cacheKey, `glance:${themeId}`, `${themeId} resolved style cacheKey should be stable and theme-specific`);
+	assert.equal(secondStyles.cacheKey, styles.cacheKey, `${themeId} resolved style cacheKey should be stable across calls`);
+	styleCacheKeys.add(styles.cacheKey);
+
+	for (const role of STYLE_ROLE_KEYS) {
+		const text = `${themeId}:${role}:sample`;
+		assert.equal(styles[role](text), fg(palette[role], text), `${themeId}.${role} style should preserve current fg(PALETTES[theme].${role}, text) ANSI output`);
+	}
+	for (const segment of SEGMENT_IDS) {
+		const text = `${themeId}:${segment}:segment`;
+		assert.equal(
+			styles.segments[segment].fg(text),
+			fg(palette.segments[segment].fg, text),
+			`${themeId}.segments.${segment}.fg style should preserve current palette segment ANSI output`,
+		);
+	}
 }
+assert.equal(styleCacheKeys.size, GLANCE_THEME_IDS.length, "resolved style cache keys should be unique across all built-in themes");
 
 console.log("✓ theme config checks passed");

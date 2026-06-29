@@ -1,11 +1,23 @@
 import { strict as assert } from "node:assert";
-import { visibleWidth, type AutocompleteItem, type AutocompleteProvider, type EditorTheme, type TUI } from "@earendil-works/pi-tui";
+import { truncateToWidth, visibleWidth, type AutocompleteItem, type AutocompleteProvider, type EditorTheme, type TUI } from "@earendil-works/pi-tui";
 import type { KeybindingsManager } from "@earendil-works/pi-coding-agent";
 import { defaultConfig } from "../config.js";
 import { GlanceEditor } from "../editor.js";
+import { PALETTES, fg } from "../palette.js";
 import { renderInputSurface } from "../renderer.js";
+import { renderGlanceLine } from "../status-line.js";
+import {
+	planSurfaceBottomFrame,
+	planSurfaceRow,
+	planSurfaceStatusBudget,
+	planSurfaceTopFrame,
+	planWorkspaceTitle,
+	renderSurfaceChunks,
+	renderSurfaceTopMargin,
+	surfaceMetrics,
+} from "../surface-layout.js";
 import { testState } from "./helpers.js";
-import type { GlanceConfig, GlanceState, SegmentId } from "../types.js";
+import type { GlanceConfig, GlanceState, GlanceThemeName, SegmentId } from "../types.js";
 
 const ANSI_PATTERN = /\x1b(?:\][^\x07]*(?:\x07|\x1b\\)|_[^\x07]*(?:\x07|\x1b\\)|\[[0-?]*[ -/]*[@-~])/g;
 const WIDTHS = [56, 64, 72, 96, 120, 160];
@@ -143,10 +155,18 @@ function liveTop(state: GlanceState, config: GlanceConfig, width: number, focuse
 	return findTopBorder(editor.render(width).map(stripAnsi));
 }
 
-function liveFrame(state: GlanceState, config: GlanceConfig, width: number, focused: boolean, text: string): string[] {
+function liveRawFrame(state: GlanceState, config: GlanceConfig, width: number, focused: boolean, text: string): string[] {
 	const editor = makeLiveEditor(state, config, focused);
 	editor.setText(text);
-	return editor.render(width).map(stripAnsi);
+	return editor.render(width);
+}
+
+function liveFrame(state: GlanceState, config: GlanceConfig, width: number, focused: boolean, text: string): string[] {
+	return liveRawFrame(state, config, width, focused, text).map(stripAnsi);
+}
+
+function rawTopBorder(lines: readonly string[]): string {
+	return lines.find((line) => stripAnsi(line).startsWith("╭")) ?? "";
 }
 
 function liveBottom(state: GlanceState, config: GlanceConfig, width: number, focused: boolean): string {
@@ -170,6 +190,218 @@ function previewTop(state: GlanceState, config: GlanceConfig, width: number): st
 
 function previewBottom(state: GlanceState, config: GlanceConfig, width: number): string {
 	return previewFrame(state, config, width, ["Ask pi to improve the input surface..."], true).at(-1) ?? "";
+}
+
+interface LegacySurfaceOptions {
+	contentLines?: string[];
+	focused?: boolean;
+	showTitle?: boolean;
+}
+
+function legacyBorder(config: GlanceConfig, text: string): string {
+	return fg(PALETTES[config.theme].border, text);
+}
+
+function legacyText(config: GlanceConfig, text: string): string {
+	return fg(PALETTES[config.theme].text, text);
+}
+
+function legacyTitle(config: GlanceConfig, text: string): string {
+	return fg(PALETTES[config.theme].title, text);
+}
+
+function legacyDim(config: GlanceConfig, text: string): string {
+	return fg(PALETTES[config.theme].dim, text);
+}
+
+function legacyEditorBorder(config: GlanceConfig, focused: boolean, text: string): string {
+	return focused ? legacyBorder(config, text) : legacyDim(config, text);
+}
+
+function legacyEditorTitle(config: GlanceConfig, focused: boolean, text: string): string {
+	return focused ? legacyTitle(config, text) : legacyDim(config, text);
+}
+
+function stripStatusForLegacyDim(status: string): string {
+	return stripAnsi(status).replace(/[\r\n\t]/g, " ");
+}
+
+function renderLegacyStyledEditorTop(state: GlanceState, config: GlanceConfig, width: number, focused: boolean): string {
+	const { safeWidth, innerWidth } = surfaceMetrics(width);
+	const title = planWorkspaceTitle({
+		workspacePath: state.workspace.path,
+		workspaceName: state.workspace.name,
+		mode: config.display.workspaceLabel,
+		innerWidth,
+		surfaceWidth: safeWidth,
+	});
+	const statusBudget = planSurfaceStatusBudget(innerWidth, title.width);
+	const rawStatus = renderGlanceLine(state, config, statusBudget, state.providers.availableCount);
+	const status = focused || !rawStatus ? rawStatus : legacyDim(config, stripStatusForLegacyDim(rawStatus));
+	return renderSurfaceChunks(planSurfaceTopFrame({ width: safeWidth, left: title, status }).chunks, {
+		border: (text) => legacyEditorBorder(config, focused, text),
+		title: (text) => legacyEditorTitle(config, focused, text),
+		status: (text) => text,
+		text: (text) => text,
+		dim: (text) => legacyEditorBorder(config, focused, text),
+	});
+}
+
+function renderLegacyStyledEditorBottom(config: GlanceConfig, width: number, focused: boolean): string {
+	return renderSurfaceChunks(planSurfaceBottomFrame({ width }).chunks, {
+		border: (text) => legacyEditorBorder(config, focused, text),
+	});
+}
+
+function renderLegacyStyledInputSurface(state: GlanceState, config: GlanceConfig, width: number, options: LegacySurfaceOptions = {}): string[] {
+	const { safeWidth, innerWidth } = surfaceMetrics(width);
+	const minRows = Math.max(2, Math.min(4, config.editor.minContentRows));
+	const contentLines = options.contentLines ?? [""];
+	const rows = Math.max(minRows, contentLines.length);
+	const title = planWorkspaceTitle({
+		workspacePath: state.workspace.path,
+		workspaceName: state.workspace.name,
+		mode: config.display.workspaceLabel,
+		innerWidth,
+		surfaceWidth: safeWidth,
+		showTitle: options.showTitle,
+	});
+	const statusBudget = planSurfaceStatusBudget(innerWidth, title.width);
+	const status = renderGlanceLine(state, config, statusBudget, state.providers.availableCount);
+	const top = renderSurfaceChunks(planSurfaceTopFrame({ width: safeWidth, left: title, status }).chunks, {
+		border: (text) => legacyBorder(config, text),
+		title: (text) => legacyTitle(config, text),
+		status: (text) => text,
+		text: (text) => text,
+		dim: (text) => legacyDim(config, text),
+	});
+	const lines = [...renderSurfaceTopMargin(safeWidth, config.editor.topMarginRows), truncateToWidth(top, safeWidth, legacyBorder(config, "…"))];
+	for (let i = 0; i < rows; i++) {
+		const raw = contentLines[i] ?? "";
+		const focusedPrefix = i === 0 && options.focused;
+		const row = planSurfaceRow({
+			width: safeWidth,
+			text: raw,
+			prefix: focusedPrefix ? "› " : "  ",
+			ellipsis: legacyDim(config, "…"),
+			prefixRole: focusedPrefix ? "dim" : "text",
+		});
+		lines.push(
+			renderSurfaceChunks(row.chunks, {
+				border: (text) => legacyBorder(config, text),
+				content: (text) => legacyText(config, text),
+				dim: (text) => legacyDim(config, text),
+				text: (text) => text,
+			}),
+		);
+	}
+	lines.push(
+		renderSurfaceChunks(planSurfaceBottomFrame({ width: safeWidth }).chunks, {
+			border: (text) => legacyBorder(config, text),
+		}),
+	);
+	return lines;
+}
+
+const RENDERER_STYLE_PARITY_THEMES = ["light", "dark", "high-contrast-light"] as const satisfies readonly GlanceThemeName[];
+
+for (const themeId of RENDERER_STYLE_PARITY_THEMES) {
+	for (const width of [32, 56, 120] as const) {
+		for (const focused of [true, false] as const) {
+			const config = defaultConfig();
+			config.theme = themeId;
+			config.editor.topMarginRows = width === 32 ? 0 : 1;
+			config.editor.minContentRows = 2;
+			onlySegments(config, ["context", "model"]);
+			const options = {
+				contentLines: ["short", "Ask pi to improve the input surface with a long prompt that must be clipped"],
+				focused,
+				showTitle: width !== 32,
+			};
+			assert.deepEqual(
+				renderInputSurface(dirtyState(), config, width, options),
+				renderLegacyStyledInputSurface(dirtyState(), config, width, options),
+				`${themeId} renderer adapter output should match legacy PALETTES/fg bytes at width ${width} (${focused ? "focused" : "unfocused"})`,
+			);
+		}
+	}
+}
+
+{
+	const config = defaultConfig();
+	config.theme = "dark";
+	config.editor.topMarginRows = 0;
+	config.editor.minContentRows = 2;
+	onlySegments(config, []);
+	const palette = PALETTES[config.theme];
+	const frame = renderInputSurface(dirtyState(), config, 56, {
+		contentLines: ["short", "Ask pi to improve the input surface with a long prompt that must be clipped"],
+		focused: true,
+	});
+	const rendered = frame.join("\n");
+	assert.ok(rendered.includes(fg(palette.border, "╭")), "renderer adapter should preserve legacy border styling bytes");
+	assert.ok(rendered.includes(fg(palette.title, " 07_pi-glance ")), "renderer adapter should preserve legacy title styling bytes");
+	assert.ok(rendered.includes(fg(palette.dim, "› ")), "renderer adapter should preserve legacy focused-prefix dim styling bytes");
+	assert.ok(rendered.includes(fg(palette.text, "short")), "renderer adapter should preserve legacy content text styling bytes");
+	assert.ok(rendered.includes(fg(palette.dim, "…")), "renderer adapter should preserve legacy dim ellipsis bytes");
+}
+
+const EDITOR_STYLE_PARITY_THEMES = ["light", "dark", "high-contrast-light"] as const satisfies readonly GlanceThemeName[];
+const editorStyleState = testState({
+	workspace: { name: "07_pi-glance", path: "/Users/winnie/00_project/07_pi-glance" },
+	providers: { availableCount: 1 },
+	model: { id: "gpt-5.5", provider: "openai", displayName: "GPT 5.5", thinking: "off" },
+});
+
+for (const themeId of EDITOR_STYLE_PARITY_THEMES) {
+	for (const width of [56, 120] as const) {
+		for (const focused of [true, false] as const) {
+			const config = defaultConfig();
+			config.theme = themeId;
+			config.editor.topMarginRows = 0;
+			config.editor.minContentRows = 2;
+			onlySegments(config, ["model"]);
+			const frame = liveRawFrame(editorStyleState, config, width, focused, "short");
+			const top = rawTopBorder(frame);
+			const bottom = frame.at(-1) ?? "";
+			assert.equal(
+				top,
+				renderLegacyStyledEditorTop(editorStyleState, config, width, focused),
+				`${themeId} live editor top border should preserve legacy PALETTES/fg bytes at width ${width} (${focused ? "focused" : "unfocused"})`,
+			);
+			assert.equal(
+				bottom,
+				renderLegacyStyledEditorBottom(config, width, focused),
+				`${themeId} live editor bottom border should preserve legacy PALETTES/fg bytes at width ${width} (${focused ? "focused" : "unfocused"})`,
+			);
+			const rendered = frame.join("\n");
+			const palette = PALETTES[themeId];
+			assert.ok(rendered.includes(fg(focused ? palette.border : palette.dim, "│")), `${themeId} live editor side border should keep legacy ${focused ? "border" : "dim"} bytes`);
+			if (focused) {
+				assert.ok(top.includes(fg(palette.title, " 07_pi-glance ")), `${themeId} focused title should keep legacy title bytes`);
+				assert.ok(top.includes(fg(palette.segments.model.fg, "ai GPT 5.5")), `${themeId} focused status should keep legacy model segment bytes`);
+			} else {
+				assert.ok(top.includes(fg(palette.dim, " 07_pi-glance ")), `${themeId} unfocused title should keep legacy dim bytes`);
+				assert.ok(top.includes(fg(palette.dim, "ai GPT 5.5")), `${themeId} unfocused status should keep legacy dim-status bytes`);
+			}
+		}
+	}
+}
+
+{
+	const state = editorStyleState;
+	const config = defaultConfig();
+	config.theme = "light";
+	config.editor.topMarginRows = 0;
+	onlySegments(config, ["model"]);
+	const editor = makeLiveEditor(state, config, true);
+	editor.setText("cache check");
+	const lightTop = rawTopBorder(editor.render(120));
+	assert.ok(lightTop.includes(fg(PALETTES.light.segments.model.fg, "ai GPT 5.5")), "initial live status should use light model bytes");
+	config.theme = "dark";
+	const darkTop = rawTopBorder(editor.render(120));
+	assert.ok(darkTop.includes(fg(PALETTES.dark.segments.model.fg, "ai GPT 5.5")), "live status cache should invalidate when style cacheKey changes on the same config object");
+	assert.equal(darkTop.includes(fg(PALETTES.light.segments.model.fg, "ai GPT 5.5")), false, "live status cache should not reuse stale light ANSI after theme/cacheKey change");
 }
 
 interface Scenario {
