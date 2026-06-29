@@ -5,7 +5,7 @@ import { GitRefresher } from "./git.js";
 import { readPiUiTheme, resolveRuntimeRenderStyleContext } from "./render-style-context.js";
 import { runtimePlanFor, type RuntimeEventFacts, type RuntimeEventKind, type RuntimeRefreshPlan } from "./runtime-policy.js";
 import type { GlanceRenderStyleContext } from "./theme-adapter.js";
-import { stateInputsFromContext, thinkingInputsFromContext } from "./runtime-snapshot.js";
+import { lifecycleInputsFromContext, stateInputsFromContext, thinkingInputsFromContext } from "./runtime-snapshot.js";
 import { clearContextUsage, clearCurrentRunThroughput, createInitialState, refreshContextUsage, refreshModel, refreshWorkspace, setCurrentRunThroughput, setGitSnapshot, setLastTurnThroughput, setProviderCount, setUsageTotals } from "./state.js";
 import { ThroughputRunTracker, type ThroughputRunStateIntent } from "./throughput-run-tracker.js";
 import type { GitSnapshot, GlanceConfig, GlanceState } from "./types.js";
@@ -107,6 +107,7 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 	let gitRefresher: RuntimeGitRefresher | undefined;
 	let requestRender: (() => void) | undefined;
 	let uiGeneration = 0;
+	let unknownContextAfterLatestCompaction = false;
 	const throughputTracker = new ThroughputRunTracker();
 	const nowMs = adapters.nowMs ?? Date.now;
 
@@ -120,9 +121,15 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 		return config;
 	}
 
+	function readStateInputs(ctx: ExtensionContext) {
+		const inputs = stateInputsFromContext(ctx, adapters.getThinkingLevel());
+		unknownContextAfterLatestCompaction = inputs.unknownContextAfterLatestCompaction;
+		return inputs;
+	}
+
 	function ensureState(ctx: ExtensionContext): GlanceState {
 		if (!state) {
-			state = createInitialState(stateInputsFromContext(ctx, adapters.getThinkingLevel()), getConfig());
+			state = createInitialState(readStateInputs(ctx), getConfig());
 		}
 		return state;
 	}
@@ -166,8 +173,19 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 			if (plan.refreshModel) refreshModel(state, inputs, getConfig());
 			return;
 		}
+		if (plan.snapshot === "lifecycle") {
+			const inputs = lifecycleInputsFromContext(ctx, adapters.getThinkingLevel());
+			const workspaceChanged = plan.refreshWorkspace ? refreshWorkspace(state, inputs) : false;
+			setProviderCount(state, inputs.availableProviderCount);
+			if (plan.refreshModel) refreshModel(state, inputs, getConfig());
+			if (plan.context === "refresh") refreshContextUsage(state, { ...inputs, unknownContextAfterLatestCompaction });
+			else if (plan.context === "clear") clearContextUsage(state, inputs);
+			if (plan.git === "immediate") scheduleGitRefresh(true);
+			else if (plan.git === "onWorkspaceChange" && workspaceChanged) scheduleGitRefresh(true);
+			return;
+		}
 
-		const inputs = stateInputsFromContext(ctx, adapters.getThinkingLevel());
+		const inputs = readStateInputs(ctx);
 		const workspaceChanged = plan.refreshWorkspace ? refreshWorkspace(state, inputs) : false;
 		setProviderCount(state, inputs.availableProviderCount);
 		if (plan.refreshModel) refreshModel(state, inputs, getConfig());
@@ -283,7 +301,7 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 			sessionStart: (_event, ctx) => {
 				throughputTracker.reset();
 				config = adapters.loadConfigSync();
-				state = createInitialState(stateInputsFromContext(ctx, adapters.getThinkingLevel()), config);
+				state = createInitialState(readStateInputs(ctx), config);
 				installInputSurface(ctx);
 			},
 			sessionShutdown: async (_event, ctx) => {

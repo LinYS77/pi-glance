@@ -343,14 +343,28 @@ function createRuntimeHarness(options: RuntimeHarnessOptions = {}): RuntimeHarne
 }
 
 {
+	const config = defaultConfig();
+	config.model.customNames["claude-opus-4"] = "Opus Custom";
+	const git = createGitHarness();
 	const test = createContext();
-	const harness = createRuntimeHarness({ loadConfigSyncConfig: defaultConfig(), showPaneResults: [{ action: "cancel" }] });
+	const harness = createRuntimeHarness({ loadConfigSyncConfig: config, showPaneResults: [{ action: "cancel" }], git });
 
 	harness.runtime.events.sessionStart({}, test.ctx);
+	const entryBaseline = test.getEntryReads();
+	const branchBaseline = test.getBranchReads();
+	assert.ok(entryBaseline > 0, "model_select counter baseline should include the session_start entries read");
+	assert.ok(branchBaseline > 0, "model_select counter baseline should include the session_start branch read");
+	const renderBaseline = test.getRenderRequests();
+	const scheduleBaseline = git.schedules.length;
 	test.setAvailableProviders(["openai", "anthropic", "openai", "local"]);
 	test.setModel({ id: "claude-opus-4-20250514", provider: "anthropic", contextWindow: 500_000 });
 	test.setContextUsage({ tokens: 123_456, contextWindow: 500_000, percent: 24.6912 });
 	await harness.runtime.events.modelSelect({}, test.ctx as ExtensionContext);
+
+	assert.equal(test.getEntryReads(), entryBaseline, "model_select should not scan session entries after the session_start baseline");
+	assert.equal(test.getBranchReads(), branchBaseline, "model_select should not scan session branch after the session_start baseline");
+	assert.deepEqual(git.schedules.slice(scheduleBaseline), [true], "model_select should preserve immediate git refresh behavior");
+	assert.ok(test.getRenderRequests() > renderBaseline, "model_select should still request a render");
 	await harness.runtime.commands.openPane("", test.ctx);
 
 	const previewState = harness.showPanePreviewStates.at(-1);
@@ -358,9 +372,12 @@ function createRuntimeHarness(options: RuntimeHarnessOptions = {}): RuntimeHarne
 	assert.equal(previewState.providers.availableCount, 3, "preview state should refresh unique provider count after model_select");
 	assert.equal(previewState.model.id, "claude-opus-4-20250514", "preview state should refresh model id after model_select");
 	assert.equal(previewState.model.provider, "anthropic", "preview state should refresh model provider after model_select");
+	assert.equal(previewState.model.displayName, "Opus Custom", "preview state should refresh configured model display name after model_select");
 	assert.equal(previewState.context.tokens, 123_456, "preview state should refresh context tokens after model_select");
 	assert.equal(previewState.context.window, 500_000, "preview state should refresh context window after model_select");
 	assert.equal(previewState.context.percent, 24.6912, "preview state should refresh context percent after model_select");
+	assert.equal(test.getEntryReads(), entryBaseline, "opening /glance after model_select should not hide a session entries scan");
+	assert.equal(test.getBranchReads(), branchBaseline, "opening /glance after model_select should not hide a session branch scan");
 }
 
 {
@@ -479,10 +496,24 @@ function createRuntimeHarness(options: RuntimeHarnessOptions = {}): RuntimeHarne
 	const harness = createRuntimeHarness({ loadConfigSyncConfig: defaultConfig(), showPaneResults: [{ action: "cancel" }], git });
 
 	harness.runtime.events.sessionStart({}, test.ctx);
+	const entryBaseline = test.getEntryReads();
+	const branchBaseline = test.getBranchReads();
+	assert.ok(entryBaseline > 0, "turn_start counter baseline should include the session_start entries read");
+	assert.ok(branchBaseline > 0, "turn_start counter baseline should include the session_start branch read");
 	const scheduleBaseline = git.schedules.length;
 	test.setCwd("/workspace/fresh-repo");
+	test.setAvailableProviders(["openai", "anthropic", "openai"]);
+	test.setModel({ id: "claude-sonnet-4-20250514", provider: "anthropic", contextWindow: 400_000 });
+	test.setContextUsage({ tokens: 44_000, contextWindow: 400_000, percent: 11 });
 	await harness.runtime.events.turnStart({}, test.ctx as ExtensionContext);
-	assert.ok(git.schedules.length > scheduleBaseline, "workspace-changing turn_start should schedule a git refresh");
+
+	assert.equal(test.getEntryReads(), entryBaseline, "turn_start should not scan session entries after the session_start baseline");
+	assert.equal(test.getBranchReads(), branchBaseline, "turn_start should not scan session branch after the session_start baseline");
+	assert.deepEqual(git.schedules.slice(scheduleBaseline), [true], "workspace-changing turn_start should schedule one immediate git refresh for the new cwd");
+	assert.equal(git.options?.getCwd(), "/workspace/fresh-repo", "git refresher getCwd should expose the refreshed turn_start workspace");
+	const renderAfterTurnStart = test.getRenderRequests();
+	git.options?.onSnapshot("/repo", gitSnapshot("stale-old-workspace"));
+	assert.equal(test.getRenderRequests(), renderAfterTurnStart, "turn_start should keep stale old-cwd git snapshots ignored after workspace change");
 	git.options?.onSnapshot("/workspace/fresh-repo", gitSnapshot("fresh-preview-branch"));
 	await harness.runtime.commands.openPane("", test.ctx);
 
@@ -490,8 +521,83 @@ function createRuntimeHarness(options: RuntimeHarnessOptions = {}): RuntimeHarne
 	assert.ok(previewState, "workspace/git smoke test should open /glance with preview state");
 	assert.equal(previewState.workspace.path, "/workspace/fresh-repo", "preview state should refresh workspace path after turn_start");
 	assert.equal(previewState.workspace.name, "fresh-repo", "preview state should refresh workspace display name after turn_start");
+	assert.equal(previewState.providers.availableCount, 2, "turn_start should refresh provider count through the lifecycle path");
+	assert.equal(previewState.model.id, "claude-sonnet-4-20250514", "turn_start should refresh model id through the lifecycle path");
+	assert.equal(previewState.model.provider, "anthropic", "turn_start should refresh model provider through the lifecycle path");
+	assert.equal(previewState.context.tokens, 44_000, "turn_start should refresh context tokens through the lifecycle path");
+	assert.equal(previewState.context.window, 400_000, "turn_start should refresh context window through the lifecycle path");
+	assert.equal(previewState.context.percent, 11, "turn_start should refresh context percent through the lifecycle path");
 	assert.equal(previewState.git.branch, "fresh-preview-branch", "preview state should include the latest matching git snapshot after workspace refresh");
 	assert.equal(previewState.git.status, "dirty", "preview state should include git snapshot status after workspace refresh");
+	assert.equal(test.getEntryReads(), entryBaseline, "opening /glance after turn_start should not hide a session entries scan");
+	assert.equal(test.getBranchReads(), branchBaseline, "opening /glance after turn_start should not hide a session branch scan");
+}
+
+{
+	const git = createGitHarness();
+	const test = createContext({
+		cwd: "/repo",
+		availableProviders: ["openai"],
+		model: { id: "initial-tool-model", provider: "openai", contextWindow: 100_000 },
+		contextUsage: { tokens: 100, contextWindow: 100_000, percent: 0.1 },
+	});
+	const harness = createRuntimeHarness({ loadConfigSyncConfig: defaultConfig(), showPaneResults: [{ action: "cancel" }], git });
+
+	harness.runtime.events.sessionStart({}, test.ctx);
+	const entryBaseline = test.getEntryReads();
+	const branchBaseline = test.getBranchReads();
+	assert.ok(entryBaseline > 0, "tool_execution_end counter baseline should include the session_start entries read");
+	assert.ok(branchBaseline > 0, "tool_execution_end counter baseline should include the session_start branch read");
+	const scheduleBaseline = git.schedules.length;
+	const renderBaseline = test.getRenderRequests();
+	test.setCwd("/workspace/tool-repo");
+	test.setAvailableProviders(["openai", "anthropic", "local", "anthropic"]);
+	test.setModel({ id: "changed-tool-model", provider: "anthropic", contextWindow: 300_000 });
+	test.setContextUsage({ tokens: 12_345, contextWindow: 300_000, percent: 4.115 });
+	await harness.runtime.events.toolExecutionEnd({}, test.ctx as ExtensionContext);
+
+	assert.equal(test.getEntryReads(), entryBaseline, "tool_execution_end should not scan session entries after the session_start baseline");
+	assert.equal(test.getBranchReads(), branchBaseline, "tool_execution_end should not scan session branch after the session_start baseline");
+	assert.deepEqual(git.schedules.slice(scheduleBaseline), [true], "tool_execution_end should preserve immediate git refresh behavior");
+	assert.ok(test.getRenderRequests() > renderBaseline, "tool_execution_end should still request a render");
+	assert.equal(git.options?.getCwd(), "/workspace/tool-repo", "git refresher getCwd should expose the refreshed tool_execution_end workspace");
+	const renderAfterToolEnd = test.getRenderRequests();
+	git.options?.onSnapshot("/repo", gitSnapshot("stale-tool-old-workspace"));
+	assert.equal(test.getRenderRequests(), renderAfterToolEnd, "tool_execution_end should keep stale old-cwd git snapshots ignored after workspace change");
+	git.options?.onSnapshot("/workspace/tool-repo", gitSnapshot("tool-preview-branch"));
+	await harness.runtime.commands.openPane("", test.ctx);
+
+	const previewState = harness.showPanePreviewStates.at(-1);
+	assert.ok(previewState, "tool_execution_end smoke test should open /glance with preview state");
+	assert.equal(previewState.workspace.path, "/workspace/tool-repo", "tool_execution_end should refresh workspace path through the lifecycle path");
+	assert.equal(previewState.workspace.name, "tool-repo", "tool_execution_end should refresh workspace display name through the lifecycle path");
+	assert.equal(previewState.providers.availableCount, 3, "tool_execution_end should refresh provider count through the lifecycle path");
+	assert.equal(previewState.model.id, "initial-tool-model", "tool_execution_end should preserve existing model id because the event does not refresh model state");
+	assert.equal(previewState.model.provider, "openai", "tool_execution_end should preserve existing model provider because the event does not refresh model state");
+	assert.equal(previewState.context.tokens, 12_345, "tool_execution_end should refresh context tokens through the lifecycle path");
+	assert.equal(previewState.context.window, 300_000, "tool_execution_end should refresh context window through the lifecycle path");
+	assert.equal(previewState.context.percent, 4.115, "tool_execution_end should refresh context percent through the lifecycle path");
+	assert.equal(previewState.git.branch, "tool-preview-branch", "tool_execution_end should accept matching new-cwd git snapshots");
+	assert.equal(test.getEntryReads(), entryBaseline, "opening /glance after tool_execution_end should not hide a session entries scan");
+	assert.equal(test.getBranchReads(), branchBaseline, "opening /glance after tool_execution_end should not hide a session branch scan");
+}
+
+{
+	const git = createGitHarness();
+	const test = createContext();
+	const harness = createRuntimeHarness({ loadConfigSyncConfig: defaultConfig(), git });
+
+	harness.runtime.events.sessionStart({}, test.ctx);
+	const entryBaseline = test.getEntryReads();
+	const branchBaseline = test.getBranchReads();
+	await harness.runtime.events.sessionTree({}, test.ctx as ExtensionContext);
+	assert.ok(test.getEntryReads() > entryBaseline, "session_tree should remain a structural full entries scan");
+	assert.ok(test.getBranchReads() > branchBaseline, "session_tree should remain a structural full branch scan");
+	const entryAfterTree = test.getEntryReads();
+	const branchAfterTree = test.getBranchReads();
+	await harness.runtime.events.sessionCompact({}, test.ctx as ExtensionContext);
+	assert.ok(test.getEntryReads() > entryAfterTree, "session_compact should remain a structural full entries scan");
+	assert.ok(test.getBranchReads() > branchAfterTree, "session_compact should remain a structural full branch scan");
 }
 
 {

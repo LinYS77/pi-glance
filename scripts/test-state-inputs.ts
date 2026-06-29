@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { hasUnknownContextAfterLatestCompaction, stateInputsFromContext, thinkingInputsFromContext, usageTotalsFromEntries, type StateSessionEntry } from "../runtime-snapshot.js";
+import { hasUnknownContextAfterLatestCompaction, lifecycleInputsFromContext, stateInputsFromContext, thinkingInputsFromContext, usageTotalsFromEntries, type StateSessionEntry } from "../runtime-snapshot.js";
 
 function message(role: string, options: { usage?: Record<string, unknown>; stopReason?: string } = {}): StateSessionEntry {
 	return {
@@ -113,6 +113,38 @@ assert.deepEqual(
 		availableProviderCount: 2,
 	},
 	"thinkingInputsFromContext should read only cheap model/thinking/provider facts",
+);
+
+const narrowLifecycleInputs = lifecycleInputsFromContext(
+	{
+		cwd: "/fallback-lifecycle",
+		model: { id: "lifecycle-model", provider: "lifecycle-provider", contextWindow: 456000 },
+		modelRegistry: {
+			getAvailable: () => [{ provider: "lifecycle-provider" }, { provider: "other-provider" }, { provider: "" }],
+		},
+		getContextUsage: () => ({ tokens: 456, contextWindow: 456000, percent: 0.1 }),
+		sessionManager: {
+			getCwd: () => "/workspace-lifecycle",
+			getEntries: () => {
+				throw new Error("lifecycle inputs should not scan session entries");
+			},
+			getBranch: () => {
+				throw new Error("lifecycle inputs should not scan session branch");
+			},
+		},
+	} as unknown as ExtensionContext,
+	"medium",
+);
+assert.deepEqual(
+	narrowLifecycleInputs,
+	{
+		cwd: "/workspace-lifecycle",
+		model: { id: "lifecycle-model", provider: "lifecycle-provider", contextWindow: 456000 },
+		thinkingLevel: "medium",
+		availableProviderCount: 2,
+		contextUsage: { tokens: 456, contextWindow: 456000, percent: 0.1 },
+	},
+	"lifecycleInputsFromContext should read workspace/model/thinking/provider/context without entries or branch scans",
 );
 
 assert.deepEqual(

@@ -29,6 +29,11 @@ export interface StateThinkingInputs {
 	availableProviderCount: number;
 }
 
+export interface StateLifecycleInputs extends StateThinkingInputs {
+	cwd: string;
+	contextUsage?: StateContextUsageInputs;
+}
+
 interface StateMessageCostInputs {
 	total?: number;
 	input?: number;
@@ -135,6 +140,17 @@ function modelInputsFromContext(ctx: ExtensionContext): StateModelInputs | undef
 		: undefined;
 }
 
+function contextUsageInputsFromContext(ctx: ExtensionContext): StateContextUsageInputs | undefined {
+	const contextUsage = ctx.getContextUsage();
+	return contextUsage
+		? {
+				tokens: contextUsage.tokens,
+				contextWindow: contextUsage.contextWindow,
+				percent: contextUsage.percent,
+			}
+		: undefined;
+}
+
 export function thinkingInputsFromContext(ctx: ExtensionContext, thinkingLevel: string): StateThinkingInputs {
 	return {
 		model: modelInputsFromContext(ctx),
@@ -143,22 +159,18 @@ export function thinkingInputsFromContext(ctx: ExtensionContext, thinkingLevel: 
 	};
 }
 
-export function stateInputsFromContext(ctx: ExtensionContext, thinkingLevel: string): StateInputs {
-	const cwd = ctx.sessionManager.getCwd() || ctx.cwd;
-	const contextUsage = ctx.getContextUsage();
+export function lifecycleInputsFromContext(ctx: ExtensionContext, thinkingLevel: string): StateLifecycleInputs {
 	return {
-		cwd,
-		model: modelInputsFromContext(ctx),
-		thinkingLevel,
-		contextUsage: contextUsage
-			? {
-					tokens: contextUsage.tokens,
-					contextWindow: contextUsage.contextWindow,
-					percent: contextUsage.percent,
-				}
-			: undefined,
+		cwd: ctx.sessionManager.getCwd() || ctx.cwd,
+		...thinkingInputsFromContext(ctx, thinkingLevel),
+		contextUsage: contextUsageInputsFromContext(ctx),
+	};
+}
+
+export function stateInputsFromContext(ctx: ExtensionContext, thinkingLevel: string): StateInputs {
+	return {
+		...lifecycleInputsFromContext(ctx, thinkingLevel),
 		usage: usageTotalsFromEntries(ctx.sessionManager.getEntries()),
-		availableProviderCount: availableProviderCountFromContext(ctx),
 		unknownContextAfterLatestCompaction: hasUnknownContextAfterLatestCompaction(ctx.sessionManager.getBranch()),
 	};
 }

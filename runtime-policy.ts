@@ -11,7 +11,7 @@ export type RuntimeEventKind =
 	| "config_save_success"
 	| "editor_thinking_cycle";
 
-export type RuntimeSnapshotMode = "none" | "reliable" | "thinking" | "compact";
+export type RuntimeSnapshotMode = "none" | "reliable" | "lifecycle" | "thinking" | "compact";
 export type RuntimeGitRefreshMode = "never" | "onWorkspaceChange" | "immediate";
 export type RuntimeContextPlan = "none" | "refresh" | "clear";
 
@@ -43,6 +43,30 @@ const ENSURE_ONLY_PLAN: RuntimeRefreshPlan = {
 	render: false,
 };
 
+const LIFECYCLE_WITH_MODEL_IMMEDIATE_PLAN: RuntimeRefreshPlan = {
+	ensureConfig: true,
+	ensureState: true,
+	snapshot: "lifecycle",
+	refreshWorkspace: true,
+	refreshModel: true,
+	refreshUsageTotals: false,
+	context: "refresh",
+	git: "immediate",
+	render: true,
+};
+
+const LIFECYCLE_WITH_MODEL_ON_WORKSPACE_CHANGE_PLAN: RuntimeRefreshPlan = {
+	ensureConfig: true,
+	ensureState: true,
+	snapshot: "lifecycle",
+	refreshWorkspace: true,
+	refreshModel: true,
+	refreshUsageTotals: false,
+	context: "refresh",
+	git: "onWorkspaceChange",
+	render: true,
+};
+
 const RELIABLE_WITH_MODEL_IMMEDIATE_PLAN: RuntimeRefreshPlan = {
 	ensureConfig: true,
 	ensureState: true,
@@ -52,18 +76,6 @@ const RELIABLE_WITH_MODEL_IMMEDIATE_PLAN: RuntimeRefreshPlan = {
 	refreshUsageTotals: true,
 	context: "refresh",
 	git: "immediate",
-	render: true,
-};
-
-const RELIABLE_WITH_MODEL_ON_WORKSPACE_CHANGE_PLAN: RuntimeRefreshPlan = {
-	ensureConfig: true,
-	ensureState: true,
-	snapshot: "reliable",
-	refreshWorkspace: true,
-	refreshModel: true,
-	refreshUsageTotals: true,
-	context: "refresh",
-	git: "onWorkspaceChange",
 	render: true,
 };
 
@@ -82,10 +94,10 @@ const RELIABLE_NO_MODEL_ON_WORKSPACE_CHANGE_PLAN: RuntimeRefreshPlan = {
 const TOOL_EXECUTION_END_PLAN: RuntimeRefreshPlan = {
 	ensureConfig: true,
 	ensureState: true,
-	snapshot: "reliable",
+	snapshot: "lifecycle",
 	refreshWorkspace: true,
 	refreshModel: false,
-	refreshUsageTotals: true,
+	refreshUsageTotals: false,
 	context: "refresh",
 	git: "immediate",
 	render: true,
@@ -146,10 +158,11 @@ function clonePlan(plan: RuntimeRefreshPlan): RuntimeRefreshPlan {
 export function runtimePlanFor(kind: RuntimeEventKind, facts: RuntimeEventFacts = {}): RuntimeRefreshPlan {
 	switch (kind) {
 		case "model_select":
+			return clonePlan(LIFECYCLE_WITH_MODEL_IMMEDIATE_PLAN);
 		case "session_tree":
 			return clonePlan(RELIABLE_WITH_MODEL_IMMEDIATE_PLAN);
 		case "turn_start":
-			return clonePlan(RELIABLE_WITH_MODEL_ON_WORKSPACE_CHANGE_PLAN);
+			return clonePlan(LIFECYCLE_WITH_MODEL_ON_WORKSPACE_CHANGE_PLAN);
 		case "tool_execution_end":
 			return clonePlan(TOOL_EXECUTION_END_PLAN);
 		case "session_compact":

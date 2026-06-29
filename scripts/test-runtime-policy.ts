@@ -13,7 +13,7 @@ type RuntimeEventKind =
 	| "config_save_success"
 	| "editor_thinking_cycle";
 
-type RuntimeSnapshotMode = "none" | "reliable" | "thinking" | "compact";
+type RuntimeSnapshotMode = "none" | "reliable" | "lifecycle" | "thinking" | "compact";
 type RuntimeGitRefreshMode = "never" | "onWorkspaceChange" | "immediate";
 type RuntimeContextPlan = "none" | "refresh" | "clear";
 
@@ -49,13 +49,25 @@ const reliableWithModelImmediate: RuntimeRefreshPlan = {
 	render: true,
 };
 
-const reliableWithModelOnWorkspaceChange: RuntimeRefreshPlan = {
+const lifecycleWithModelImmediate: RuntimeRefreshPlan = {
 	ensureConfig: true,
 	ensureState: true,
-	snapshot: "reliable",
+	snapshot: "lifecycle",
 	refreshWorkspace: true,
 	refreshModel: true,
-	refreshUsageTotals: true,
+	refreshUsageTotals: false,
+	context: "refresh",
+	git: "immediate",
+	render: true,
+};
+
+const lifecycleWithModelOnWorkspaceChange: RuntimeRefreshPlan = {
+	ensureConfig: true,
+	ensureState: true,
+	snapshot: "lifecycle",
+	refreshWorkspace: true,
+	refreshModel: true,
+	refreshUsageTotals: false,
 	context: "refresh",
 	git: "onWorkspaceChange",
 	render: true,
@@ -82,18 +94,18 @@ function assertPlan(kind: RuntimeEventKind, expected: RuntimeRefreshPlan, facts?
 	assert.deepEqual(runtimePlanFor(kind, facts), expected, `${kind} should return the expected runtime refresh plan`);
 }
 
-assertPlan("model_select", reliableWithModelImmediate);
+assertPlan("model_select", lifecycleWithModelImmediate);
 assertPlan("session_tree", reliableWithModelImmediate);
 
-assertPlan("turn_start", reliableWithModelOnWorkspaceChange);
+assertPlan("turn_start", lifecycleWithModelOnWorkspaceChange);
 
 assertPlan("tool_execution_end", {
 	ensureConfig: true,
 	ensureState: true,
-	snapshot: "reliable",
+	snapshot: "lifecycle",
 	refreshWorkspace: true,
 	refreshModel: false,
-	refreshUsageTotals: true,
+	refreshUsageTotals: false,
 	context: "refresh",
 	git: "immediate",
 	render: true,
@@ -169,6 +181,11 @@ assertPlan("config_save_success", {
 	git: "immediate",
 	render: true,
 });
+
+for (const kind of ["model_select", "turn_start", "tool_execution_end"] as const) {
+	assert.equal(runtimePlanFor(kind).snapshot, "lifecycle", `${kind} should use the narrow lifecycle snapshot reader`);
+	assert.equal(runtimePlanFor(kind).refreshUsageTotals, false, `${kind} should not request a usage totals refresh`);
+}
 
 for (const kind of ["thinking_level_select", "editor_thinking_cycle"] as const) {
 	assert.equal(runtimePlanFor(kind).git, "never", `${kind} should not schedule a git refresh`);
