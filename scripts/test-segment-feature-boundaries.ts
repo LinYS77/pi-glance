@@ -40,7 +40,7 @@ const FORBIDDEN_LOCAL_MODULES = new Set([
 	"./state.js",
 	"./themes.js",
 	"./palette.js",
-	"./footer-bridge.js",
+	"./footer.js",
 	"./runtime-snapshot.js",
 	"./git.js",
 ]);

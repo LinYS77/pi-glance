@@ -19,6 +19,7 @@ export interface StateInputs {
 	thinkingLevel: string;
 	contextUsage?: StateContextUsageInputs;
 	usage: UsageTotals;
+	availableProviderCount: number;
 	unknownContextAfterLatestCompaction: boolean;
 }
 
@@ -43,6 +44,14 @@ interface StateMessageInputs {
 	role?: string;
 	stopReason?: string;
 	usage?: StateMessageUsageInputs;
+}
+
+interface ModelRegistryLike {
+	getAvailable?(): readonly { provider?: unknown }[];
+}
+
+interface ProviderContext {
+	modelRegistry?: ModelRegistryLike;
 }
 
 export interface StateSessionEntry {
@@ -99,6 +108,16 @@ export function hasUnknownContextAfterLatestCompaction(branch: readonly StateSes
 	return true;
 }
 
+function availableProviderCountFromContext(ctx: ExtensionContext): number {
+	const registry = (ctx as ExtensionContext & ProviderContext).modelRegistry;
+	const availableModels = registry?.getAvailable?.() ?? [];
+	const providers = new Set<string>();
+	for (const model of availableModels) {
+		if (typeof model.provider === "string" && model.provider) providers.add(model.provider);
+	}
+	return Math.max(1, providers.size);
+}
+
 export function stateInputsFromContext(ctx: ExtensionContext, thinkingLevel: string): StateInputs {
 	const cwd = ctx.sessionManager.getCwd() || ctx.cwd;
 	const contextUsage = ctx.getContextUsage();
@@ -120,6 +139,7 @@ export function stateInputsFromContext(ctx: ExtensionContext, thinkingLevel: str
 				}
 			: undefined,
 		usage: usageTotalsFromEntries(ctx.sessionManager.getEntries()),
+		availableProviderCount: availableProviderCountFromContext(ctx),
 		unknownContextAfterLatestCompaction: hasUnknownContextAfterLatestCompaction(ctx.sessionManager.getBranch()),
 	};
 }

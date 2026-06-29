@@ -8,9 +8,9 @@ const ALLOWED_PI_IMPORTS = new Set([
 	"@earendil-works/pi-coding-agent",
 	"@earendil-works/pi-tui",
 ]);
-const FOOTER_BRIDGE_MODULE = "footer-bridge.ts";
+const FOOTER_MODULE = "footer.ts";
 const STATUS_LINE_MODULE = "status-line.ts";
-const RENDER_MODULES = new Set(["editor.ts", "renderer.ts", "pane.ts", "segments.ts", "surface-layout.ts", FOOTER_BRIDGE_MODULE, STATUS_LINE_MODULE]);
+const RENDER_MODULES = new Set(["editor.ts", "renderer.ts", "pane.ts", "segments.ts", "surface-layout.ts", FOOTER_MODULE, STATUS_LINE_MODULE]);
 const INDEX_MODULE = "index.ts";
 const PURE_CONFIG_OPTIONS_MODULE = "config-options.ts";
 const RUNTIME_POLICY_MODULE = "runtime-policy.ts";
@@ -229,7 +229,7 @@ function assertRuntimePolicyPureModule(files: SourceFile[]): void {
 		"./editor.js",
 		"./renderer.js",
 		"./pane.js",
-		"./footer-bridge.js",
+		"./footer.js",
 		"./git.js",
 		"./config.js",
 	]);
@@ -256,7 +256,7 @@ function assertStatusLineSeamImports(files: SourceFile[]): void {
 		"./runtime.js",
 		"./runtime-snapshot.js",
 		"./state.js",
-		"./footer-bridge.js",
+		"./footer.js",
 		"./config.js",
 		"./settings-catalog.js",
 	]);
@@ -300,25 +300,26 @@ function assertStateModulePiFree(files: SourceFile[]): void {
 	}
 }
 
-function assertFooterBridgeProviderSeam(files: SourceFile[]): void {
-	const footerBridge = files.find((candidate) => basename(candidate.path) === FOOTER_BRIDGE_MODULE);
-	assert.ok(footerBridge, "footer-bridge.ts provider facts bridge should exist");
+function assertFooterSeams(files: SourceFile[]): void {
+	const footer = files.find((candidate) => basename(candidate.path) === FOOTER_MODULE);
+	assert.ok(footer, "footer.ts explicit empty footer should exist");
 
 	const importPattern = /(?:import|export)\s+(type\s+)?(?:[^"'`]*?\s+from\s+)?["']([^"']+)["']/g;
-	const allowedSpecifiers = new Set(["@earendil-works/pi-coding-agent", "@earendil-works/pi-tui", "./state.js", "./types.js"]);
-	for (const match of footerBridge.text.matchAll(importPattern)) {
+	for (const match of footer.text.matchAll(importPattern)) {
 		const isTypeOnly = match[1] === "type ";
 		const specifier = match[2]!;
-		if (!allowedSpecifiers.has(specifier)) fail(`${footerBridge.path}: footer bridge must only import provider/component types and state provider-count seam, not ${specifier}`);
-		if ((specifier === "@earendil-works/pi-coding-agent" || specifier === "@earendil-works/pi-tui" || specifier === "./types.js") && !isTypeOnly) {
-			fail(`${footerBridge.path}: footer bridge import from ${specifier} must be type-only`);
-		}
+		if (specifier !== "@earendil-works/pi-tui") fail(`${footer.path}: footer may only import pi-tui Component type, not ${specifier}`);
+		if (!isTypeOnly) fail(`${footer.path}: footer import from ${specifier} must be type-only`);
 	}
-	if (!/setProviderCount\s*\(\s*this\.getState\(\)\s*,\s*this\.footerData\.getAvailableProviderCount\(\)\s*\)/.test(footerBridge.text)) {
-		fail(`${footerBridge.path}: footer bridge sync should delegate provider count facts to setProviderCount()`);
-	}
-	if (/\.version\s*(?:\+\+|=|\+=)/.test(footerBridge.text)) fail(`${footerBridge.path}: footer bridge must not mutate state.version directly`);
-	if (/providers\.availableCount\s*=/.test(footerBridge.text)) fail(`${footerBridge.path}: footer bridge must not mutate provider count directly`);
+	if (!/render\(_width: number\): string\[\]\s*{\s*return \[\];\s*}/s.test(footer.text)) fail(`${footer.path}: custom footer should be explicitly empty`);
+	if (/getAvailableProviderCount|ReadonlyFooterDataProvider|setProviderCount/.test(footer.text)) fail(`${footer.path}: footer must not be a provider-count data bridge`);
+}
+
+function assertProviderCountSnapshotSeam(files: SourceFile[]): void {
+	const runtimeSnapshot = files.find((candidate) => basename(candidate.path) === RUNTIME_SNAPSHOT_MODULE);
+	assert.ok(runtimeSnapshot, "runtime-snapshot.ts state input adapter seam should exist");
+	if (!/modelRegistry[\s\S]*?getAvailable/.test(runtimeSnapshot.text)) fail(`${runtimeSnapshot.path}: provider count should derive from ctx.modelRegistry.getAvailable()`);
+	if (!/new Set<string>\(\)/.test(runtimeSnapshot.text)) fail(`${runtimeSnapshot.path}: provider count should deduplicate provider names`);
 }
 
 function assertIndexThinWiring(files: SourceFile[]): void {
@@ -375,7 +376,8 @@ assertRuntimePolicyPureModule(sourceFiles);
 assertStatusLineSeamImports(sourceFiles);
 assertStatusLineConsumers(sourceFiles);
 assertStateModulePiFree(sourceFiles);
-assertFooterBridgeProviderSeam(sourceFiles);
+assertFooterSeams(sourceFiles);
+assertProviderCountSnapshotSeam(sourceFiles);
 assertIndexThinWiring(sourceFiles);
 assertConfigOptionsPureModule(sourceFiles);
 

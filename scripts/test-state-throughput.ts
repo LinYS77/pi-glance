@@ -33,6 +33,7 @@ const inputs: StateInputs = {
 	thinkingLevel: "off",
 	contextUsage: undefined,
 	usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 },
+	availableProviderCount: 1,
 	unknownContextAfterLatestCompaction: false,
 };
 

@@ -11,7 +11,7 @@ export function createInitialState(inputs: StateInputs, config: GlanceConfig): G
 		},
 		git: emptyGitSnapshot(),
 		providers: {
-			availableCount: 1,
+			availableCount: inputs.availableProviderCount,
 		},
 		model: {
 			id: inputs.model?.id,

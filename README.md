@@ -31,6 +31,8 @@ git clone https://github.com/LinYS77/pi-glance.git ~/.pi/agent/extensions/pi-gla
 
 Then restart pi or run `/reload`.
 
+To update installed packages/extensions, use `pi update --extensions` or `pi update --all`. `pi update` updates Pi itself by default.
+
 Compatibility: current pi-glance releases target Pi packages under `@earendil-works/*` and the Node runtime supported by current Pi. If your Pi installation still exposes the older package namespace or runs on Node 20, pin `pi-glance@0.3.0` or upgrade Pi before updating pi-glance.
 
 For development/testing:

@@ -62,12 +62,15 @@ function createContext(): TestContext {
 	let renderRequests = 0;
 	const fakeTui = { requestRender: () => renderRequests++ };
 	const fakeTheme = {};
-	const fakeFooterData = { getAvailableProviderCount: () => 1 };
 
 	const ctx = {
+		mode: "tui",
 		hasUI: true,
 		cwd: "/repo",
 		model: { id: "test-model", provider: "test-provider", contextWindow: 200_000 },
+		modelRegistry: {
+			getAvailable: () => [{ provider: "test-provider", id: "test-model" }],
+		},
 		sessionManager: {
 			getCwd: () => "/repo",
 			getEntries: () => [],
@@ -76,7 +79,7 @@ function createContext(): TestContext {
 		ui: {
 			notify: (message: string, type?: "info" | "warning" | "error") => notifications.push({ message, type }),
 			setFooter: (factory: unknown) => {
-				if (factory) (factory as (tui: unknown, theme: unknown, footerData: unknown) => unknown)(fakeTui, fakeTheme, fakeFooterData);
+				if (factory) (factory as (tui: unknown, theme: unknown) => unknown)(fakeTui, fakeTheme);
 			},
 			setEditorComponent: (_factory: unknown) => {},
 		},

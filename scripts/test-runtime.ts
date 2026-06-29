@@ -104,22 +104,28 @@ function createGitHarness(): GitRefresherHarness {
 	return harness;
 }
 
-function createContext(options: { cwd?: string; invokeFooterFactory?: boolean } = {}): TestContext {
+function createContext(options: { cwd?: string; mode?: "tui" | "rpc" | "json" | "print"; hasUI?: boolean; availableProviders?: string[]; invokeFooterFactory?: boolean } = {}): TestContext {
 	const surfaceCalls: string[] = [];
 	const notifications: Notification[] = [];
 	let renderRequests = 0;
 	let cwd = options.cwd ?? "/repo";
+	const mode = options.mode ?? "tui";
+	const hasUI = options.hasUI ?? (mode === "tui" || mode === "rpc");
+	const availableProviders = options.availableProviders ?? ["test-provider"];
 	const invokeFooterFactory = options.invokeFooterFactory ?? true;
 	const fakeTui = { requestRender: () => renderRequests++ };
 	const fakeTheme = {};
-	const fakeFooterData = { getAvailableProviderCount: () => 1 };
 
 	const ctx = {
-		hasUI: true,
+		mode,
+		hasUI,
 		get cwd() {
 			return cwd;
 		},
 		model: { id: "test-model", provider: "test-provider", contextWindow: 200_000 },
+		modelRegistry: {
+			getAvailable: () => availableProviders.map((provider) => ({ provider, id: `${provider}-model` })),
+		},
 		sessionManager: {
 			getCwd: () => cwd,
 			getEntries: () => [],
@@ -130,7 +136,7 @@ function createContext(options: { cwd?: string; invokeFooterFactory?: boolean } 
 			setFooter: (factory: unknown) => {
 				surfaceCalls.push(factory ? "setFooter:install" : "setFooter:clear");
 				if (factory && invokeFooterFactory) {
-					(factory as (tui: unknown, theme: unknown, footerData: unknown) => unknown)(fakeTui, fakeTheme, fakeFooterData);
+					(factory as (tui: unknown, theme: unknown) => unknown)(fakeTui, fakeTheme);
 				}
 			},
 			setEditorComponent: (factory: unknown) => surfaceCalls.push(factory ? "setEditorComponent:install" : "setEditorComponent:clear"),
@@ -191,7 +197,7 @@ function createRuntimeHarness(options: RuntimeHarnessOptions = {}): RuntimeHarne
 	const result = harness.runtime.events.sessionStart({}, test.ctx);
 
 	assert.equal(isPromiseLike(result), false, "sessionStart should stay synchronous for enabled config");
-	assert.deepEqual(test.surfaceCalls, ["setFooter:install", "setEditorComponent:install"], "enabled sessionStart should synchronously install footer before editor");
+	assert.deepEqual(test.surfaceCalls, ["setFooter:install", "setEditorComponent:install"], "enabled TUI sessionStart should synchronously install footer before editor");
 	assert.deepEqual(git.schedules, [true], "enabled sessionStart should schedule an immediate git refresh through the adapter");
 	assert.equal(harness.getLoadConfigCalls(), 0, "sessionStart should not call the async loadConfig adapter");
 }
@@ -203,7 +209,7 @@ function createRuntimeHarness(options: RuntimeHarnessOptions = {}): RuntimeHarne
 	const result = harness.runtime.events.sessionStart({}, test.ctx);
 
 	assert.equal(isPromiseLike(result), false, "sessionStart should stay synchronous for disabled config");
-	assert.deepEqual(test.surfaceCalls, ["setEditorComponent:clear", "setFooter:clear"], "disabled sessionStart should synchronously restore editor and footer");
+	assert.deepEqual(test.surfaceCalls, ["setEditorComponent:clear", "setFooter:clear"], "disabled TUI sessionStart should synchronously restore editor and footer");
 	assert.equal(git.created, 0, "disabled sessionStart should not create a git refresher");
 	assert.equal(harness.getLoadConfigCalls(), 0, "disabled sessionStart should not call the async loadConfig adapter");
 }
@@ -254,7 +260,7 @@ function createRuntimeHarness(options: RuntimeHarnessOptions = {}): RuntimeHarne
 
 	assert.deepEqual(harness.savedConfigs, [nextConfig], "save success should pass the next config to saveConfig");
 	assert.equal(hasNotification(test.notifications, "pi-glance configuration saved", "info"), true, "save success should notify saved");
-	assert.deepEqual(test.surfaceCalls.slice(surfaceBaseline), ["setFooter:install", "setEditorComponent:install"], "save success should reinstall the enabled input surface");
+	assert.deepEqual(test.surfaceCalls.slice(surfaceBaseline), ["setFooter:install", "setEditorComponent:install"], "save success should reinstall the enabled TUI input surface");
 	assert.ok(test.getRenderRequests() > renderBaseline, "save success should request a render after reinstalling the surface");
 	assert.deepEqual(git.options?.getConfig(), nextConfig.git, "existing git refresher should read the updated active git config after save success");
 
@@ -282,6 +288,51 @@ function createRuntimeHarness(options: RuntimeHarnessOptions = {}): RuntimeHarne
 
 	await harness.runtime.events.sessionShutdown({}, test.ctx as ExtensionContext);
 	assert.equal(git.disposeCount, 1, "sessionShutdown should dispose the runtime git refresher");
+}
+
+{
+	const git = createGitHarness();
+	const test = createContext({ mode: "rpc", hasUI: true });
+	const harness = createRuntimeHarness({ loadConfigSyncConfig: defaultConfig(), git });
+
+	harness.runtime.events.sessionStart({}, test.ctx);
+	assert.deepEqual(test.surfaceCalls, [], "RPC mode should not install custom TUI footer/editor even though ctx.hasUI is true");
+	assert.equal(git.created, 0, "RPC mode should not start the TUI-only git refresher/input surface");
+	await harness.runtime.events.sessionShutdown({}, test.ctx as ExtensionContext);
+	assert.deepEqual(test.surfaceCalls, [], "RPC shutdown should not clear custom TUI components that were never installed");
+}
+
+{
+	for (const mode of ["json", "print"] as const) {
+		const git = createGitHarness();
+		const test = createContext({ mode, hasUI: false });
+		const harness = createRuntimeHarness({ loadConfigSyncConfig: defaultConfig(), git });
+
+		harness.runtime.events.sessionStart({}, test.ctx);
+		assert.deepEqual(test.surfaceCalls, [], `${mode} mode should not install custom TUI footer/editor`);
+		assert.equal(git.created, 0, `${mode} mode should not start the TUI-only git refresher/input surface`);
+		await harness.runtime.events.sessionShutdown({}, test.ctx as ExtensionContext);
+		assert.deepEqual(test.surfaceCalls, [], `${mode} shutdown should not clear custom TUI components that were never installed`);
+	}
+}
+
+{
+	const test = createContext({ mode: "rpc", hasUI: true });
+	const harness = createRuntimeHarness({ loadConfigSyncConfig: defaultConfig(), showPaneResults: [{ action: "cancel" }] });
+
+	await harness.runtime.commands.openPane("", test.ctx);
+	assert.deepEqual(harness.showPaneInitials, [], "non-TUI /glance should not invoke the custom pane adapter");
+	assert.equal(hasNotification(test.notifications, "pi-glance configuration pane requires TUI mode", "error"), true, "non-TUI /glance should notify that the pane requires TUI mode");
+}
+
+{
+	const test = createContext({ availableProviders: ["openai", "anthropic", "openai"] });
+	const harness = createRuntimeHarness({ loadConfigSyncConfig: defaultConfig(), showPaneResults: [{ action: "cancel" }] });
+
+	harness.runtime.events.sessionStart({}, test.ctx);
+	await harness.runtime.commands.openPane("", test.ctx);
+	const previewState = harness.showPaneInitials.length;
+	assert.equal(previewState, 1, "TUI /glance should still open after provider-count snapshot setup");
 }
 
 console.log("✓ runtime seam checks passed");

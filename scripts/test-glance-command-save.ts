@@ -63,9 +63,13 @@ function createContext(customResults: PaneResult[]): TestContext {
 	const fakeTheme = { fg: (_tone: string, text: string) => text };
 
 	const ctx = {
+		mode: "tui",
 		hasUI: true,
 		cwd: process.cwd(),
 		model: { id: "test-model", provider: "test-provider", contextWindow: 200_000 },
+		modelRegistry: {
+			getAvailable: () => [{ provider: "test-provider", id: "test-model" }],
+		},
 		sessionManager: {
 			getCwd: () => process.cwd(),
 			getEntries: () => [],

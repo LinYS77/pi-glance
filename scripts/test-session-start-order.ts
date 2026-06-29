@@ -33,11 +33,15 @@ function getHandler(pi: CapturedPi, event: string): CapturedHandler {
 	return handler;
 }
 
-function createContext(calls: string[]): ExtensionContext {
+function createContext(calls: string[], mode: "tui" | "rpc" | "json" | "print" = "tui"): ExtensionContext {
 	return {
-		hasUI: true,
+		mode,
+		hasUI: mode === "tui" || mode === "rpc",
 		cwd: process.cwd(),
 		model: { id: "test-model", provider: "test-provider", contextWindow: 200_000 },
+		modelRegistry: {
+			getAvailable: () => [{ provider: "test-provider", id: "test-model" }],
+		},
 		sessionManager: {
 			getCwd: () => process.cwd(),
 			getEntries: () => [],
@@ -70,10 +74,19 @@ async function main(): Promise<void> {
 		const enabledResult = getHandler(enabledPi, "session_start")({ type: "session_start" }, enabledContext);
 
 		assert.equal(isPromiseLike(enabledResult), false, "session_start should be synchronous for default enabled config");
-		assert.equal(enabledCalls[0], "setFooter:install", "default enabled config should synchronously claim the footer before handler returns");
-		assert.equal(enabledCalls[1], "setEditorComponent:install", "default enabled config should synchronously claim the editor before handler returns");
+		assert.equal(enabledCalls[0], "setFooter:install", "default enabled TUI config should synchronously claim the footer before handler returns");
+		assert.equal(enabledCalls[1], "setEditorComponent:install", "default enabled TUI config should synchronously claim the editor before handler returns");
 
 		await getHandler(enabledPi, "session_shutdown")({ type: "session_shutdown" }, enabledContext);
+
+		for (const mode of ["rpc", "json", "print"] as const) {
+			const nonTuiPi = createPi();
+			piGlance(nonTuiPi.api);
+			const nonTuiCalls: string[] = [];
+			const nonTuiResult = getHandler(nonTuiPi, "session_start")({ type: "session_start" }, createContext(nonTuiCalls, mode));
+			assert.equal(isPromiseLike(nonTuiResult), false, `${mode} session_start should stay synchronous for default enabled config`);
+			assert.deepEqual(nonTuiCalls, [], `${mode} session_start should not install or clear TUI footer/editor`);
+		}
 
 		await mkdir(join(agentDir, "pi-glance"), { recursive: true });
 		await writeFile(join(agentDir, "pi-glance", "config.json"), `${JSON.stringify({ enabled: false })}\n`, "utf8");

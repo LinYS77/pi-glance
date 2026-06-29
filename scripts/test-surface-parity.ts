@@ -1,5 +1,5 @@
 import { strict as assert } from "node:assert";
-import { visibleWidth, type EditorTheme, type TUI } from "@earendil-works/pi-tui";
+import { visibleWidth, type AutocompleteItem, type AutocompleteProvider, type EditorTheme, type TUI } from "@earendil-works/pi-tui";
 import type { KeybindingsManager } from "@earendil-works/pi-coding-agent";
 import { defaultConfig } from "../config.js";
 import { GlanceEditor } from "../editor.js";
@@ -12,12 +12,22 @@ const WIDTHS = [56, 64, 72, 96, 120, 160];
 
 const theme = {
 	borderColor: (text: string) => text,
-	selectList: {},
+	selectList: {
+		selectedPrefix: (text: string) => text,
+		selectedText: (text: string) => text,
+		description: (text: string) => text,
+		scrollInfo: (text: string) => text,
+		noMatch: (text: string) => text,
+	},
 } as unknown as EditorTheme;
 
-const keybindings = {
-	matches: () => false,
-} as unknown as KeybindingsManager;
+function keybindingsWith(matches: Partial<Record<string, string[]>> = {}): KeybindingsManager {
+	return {
+		matches: (data: string, action: string) => matches[action]?.includes(data) ?? false,
+	} as unknown as KeybindingsManager;
+}
+
+const keybindings = keybindingsWith();
 
 function stripAnsi(text: string): string {
 	return text.replace(ANSI_PATTERN, "");
@@ -98,11 +108,11 @@ function noGitState(): GlanceState {
 	});
 }
 
-function makeLiveEditor(state: GlanceState, config: GlanceConfig, focused: boolean, rows = 40): GlanceEditor {
+function makeLiveEditor(state: GlanceState, config: GlanceConfig, focused: boolean, rows = 40, bindings = keybindings): GlanceEditor {
 	const editor = new GlanceEditor(
 		{ terminal: { rows }, requestRender: () => undefined } as unknown as TUI,
 		theme,
-		keybindings,
+		bindings,
 		() => state,
 		() => config,
 	);
@@ -245,6 +255,69 @@ for (const width of WIDTHS) {
 	assert.ok(scrolledBottom.includes("↓"), `live bottom should show a down scroll indicator at width ${width}`);
 	assert.ok(scrolledBottom.includes("more"), `live bottom should include scroll count copy at width ${width}`);
 	assert.ok(visibleWidth(scrolledBottom) <= width, `live scrolled bottom should fit width ${width}`);
+}
+
+{
+	const config = defaultConfig();
+	config.editor.topMarginRows = 0;
+	config.editor.minContentRows = 2;
+	const editor = makeLiveEditor(dirtyState(), config, true, 40, keybindingsWith({ "tui.input.newLine": ["\u000a"], "app.thinking.cycle": ["\u001b[Z"] }));
+	let thinkingNotifications = 0;
+	const thinkingEditor = new GlanceEditor(
+		{ terminal: { rows: 40 }, requestRender: () => undefined } as unknown as TUI,
+		theme,
+		keybindingsWith({ "tui.input.newLine": ["\u000a"], "app.thinking.cycle": ["\u001b[Z"] }),
+		() => dirtyState(),
+		() => config,
+		() => {
+			thinkingNotifications++;
+		},
+	);
+	thinkingEditor.handleInput("\u001b[Z");
+	assert.equal(thinkingNotifications, 1, "GlanceEditor should keep app thinking-cycle keybinding delegation");
+
+	editor.setText("中文🙂wide");
+	editor.handleInput("\u000a");
+	editor.handleInput("下一行");
+	assert.equal(editor.getText(), "中文🙂wide\n下一行", "Ctrl+J/newline should delegate to Pi editor input behavior");
+	const frame = editor.render(48).map(stripAnsi);
+	assert.ok(frame.some((line) => line.includes("中文🙂wide")), "wide CJK/emoji content should render inside GlanceEditor frame");
+	assert.ok(frame.some((line) => line.includes("下一行")), "unicode line after Ctrl+J should render inside GlanceEditor frame");
+	for (const line of frame) {
+		assert.ok(visibleWidth(line) <= 48, `unicode editor frame line should fit width 48: ${line}`);
+	}
+}
+
+{
+	const config = defaultConfig();
+	config.editor.topMarginRows = 0;
+	const editor = makeLiveEditor(dirtyState(), config, true, 40, keybindingsWith({ "tui.input.tab": ["\t"] }));
+	const completion: AutocompleteItem = { value: "src/中文-file.ts", label: "src/中文-file.ts", description: "wide path" };
+	const provider: AutocompleteProvider = {
+		getSuggestions: async () => ({ prefix: "src", items: [completion, { value: "src/other.ts", label: "src/other.ts" }] }),
+		applyCompletion: (lines, cursorLine, cursorCol, item, prefix) => {
+			const line = lines[cursorLine] ?? "";
+			const start = Math.max(0, cursorCol - prefix.length);
+			return {
+				lines: [...lines.slice(0, cursorLine), `${line.slice(0, start)}${item.value}${line.slice(cursorCol)}`, ...lines.slice(cursorLine + 1)],
+				cursorLine,
+				cursorCol: start + item.value.length,
+			};
+		},
+		shouldTriggerFileCompletion: () => true,
+	};
+	editor.setAutocompleteProvider(provider);
+	editor.setText("src");
+	editor.handleInput("\t");
+	await Promise.resolve();
+	await Promise.resolve();
+	const autocompleteFrame = editor.render(80).map(stripAnsi);
+	const autocompleteLine = autocompleteFrame.find((line) => line.includes("src/中文-file.ts"));
+	assert.ok(autocompleteLine, "autocomplete suggestions with CJK text should render below GlanceEditor frame");
+	assert.ok(autocompleteLine?.startsWith("  "), "autocomplete lines should keep pi-glance indentation outside the framed editor");
+	for (const line of autocompleteFrame) {
+		assert.ok(visibleWidth(line) <= 80, `autocomplete editor frame line should fit width 80: ${line}`);
+	}
 }
 
 for (const topMarginRows of [0, 1, 2] as const) {

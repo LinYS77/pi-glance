@@ -22,6 +22,7 @@ interface FakeContextOptions {
 	sessionCwd?: string;
 	model?: { id?: string; provider?: string; contextWindow?: number };
 	contextUsage?: { tokens: number | null; contextWindow: number; percent: number | null };
+	availableProviders?: readonly unknown[];
 	entries?: readonly StateSessionEntry[];
 	branch?: readonly StateSessionEntry[];
 }
@@ -30,6 +31,9 @@ function fakeContext(options: FakeContextOptions = {}): ExtensionContext {
 	return {
 		cwd: options.cwd ?? "/fallback",
 		model: options.model,
+		modelRegistry: {
+			getAvailable: () => (options.availableProviders ?? ["test-provider"]).map((provider, index) => ({ provider, id: `model-${index}` })),
+		},
 		getContextUsage: () => options.contextUsage,
 		sessionManager: {
 			getCwd: () => options.sessionCwd,
@@ -74,6 +78,9 @@ assert.deepEqual(
 	"present context usage should be copied exactly",
 );
 assert.equal(stateInputsFromContext(fakeContext({ contextUsage: undefined }), "off").contextUsage, undefined, "missing context usage should stay undefined");
+assert.equal(stateInputsFromContext(fakeContext({ availableProviders: ["openai", "anthropic", "openai", ""] }), "off").availableProviderCount, 2, "provider count should deduplicate non-empty available provider names from modelRegistry");
+assert.equal(stateInputsFromContext(fakeContext({ availableProviders: [] }), "off").availableProviderCount, 1, "provider count should keep one-provider fallback when no available models are configured");
+assert.equal(stateInputsFromContext(fakeContext({ availableProviders: [undefined, 123] }), "off").availableProviderCount, 1, "provider count should ignore invalid provider names and keep fallback minimum");
 
 assert.deepEqual(
 	usageTotalsFromEntries([
@@ -101,6 +108,7 @@ assert.deepEqual(
 		thinkingLevel: "low",
 		contextUsage: undefined,
 		usage: { input: 2, output: 3, cacheRead: 0, cacheWrite: 0, cost: 0.5 },
+		availableProviderCount: 1,
 		unknownContextAfterLatestCompaction: false,
 	},
 	"stateInputsFromContext should combine cwd, thinking, usage totals, and compaction status",
