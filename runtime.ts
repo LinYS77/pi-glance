@@ -5,7 +5,7 @@ import { GitRefresher } from "./git.js";
 import { readPiUiTheme, resolveRuntimeRenderStyleContext } from "./render-style-context.js";
 import { runtimePlanFor, type RuntimeEventFacts, type RuntimeEventKind, type RuntimeRefreshPlan } from "./runtime-policy.js";
 import type { GlanceRenderStyleContext } from "./theme-adapter.js";
-import { stateInputsFromContext } from "./runtime-snapshot.js";
+import { stateInputsFromContext, thinkingInputsFromContext } from "./runtime-snapshot.js";
 import { clearContextUsage, clearCurrentRunThroughput, createInitialState, refreshContextUsage, refreshModel, refreshWorkspace, setCurrentRunThroughput, setGitSnapshot, setLastTurnThroughput, setProviderCount, setUsageTotals } from "./state.js";
 import { ThroughputRunTracker, type ThroughputRunStateIntent } from "./throughput-run-tracker.js";
 import type { GitSnapshot, GlanceConfig, GlanceState } from "./types.js";
@@ -160,6 +160,13 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 
 	function applySnapshotPlan(ctx: ExtensionContext, plan: RuntimeRefreshPlan): void {
 		if (!state || plan.snapshot === "none") return;
+		if (plan.snapshot === "thinking") {
+			const inputs = thinkingInputsFromContext(ctx, adapters.getThinkingLevel());
+			setProviderCount(state, inputs.availableProviderCount);
+			if (plan.refreshModel) refreshModel(state, inputs, getConfig());
+			return;
+		}
+
 		const inputs = stateInputsFromContext(ctx, adapters.getThinkingLevel());
 		const workspaceChanged = plan.refreshWorkspace ? refreshWorkspace(state, inputs) : false;
 		setProviderCount(state, inputs.availableProviderCount);

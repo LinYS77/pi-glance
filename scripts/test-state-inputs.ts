@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { hasUnknownContextAfterLatestCompaction, stateInputsFromContext, usageTotalsFromEntries, type StateSessionEntry } from "../runtime-snapshot.js";
+import { hasUnknownContextAfterLatestCompaction, stateInputsFromContext, thinkingInputsFromContext, usageTotalsFromEntries, type StateSessionEntry } from "../runtime-snapshot.js";
 
 function message(role: string, options: { usage?: Record<string, unknown>; stopReason?: string } = {}): StateSessionEntry {
 	return {
@@ -81,6 +81,39 @@ assert.equal(stateInputsFromContext(fakeContext({ contextUsage: undefined }), "o
 assert.equal(stateInputsFromContext(fakeContext({ availableProviders: ["openai", "anthropic", "openai", ""] }), "off").availableProviderCount, 2, "provider count should deduplicate non-empty available provider names from modelRegistry");
 assert.equal(stateInputsFromContext(fakeContext({ availableProviders: [] }), "off").availableProviderCount, 1, "provider count should keep one-provider fallback when no available models are configured");
 assert.equal(stateInputsFromContext(fakeContext({ availableProviders: [undefined, 123] }), "off").availableProviderCount, 1, "provider count should ignore invalid provider names and keep fallback minimum");
+
+const cheapThinkingInputs = thinkingInputsFromContext(
+	{
+		model: { id: "cheap-model", provider: "cheap-provider", contextWindow: 123000 },
+		modelRegistry: {
+			getAvailable: () => [{ provider: "cheap-provider" }, { provider: "other-provider" }, { provider: "cheap-provider" }],
+		},
+		getContextUsage: () => {
+			throw new Error("thinking inputs should not read context usage");
+		},
+		sessionManager: {
+			getCwd: () => {
+				throw new Error("thinking inputs should not read session cwd");
+			},
+			getEntries: () => {
+				throw new Error("thinking inputs should not scan session entries");
+			},
+			getBranch: () => {
+				throw new Error("thinking inputs should not scan session branch");
+			},
+		},
+	} as unknown as ExtensionContext,
+	"high",
+);
+assert.deepEqual(
+	cheapThinkingInputs,
+	{
+		model: { id: "cheap-model", provider: "cheap-provider", contextWindow: 123000 },
+		thinkingLevel: "high",
+		availableProviderCount: 2,
+	},
+	"thinkingInputsFromContext should read only cheap model/thinking/provider facts",
+);
 
 assert.deepEqual(
 	usageTotalsFromEntries([

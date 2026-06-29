@@ -23,6 +23,12 @@ export interface StateInputs {
 	unknownContextAfterLatestCompaction: boolean;
 }
 
+export interface StateThinkingInputs {
+	model?: StateModelInputs;
+	thinkingLevel: string;
+	availableProviderCount: number;
+}
+
 interface StateMessageCostInputs {
 	total?: number;
 	input?: number;
@@ -118,18 +124,31 @@ function availableProviderCountFromContext(ctx: ExtensionContext): number {
 	return Math.max(1, providers.size);
 }
 
+function modelInputsFromContext(ctx: ExtensionContext): StateModelInputs | undefined {
+	const model = ctx.model;
+	return model
+		? {
+				id: model.id,
+				provider: model.provider,
+				contextWindow: model.contextWindow,
+			}
+		: undefined;
+}
+
+export function thinkingInputsFromContext(ctx: ExtensionContext, thinkingLevel: string): StateThinkingInputs {
+	return {
+		model: modelInputsFromContext(ctx),
+		thinkingLevel,
+		availableProviderCount: availableProviderCountFromContext(ctx),
+	};
+}
+
 export function stateInputsFromContext(ctx: ExtensionContext, thinkingLevel: string): StateInputs {
 	const cwd = ctx.sessionManager.getCwd() || ctx.cwd;
 	const contextUsage = ctx.getContextUsage();
 	return {
 		cwd,
-		model: ctx.model
-			? {
-					id: ctx.model.id,
-					provider: ctx.model.provider,
-					contextWindow: ctx.model.contextWindow,
-				}
-			: undefined,
+		model: modelInputsFromContext(ctx),
 		thinkingLevel,
 		contextUsage: contextUsage
 			? {

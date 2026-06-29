@@ -32,6 +32,8 @@ interface TestContext {
 	editorFactories: CapturedEditorFactory[];
 	getRenderRequests(): number;
 	getThemeReads(): number;
+	getEntryReads(): number;
+	getBranchReads(): number;
 	setCwd(cwd: string): void;
 	setAvailableProviders(providers: string[]): void;
 	setModel(model: MutableModelInfo | undefined): void;
@@ -53,6 +55,7 @@ interface RuntimeHarnessOptions {
 	onSaveConfig?: (config: GlanceConfig) => void | Promise<void>;
 	saveConfigError?: Error;
 	git?: GitRefresherHarness;
+	getThinkingLevel?: () => string;
 }
 
 interface RuntimeHarness {
@@ -144,6 +147,8 @@ function createContext(options: { cwd?: string; mode?: "tui" | "rpc" | "json" | 
 	const editorFactories: CapturedEditorFactory[] = [];
 	let renderRequests = 0;
 	let themeReads = 0;
+	let entryReads = 0;
+	let branchReads = 0;
 	let cwd = options.cwd ?? "/repo";
 	let availableProviders = options.availableProviders ?? ["test-provider"];
 	let model: MutableModelInfo | undefined = options.model ?? { id: "test-model", provider: "test-provider", contextWindow: 200_000 };
@@ -168,8 +173,14 @@ function createContext(options: { cwd?: string; mode?: "tui" | "rpc" | "json" | 
 		},
 		sessionManager: {
 			getCwd: () => cwd,
-			getEntries: () => [],
-			getBranch: () => [],
+			getEntries: () => {
+				entryReads++;
+				return [];
+			},
+			getBranch: () => {
+				branchReads++;
+				return [];
+			},
 		},
 		ui: {
 			get theme() {
@@ -200,6 +211,8 @@ function createContext(options: { cwd?: string; mode?: "tui" | "rpc" | "json" | 
 		editorFactories,
 		getRenderRequests: () => renderRequests,
 		getThemeReads: () => themeReads,
+		getEntryReads: () => entryReads,
+		getBranchReads: () => branchReads,
 		setCwd: (nextCwd: string) => {
 			cwd = nextCwd;
 		},
@@ -221,7 +234,7 @@ function invokeFooterFactory(test: TestContext, index: number, requestRender: ()
 	return factory({ requestRender }, {});
 }
 
-function invokeEditorFactory(test: TestContext, index: number, requestRender: () => void): unknown {
+function invokeEditorFactory(test: TestContext, index: number, requestRender: () => void, keybindings: { matches(data: string, action: string): boolean } = { matches: () => false }): unknown {
 	const factory = test.editorFactories[index];
 	assert.ok(factory, `expected editor factory ${index}`);
 	const editorTheme = {
@@ -234,7 +247,6 @@ function invokeEditorFactory(test: TestContext, index: number, requestRender: ()
 			noMatch: (text: string) => text,
 		},
 	};
-	const keybindings = { matches: () => false };
 	return factory({ terminal: { rows: 40 }, requestRender }, editorTheme, keybindings);
 }
 
@@ -249,7 +261,7 @@ function createRuntimeHarness(options: RuntimeHarnessOptions = {}): RuntimeHarne
 	const loadConfigConfig = options.loadConfigConfig ?? loadConfigSyncConfig;
 	const showPaneResults = [...(options.showPaneResults ?? [])];
 	const adapters: GlanceRuntimeAdapters = {
-		getThinkingLevel: () => "off",
+		getThinkingLevel: options.getThinkingLevel ?? (() => "off"),
 		loadConfigSync: () => loadConfigSyncConfig,
 		loadConfig: async () => {
 			loadConfigCalls++;
@@ -349,6 +361,116 @@ function createRuntimeHarness(options: RuntimeHarnessOptions = {}): RuntimeHarne
 	assert.equal(previewState.context.tokens, 123_456, "preview state should refresh context tokens after model_select");
 	assert.equal(previewState.context.window, 500_000, "preview state should refresh context window after model_select");
 	assert.equal(previewState.context.percent, 24.6912, "preview state should refresh context percent after model_select");
+}
+
+{
+	const config = defaultConfig();
+	config.model.customNames["claude-opus-4"] = "Opus Custom";
+	let thinkingLevel = "off";
+	const git = createGitHarness();
+	const test = createContext({
+		availableProviders: ["openai"],
+		model: { id: "gpt-4o-mini", provider: "openai", contextWindow: 128_000 },
+		contextUsage: { tokens: 99, contextWindow: 128_000, percent: 0.077 },
+	});
+	const harness = createRuntimeHarness({
+		loadConfigSyncConfig: config,
+		showPaneResults: [{ action: "cancel" }],
+		getThinkingLevel: () => thinkingLevel,
+		git,
+	});
+
+	harness.runtime.events.sessionStart({}, test.ctx);
+	const entryBaseline = test.getEntryReads();
+	const branchBaseline = test.getBranchReads();
+	assert.ok(entryBaseline > 0, "thinking_level_select counter baseline should include the session_start entries read");
+	assert.ok(branchBaseline > 0, "thinking_level_select counter baseline should include the session_start branch read");
+	const renderBaseline = test.getRenderRequests();
+	const scheduleBaseline = git.schedules.length;
+	thinkingLevel = "high";
+	test.setAvailableProviders(["openai", "anthropic", "openai", "local"]);
+	test.setModel({ id: "claude-opus-4-20250514", provider: "anthropic", contextWindow: 500_000 });
+	test.setContextUsage({ tokens: 777, contextWindow: 500_000, percent: 0.1554 });
+	await harness.runtime.events.thinkingLevelSelect({}, test.ctx as ExtensionContext);
+
+	assert.equal(test.getEntryReads(), entryBaseline, "thinking_level_select should not scan session entries after the session_start baseline");
+	assert.equal(test.getBranchReads(), branchBaseline, "thinking_level_select should not scan session branch after the session_start baseline");
+	assert.deepEqual(git.schedules.slice(scheduleBaseline), [], "thinking_level_select should not schedule git refreshes");
+	assert.ok(test.getRenderRequests() > renderBaseline, "thinking_level_select should still request a render");
+	await harness.runtime.commands.openPane("", test.ctx);
+
+	const previewState = harness.showPanePreviewStates.at(-1);
+	assert.ok(previewState, "thinking_level_select smoke test should open /glance with preview state");
+	assert.equal(previewState.providers.availableCount, 3, "thinking_level_select should refresh unique provider count through the cheap path");
+	assert.equal(previewState.model.id, "claude-opus-4-20250514", "thinking_level_select should refresh model id through the cheap path");
+	assert.equal(previewState.model.provider, "anthropic", "thinking_level_select should refresh model provider through the cheap path");
+	assert.equal(previewState.model.displayName, "Opus Custom", "thinking_level_select should honor configured model custom names");
+	assert.equal(previewState.model.thinking, "high", "thinking_level_select should refresh the visible thinking level");
+	assert.equal(previewState.context.tokens, 99, "thinking_level_select should not overwrite context tokens when the plan does not refresh context usage");
+	assert.equal(previewState.context.window, 500_000, "thinking_level_select should refresh context window from the current model");
+	assert.equal(previewState.context.percent, 0.077, "thinking_level_select should not overwrite context percent when the plan does not refresh context usage");
+	assert.equal(test.getEntryReads(), entryBaseline, "opening /glance after thinking_level_select should not hide a session entries scan");
+	assert.equal(test.getBranchReads(), branchBaseline, "opening /glance after thinking_level_select should not hide a session branch scan");
+}
+
+{
+	const config = defaultConfig();
+	config.model.customNames["gpt-5"] = "GPT Custom";
+	let thinkingLevel = "off";
+	const git = createGitHarness();
+	const test = createContext({
+		availableProviders: ["openai"],
+		model: { id: "initial-model", provider: "openai", contextWindow: 100_000 },
+		contextUsage: { tokens: 321, contextWindow: 100_000, percent: 0.321 },
+	});
+	const harness = createRuntimeHarness({
+		loadConfigSyncConfig: config,
+		showPaneResults: [{ action: "cancel" }],
+		getThinkingLevel: () => thinkingLevel,
+		git,
+	});
+
+	harness.runtime.events.sessionStart({}, test.ctx);
+	assert.equal(test.editorFactories.length, 1, "enabled sessionStart should register one editor factory for editor thinking-cycle coverage");
+	let editorRenderRequests = 0;
+	const editor = invokeEditorFactory(
+		test,
+		0,
+		() => editorRenderRequests++,
+		{ matches: (data, action) => action === "app.thinking.cycle" && data === "t" },
+	) as { handleInput(data: string): void; getText(): string };
+	const entryBaseline = test.getEntryReads();
+	const branchBaseline = test.getBranchReads();
+	assert.ok(entryBaseline > 0, "editor_thinking_cycle counter baseline should include the session_start entries read");
+	assert.ok(branchBaseline > 0, "editor_thinking_cycle counter baseline should include the session_start branch read");
+	const renderBaseline = editorRenderRequests;
+	const scheduleBaseline = git.schedules.length;
+	thinkingLevel = "medium";
+	test.setAvailableProviders(["openai", "anthropic", "anthropic"]);
+	test.setModel({ id: "gpt-5-large", provider: "openai", contextWindow: 1_000_000 });
+	test.setContextUsage({ tokens: 999, contextWindow: 1_000_000, percent: 0.999 });
+	editor.handleInput("t");
+	await Promise.resolve();
+
+	assert.equal(test.getEntryReads(), entryBaseline, "editor_thinking_cycle should not scan session entries after the session_start baseline");
+	assert.equal(test.getBranchReads(), branchBaseline, "editor_thinking_cycle should not scan session branch after the session_start baseline");
+	assert.deepEqual(git.schedules.slice(scheduleBaseline), [], "editor_thinking_cycle should not schedule git refreshes");
+	assert.ok(editorRenderRequests > renderBaseline, "editor_thinking_cycle should still request a render through the active editor surface");
+	assert.equal(editor.getText(), "t", "editor_thinking_cycle should preserve CustomEditor text handling after the app keybinding");
+	await harness.runtime.commands.openPane("", test.ctx);
+
+	const previewState = harness.showPanePreviewStates.at(-1);
+	assert.ok(previewState, "editor_thinking_cycle smoke test should open /glance with preview state");
+	assert.equal(previewState.providers.availableCount, 2, "editor_thinking_cycle should refresh unique provider count through the cheap path");
+	assert.equal(previewState.model.id, "gpt-5-large", "editor_thinking_cycle should refresh model id through the cheap path");
+	assert.equal(previewState.model.provider, "openai", "editor_thinking_cycle should refresh model provider through the cheap path");
+	assert.equal(previewState.model.displayName, "GPT Custom", "editor_thinking_cycle should honor configured model custom names");
+	assert.equal(previewState.model.thinking, "medium", "editor_thinking_cycle should refresh the visible thinking level");
+	assert.equal(previewState.context.tokens, 321, "editor_thinking_cycle should not overwrite context tokens when the plan does not refresh context usage");
+	assert.equal(previewState.context.window, 1_000_000, "editor_thinking_cycle should refresh context window from the current model");
+	assert.equal(previewState.context.percent, 0.321, "editor_thinking_cycle should not overwrite context percent when the plan does not refresh context usage");
+	assert.equal(test.getEntryReads(), entryBaseline, "opening /glance after editor_thinking_cycle should not hide a session entries scan");
+	assert.equal(test.getBranchReads(), branchBaseline, "opening /glance after editor_thinking_cycle should not hide a session branch scan");
 }
 
 {
