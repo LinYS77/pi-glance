@@ -13,7 +13,7 @@ type RuntimeEventKind =
 	| "config_save_success"
 	| "editor_thinking_cycle";
 
-type RuntimeSnapshotMode = "none" | "reliable" | "lifecycle" | "thinking" | "compact";
+type RuntimeSnapshotMode = "none" | "reliable" | "lifecycle" | "message" | "thinking" | "compact";
 type RuntimeGitRefreshMode = "never" | "onWorkspaceChange" | "immediate";
 type RuntimeContextPlan = "none" | "refresh" | "clear";
 
@@ -124,7 +124,17 @@ assertPlan("session_compact", {
 });
 assert.equal(runtimePlanFor("session_compact").context, "clear", "session_compact should clear context rather than refresh it");
 
-assertPlan("message_end", reliableNoModelOnWorkspaceChange, { messageRole: "assistant" });
+assertPlan("message_end", {
+	ensureConfig: true,
+	ensureState: true,
+	snapshot: "message",
+	refreshWorkspace: true,
+	refreshModel: false,
+	refreshUsageTotals: false,
+	context: "refresh",
+	git: "onWorkspaceChange",
+	render: true,
+}, { messageRole: "assistant" });
 for (const role of ["user", "system", undefined]) {
 	assertPlan(
 		"message_end",
@@ -186,6 +196,8 @@ for (const kind of ["model_select", "turn_start", "tool_execution_end"] as const
 	assert.equal(runtimePlanFor(kind).snapshot, "lifecycle", `${kind} should use the narrow lifecycle snapshot reader`);
 	assert.equal(runtimePlanFor(kind).refreshUsageTotals, false, `${kind} should not request a usage totals refresh`);
 }
+assert.equal(runtimePlanFor("message_end", { messageRole: "assistant" }).snapshot, "message", "assistant message_end should use the message-level snapshot reader");
+assert.equal(runtimePlanFor("message_end", { messageRole: "assistant" }).refreshUsageTotals, false, "assistant message_end should not request a usage totals scan");
 
 for (const kind of ["thinking_level_select", "editor_thinking_cycle"] as const) {
 	assert.equal(runtimePlanFor(kind).git, "never", `${kind} should not schedule a git refresh`);

@@ -51,7 +51,7 @@ interface StateMessageUsageInputs {
 	cost?: StateMessageCostInputs;
 }
 
-interface StateMessageInputs {
+export interface StateMessageInputs {
 	role?: string;
 	stopReason?: string;
 	usage?: StateMessageUsageInputs;
@@ -77,16 +77,27 @@ function usageCost(message: StateMessageInputs): number {
 	return (cost.input ?? 0) + (cost.output ?? 0) + (cost.cacheRead ?? 0) + (cost.cacheWrite ?? 0);
 }
 
+export function usageTotalsFromAssistantMessage(message: StateMessageInputs): UsageTotals {
+	if (message.role !== "assistant") return { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 };
+	return {
+		input: message.usage?.input ?? 0,
+		output: message.usage?.output ?? 0,
+		cacheRead: message.usage?.cacheRead ?? 0,
+		cacheWrite: message.usage?.cacheWrite ?? 0,
+		cost: usageCost(message),
+	};
+}
+
 export function usageTotalsFromEntries(entries: readonly StateSessionEntry[]): UsageTotals {
 	const usage: UsageTotals = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 };
 	for (const entry of entries) {
-		if (entry.type !== "message" || entry.message?.role !== "assistant") continue;
-		const message = entry.message;
-		usage.input += message.usage?.input ?? 0;
-		usage.output += message.usage?.output ?? 0;
-		usage.cacheRead += message.usage?.cacheRead ?? 0;
-		usage.cacheWrite += message.usage?.cacheWrite ?? 0;
-		usage.cost += usageCost(message);
+		if (entry.type !== "message" || !entry.message) continue;
+		const delta = usageTotalsFromAssistantMessage(entry.message);
+		usage.input += delta.input;
+		usage.output += delta.output;
+		usage.cacheRead += delta.cacheRead;
+		usage.cacheWrite += delta.cacheWrite;
+		usage.cost += delta.cost;
 	}
 	return usage;
 }
@@ -96,6 +107,12 @@ function assistantContextTokens(message: StateMessageInputs): number {
 	if (!usage) return 0;
 	if (Number.isFinite(usage.totalTokens)) return usage.totalTokens ?? 0;
 	return (usage.input ?? 0) + (usage.output ?? 0) + (usage.cacheRead ?? 0) + (usage.cacheWrite ?? 0);
+}
+
+export function assistantMessageHasKnownContextUsage(message: StateMessageInputs): boolean {
+	if (message.role !== "assistant") return false;
+	if (message.stopReason === "aborted" || message.stopReason === "error") return false;
+	return assistantContextTokens(message) > 0;
 }
 
 export function hasUnknownContextAfterLatestCompaction(branch: readonly StateSessionEntry[]): boolean {

@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { hasUnknownContextAfterLatestCompaction, lifecycleInputsFromContext, stateInputsFromContext, thinkingInputsFromContext, usageTotalsFromEntries, type StateSessionEntry } from "../runtime-snapshot.js";
+import { hasUnknownContextAfterLatestCompaction, lifecycleInputsFromContext, stateInputsFromContext, thinkingInputsFromContext, usageTotalsFromAssistantMessage, usageTotalsFromEntries, type StateSessionEntry } from "../runtime-snapshot.js";
 
 function message(role: string, options: { usage?: Record<string, unknown>; stopReason?: string } = {}): StateSessionEntry {
 	return {
@@ -145,6 +145,27 @@ assert.deepEqual(
 		contextUsage: { tokens: 456, contextWindow: 456000, percent: 0.1 },
 	},
 	"lifecycleInputsFromContext should read workspace/model/thinking/provider/context without entries or branch scans",
+);
+
+assert.deepEqual(
+	usageTotalsFromAssistantMessage(message("user", { usage: { input: 100, output: 200, cacheRead: 300, cacheWrite: 400, cost: { total: 999 } } }).message ?? {}),
+	{ input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 },
+	"usageTotalsFromAssistantMessage should ignore non-assistant messages",
+);
+assert.deepEqual(
+	usageTotalsFromAssistantMessage(message("assistant", { usage: { input: 1, output: 2, cacheRead: 3, cacheWrite: 4, cost: { total: 0.25, input: 10 } } }).message ?? {}),
+	{ input: 1, output: 2, cacheRead: 3, cacheWrite: 4, cost: 0.25 },
+	"usageTotalsFromAssistantMessage should prefer finite cost.total over cost components",
+);
+assert.deepEqual(
+	usageTotalsFromAssistantMessage(message("assistant", { usage: { input: 5, output: 6, cacheRead: 7, cacheWrite: 8, cost: { input: 0.1, output: 0.2, cacheRead: 0.3, cacheWrite: 0.4 } } }).message ?? {}),
+	{ input: 5, output: 6, cacheRead: 7, cacheWrite: 8, cost: 1 },
+	"usageTotalsFromAssistantMessage should fall back to cost components when cost.total is absent",
+);
+assert.deepEqual(
+	usageTotalsFromAssistantMessage(message("assistant").message ?? {}),
+	{ input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 },
+	"usageTotalsFromAssistantMessage should default missing usage to zero",
 );
 
 assert.deepEqual(

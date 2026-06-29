@@ -5,8 +5,8 @@ import { GitRefresher } from "./git.js";
 import { readPiUiTheme, resolveRuntimeRenderStyleContext } from "./render-style-context.js";
 import { runtimePlanFor, type RuntimeEventFacts, type RuntimeEventKind, type RuntimeRefreshPlan } from "./runtime-policy.js";
 import type { GlanceRenderStyleContext } from "./theme-adapter.js";
-import { lifecycleInputsFromContext, stateInputsFromContext, thinkingInputsFromContext } from "./runtime-snapshot.js";
-import { clearContextUsage, clearCurrentRunThroughput, createInitialState, refreshContextUsage, refreshModel, refreshWorkspace, setCurrentRunThroughput, setGitSnapshot, setLastTurnThroughput, setProviderCount, setUsageTotals } from "./state.js";
+import { assistantMessageHasKnownContextUsage, lifecycleInputsFromContext, stateInputsFromContext, thinkingInputsFromContext, usageTotalsFromAssistantMessage, type StateMessageInputs } from "./runtime-snapshot.js";
+import { addUsageTotals, clearContextUsage, clearCurrentRunThroughput, createInitialState, refreshContextUsage, refreshModel, refreshWorkspace, setCurrentRunThroughput, setGitSnapshot, setLastTurnThroughput, setProviderCount, setUsageTotals } from "./state.js";
 import { ThroughputRunTracker, type ThroughputRunStateIntent } from "./throughput-run-tracker.js";
 import type { GitSnapshot, GlanceConfig, GlanceState } from "./types.js";
 
@@ -38,8 +38,8 @@ export interface GlanceRuntimeAdapters {
 }
 
 interface MessageEndLikeEvent {
-	message: {
-		role?: string;
+	message: StateMessageInputs & {
+		responseId?: unknown;
 	};
 }
 
@@ -108,6 +108,8 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 	let requestRender: (() => void) | undefined;
 	let uiGeneration = 0;
 	let unknownContextAfterLatestCompaction = false;
+	let appliedAssistantMessageObjects = new WeakSet<object>();
+	let appliedAssistantMessageResponseIds = new Set<string>();
 	const throughputTracker = new ThroughputRunTracker();
 	const nowMs = adapters.nowMs ?? Date.now;
 
@@ -165,6 +167,29 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 		gitRefresher?.schedule(immediate);
 	}
 
+	function resetAssistantMessageDedupe(): void {
+		appliedAssistantMessageObjects = new WeakSet<object>();
+		appliedAssistantMessageResponseIds = new Set<string>();
+	}
+
+	function usageTotalsAreZero(delta: ReturnType<typeof usageTotalsFromAssistantMessage>): boolean {
+		return delta.input === 0 && delta.output === 0 && delta.cacheRead === 0 && delta.cacheWrite === 0 && delta.cost === 0;
+	}
+
+	function applyAssistantMessageUsageDelta(message: StateMessageInputs & { responseId?: unknown }): boolean {
+		if (!state || message.role !== "assistant") return false;
+		const delta = usageTotalsFromAssistantMessage(message);
+		if (usageTotalsAreZero(delta)) return false;
+		if (typeof message.responseId === "string" && message.responseId) {
+			if (appliedAssistantMessageResponseIds.has(message.responseId)) return false;
+			appliedAssistantMessageResponseIds.add(message.responseId);
+		} else if (typeof message === "object" && message !== null) {
+			if (appliedAssistantMessageObjects.has(message)) return false;
+			appliedAssistantMessageObjects.add(message);
+		}
+		return addUsageTotals(state, delta);
+	}
+
 	function applySnapshotPlan(ctx: ExtensionContext, plan: RuntimeRefreshPlan): void {
 		if (!state || plan.snapshot === "none") return;
 		if (plan.snapshot === "thinking") {
@@ -173,7 +198,7 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 			if (plan.refreshModel) refreshModel(state, inputs, getConfig());
 			return;
 		}
-		if (plan.snapshot === "lifecycle") {
+		if (plan.snapshot === "lifecycle" || plan.snapshot === "message") {
 			const inputs = lifecycleInputsFromContext(ctx, adapters.getThinkingLevel());
 			const workspaceChanged = plan.refreshWorkspace ? refreshWorkspace(state, inputs) : false;
 			setProviderCount(state, inputs.availableProviderCount);
@@ -300,12 +325,14 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 		events: {
 			sessionStart: (_event, ctx) => {
 				throughputTracker.reset();
+				resetAssistantMessageDedupe();
 				config = adapters.loadConfigSync();
 				state = createInitialState(readStateInputs(ctx), config);
 				installInputSurface(ctx);
 			},
 			sessionShutdown: async (_event, ctx) => {
 				throughputTracker.reset();
+				resetAssistantMessageDedupe();
 				clearUI(ctx);
 			},
 			modelSelect: async (_event, ctx) => {
@@ -327,7 +354,12 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 				await executeRuntimePlan("session_compact", ctx);
 			},
 			messageEnd: async (event, ctx) => {
-				await executeRuntimePlan("message_end", ctx, { messageRole: event.message.role });
+				if (event.message.role === "assistant" && unknownContextAfterLatestCompaction && assistantMessageHasKnownContextUsage(event.message)) {
+					unknownContextAfterLatestCompaction = false;
+				}
+				await executeRuntimePlan("message_end", ctx, { messageRole: event.message.role }, () => {
+					applyAssistantMessageUsageDelta(event.message);
+				});
 			},
 			turnEnd: async (event, ctx) => {
 				await executeRuntimePlan("turn_end", ctx, undefined, () => {

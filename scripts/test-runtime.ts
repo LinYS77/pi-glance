@@ -2,6 +2,7 @@ import { strict as assert } from "node:assert";
 import type { ExtensionCommandContext, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { defaultConfig } from "../config.js";
 import { createGlanceRuntime, type CreateGitRefresherOptions, type GlancePaneResult, type GlanceRuntimeAdapters, type RuntimeGitRefresher, type RuntimeShowPaneOptions } from "../runtime.js";
+import type { StateSessionEntry } from "../runtime-snapshot.js";
 import type { GitSnapshot, GlanceConfig, GlanceState } from "../types.js";
 
 interface Notification {
@@ -38,6 +39,8 @@ interface TestContext {
 	setAvailableProviders(providers: string[]): void;
 	setModel(model: MutableModelInfo | undefined): void;
 	setContextUsage(usage: MutableContextUsage | undefined): void;
+	setSessionEntries(entries: StateSessionEntry[]): void;
+	setSessionBranch(branch: StateSessionEntry[]): void;
 }
 
 interface GitRefresherHarness {
@@ -105,6 +108,28 @@ function gitSnapshot(branch = "main"): GitSnapshot {
 	};
 }
 
+function assistantMessage(options: { responseId?: string; usage?: Record<string, unknown>; stopReason?: string; timestamp?: number } = {}) {
+	return {
+		role: "assistant",
+		responseId: options.responseId,
+		usage: options.usage,
+		stopReason: options.stopReason ?? "stop",
+		timestamp: options.timestamp ?? 1000,
+	};
+}
+
+function sessionMessage(role: string, options: { usage?: Record<string, unknown>; stopReason?: string; responseId?: string } = {}): StateSessionEntry {
+	return {
+		type: "message",
+		message: {
+			role,
+			usage: options.usage,
+			stopReason: options.stopReason,
+			responseId: options.responseId,
+		} as StateSessionEntry["message"] & { responseId?: string },
+	};
+}
+
 function fakePiTheme(name = "runtime-current-pi-theme") {
 	return {
 		name,
@@ -140,7 +165,7 @@ function createGitHarness(): GitRefresherHarness {
 	return harness;
 }
 
-function createContext(options: { cwd?: string; mode?: "tui" | "rpc" | "json" | "print"; hasUI?: boolean; availableProviders?: string[]; model?: MutableModelInfo; contextUsage?: MutableContextUsage; invokeFooterFactory?: boolean; uiTheme?: unknown } = {}): TestContext {
+function createContext(options: { cwd?: string; mode?: "tui" | "rpc" | "json" | "print"; hasUI?: boolean; availableProviders?: string[]; model?: MutableModelInfo; contextUsage?: MutableContextUsage; entries?: StateSessionEntry[]; branch?: StateSessionEntry[]; invokeFooterFactory?: boolean; uiTheme?: unknown } = {}): TestContext {
 	const surfaceCalls: string[] = [];
 	const notifications: Notification[] = [];
 	const footerFactories: CapturedFooterFactory[] = [];
@@ -153,6 +178,8 @@ function createContext(options: { cwd?: string; mode?: "tui" | "rpc" | "json" | 
 	let availableProviders = options.availableProviders ?? ["test-provider"];
 	let model: MutableModelInfo | undefined = options.model ?? { id: "test-model", provider: "test-provider", contextWindow: 200_000 };
 	let contextUsage: MutableContextUsage | undefined = options.contextUsage ?? { tokens: 42, contextWindow: 200_000, percent: 0.021 };
+	let entries: StateSessionEntry[] = options.entries ?? [];
+	let branch: StateSessionEntry[] = options.branch ?? [];
 	const mode = options.mode ?? "tui";
 	const hasUI = options.hasUI ?? (mode === "tui" || mode === "rpc");
 	const invokeFooterFactory = options.invokeFooterFactory ?? true;
@@ -175,11 +202,11 @@ function createContext(options: { cwd?: string; mode?: "tui" | "rpc" | "json" | 
 			getCwd: () => cwd,
 			getEntries: () => {
 				entryReads++;
-				return [];
+				return entries;
 			},
 			getBranch: () => {
 				branchReads++;
-				return [];
+				return branch;
 			},
 		},
 		ui: {
@@ -224,6 +251,12 @@ function createContext(options: { cwd?: string; mode?: "tui" | "rpc" | "json" | 
 		},
 		setContextUsage: (usage: MutableContextUsage | undefined) => {
 			contextUsage = usage;
+		},
+		setSessionEntries: (nextEntries: StateSessionEntry[]) => {
+			entries = nextEntries;
+		},
+		setSessionBranch: (nextBranch: StateSessionEntry[]) => {
+			branch = nextBranch;
 		},
 	};
 }
@@ -598,6 +631,69 @@ function createRuntimeHarness(options: RuntimeHarnessOptions = {}): RuntimeHarne
 	await harness.runtime.events.sessionCompact({}, test.ctx as ExtensionContext);
 	assert.ok(test.getEntryReads() > entryAfterTree, "session_compact should remain a structural full entries scan");
 	assert.ok(test.getBranchReads() > branchAfterTree, "session_compact should remain a structural full branch scan");
+}
+
+{
+	const git = createGitHarness();
+	const test = createContext();
+	const harness = createRuntimeHarness({
+		loadConfigSyncConfig: defaultConfig(),
+		showPaneResults: [{ action: "cancel" }, { action: "cancel" }, { action: "cancel" }, { action: "cancel" }],
+		git,
+	});
+
+	harness.runtime.events.sessionStart({}, test.ctx);
+	const entryBaseline = test.getEntryReads();
+	const branchBaseline = test.getBranchReads();
+	assert.ok(entryBaseline > 0, "assistant message_end counter baseline should include the session_start entries read");
+	assert.ok(branchBaseline > 0, "assistant message_end counter baseline should include the session_start branch read");
+	const renderBaseline = test.getRenderRequests();
+	const scheduleBaseline = git.schedules.length;
+	await harness.runtime.events.messageEnd({ message: { role: "user", usage: { input: 100, output: 100, cost: { total: 100 } } } }, test.ctx as ExtensionContext);
+	assert.equal(test.getEntryReads(), entryBaseline, "user message_end should not scan session entries after the session_start baseline");
+	assert.equal(test.getBranchReads(), branchBaseline, "user message_end should not scan session branch after the session_start baseline");
+	assert.equal(test.getRenderRequests(), renderBaseline, "user message_end should remain no-render");
+	assert.deepEqual(git.schedules.slice(scheduleBaseline), [], "user message_end should not schedule git refreshes");
+	const firstMessage = assistantMessage({ responseId: "resp-1", usage: { input: 2, output: 3, cacheRead: 4, cacheWrite: 5, totalTokens: 14, cost: { total: 0.5, input: 10 } } });
+	await harness.runtime.events.messageEnd({ message: firstMessage }, test.ctx as ExtensionContext);
+
+	assert.equal(test.getEntryReads(), entryBaseline, "assistant message_end should not scan session entries after the session_start baseline");
+	assert.equal(test.getBranchReads(), branchBaseline, "assistant message_end should not scan session branch after the session_start baseline");
+	assert.deepEqual(git.schedules.slice(scheduleBaseline), [], "assistant message_end should not schedule git refresh when workspace is unchanged");
+	assert.ok(test.getRenderRequests() > renderBaseline, "assistant message_end should still request a render");
+	await harness.runtime.commands.openPane("", test.ctx);
+	let previewState = harness.showPanePreviewStates.at(-1);
+	assert.ok(previewState, "assistant message_end should open /glance with preview state");
+	assert.deepEqual(previewState.usage, { input: 2, output: 3, cacheRead: 4, cacheWrite: 5, cost: 0.5 }, "assistant message_end should add message-level usage with cost.total semantics");
+
+	await harness.runtime.events.messageEnd(
+		{ message: assistantMessage({ responseId: "resp-1", usage: { input: 100, output: 100, cacheRead: 100, cacheWrite: 100, cost: { total: 100 } } }) },
+		test.ctx as ExtensionContext,
+	);
+	await harness.runtime.commands.openPane("", test.ctx);
+	previewState = harness.showPanePreviewStates.at(-1);
+	assert.ok(previewState, "duplicate responseId check should open /glance with preview state");
+	assert.deepEqual(previewState.usage, { input: 2, output: 3, cacheRead: 4, cacheWrite: 5, cost: 0.5 }, "assistant message_end should dedupe repeated responseId deltas");
+
+	const objectIdentityMessage = assistantMessage({ usage: { input: 7, output: 8, cacheRead: 9, cacheWrite: 10, cost: { input: 0.1, output: 0.2, cacheRead: 0.3, cacheWrite: 0.4 } } });
+	await harness.runtime.events.messageEnd({ message: objectIdentityMessage }, test.ctx as ExtensionContext);
+	await harness.runtime.events.messageEnd({ message: objectIdentityMessage }, test.ctx as ExtensionContext);
+	await harness.runtime.commands.openPane("", test.ctx);
+	previewState = harness.showPanePreviewStates.at(-1);
+	assert.ok(previewState, "object identity dedupe check should open /glance with preview state");
+	assert.deepEqual(previewState.usage, { input: 9, output: 11, cacheRead: 13, cacheWrite: 15, cost: 1.5 }, "assistant message_end should add component-cost fallback once for duplicate object events");
+	assert.equal(test.getEntryReads(), entryBaseline, "assistant message_end duplicate checks should still avoid entries scans");
+	assert.equal(test.getBranchReads(), branchBaseline, "assistant message_end duplicate checks should still avoid branch scans");
+
+	test.setSessionEntries([sessionMessage("assistant", { usage: { input: 20, output: 30, cacheRead: 40, cacheWrite: 50, cost: { total: 2.5 } } })]);
+	test.setSessionBranch([]);
+	await harness.runtime.events.turnEnd({ turnIndex: 1, message: firstMessage }, test.ctx as ExtensionContext);
+	assert.ok(test.getEntryReads() > entryBaseline, "turn_end should keep full entries reconciliation after assistant message_end");
+	assert.ok(test.getBranchReads() > branchBaseline, "turn_end should keep full branch reconciliation after assistant message_end");
+	await harness.runtime.commands.openPane("", test.ctx);
+	previewState = harness.showPanePreviewStates.at(-1);
+	assert.ok(previewState, "turn_end reconciliation check should open /glance with preview state");
+	assert.deepEqual(previewState.usage, { input: 20, output: 30, cacheRead: 40, cacheWrite: 50, cost: 2.5 }, "turn_end full reconciliation should replace totals rather than add onto message_end deltas");
 }
 
 {

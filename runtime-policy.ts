@@ -11,7 +11,7 @@ export type RuntimeEventKind =
 	| "config_save_success"
 	| "editor_thinking_cycle";
 
-export type RuntimeSnapshotMode = "none" | "reliable" | "lifecycle" | "thinking" | "compact";
+export type RuntimeSnapshotMode = "none" | "reliable" | "lifecycle" | "message" | "thinking" | "compact";
 export type RuntimeGitRefreshMode = "never" | "onWorkspaceChange" | "immediate";
 export type RuntimeContextPlan = "none" | "refresh" | "clear";
 
@@ -103,6 +103,18 @@ const TOOL_EXECUTION_END_PLAN: RuntimeRefreshPlan = {
 	render: true,
 };
 
+const ASSISTANT_MESSAGE_END_PLAN: RuntimeRefreshPlan = {
+	ensureConfig: true,
+	ensureState: true,
+	snapshot: "message",
+	refreshWorkspace: true,
+	refreshModel: false,
+	refreshUsageTotals: false,
+	context: "refresh",
+	git: "onWorkspaceChange",
+	render: true,
+};
+
 const SESSION_COMPACT_PLAN: RuntimeRefreshPlan = {
 	ensureConfig: true,
 	ensureState: true,
@@ -168,7 +180,7 @@ export function runtimePlanFor(kind: RuntimeEventKind, facts: RuntimeEventFacts 
 		case "session_compact":
 			return clonePlan(SESSION_COMPACT_PLAN);
 		case "message_end":
-			return facts.messageRole === "assistant" ? clonePlan(RELIABLE_NO_MODEL_ON_WORKSPACE_CHANGE_PLAN) : clonePlan(ENSURE_ONLY_PLAN);
+			return facts.messageRole === "assistant" ? clonePlan(ASSISTANT_MESSAGE_END_PLAN) : clonePlan(ENSURE_ONLY_PLAN);
 		case "turn_end":
 		case "agent_end":
 			return clonePlan(RELIABLE_NO_MODEL_ON_WORKSPACE_CHANGE_PLAN);

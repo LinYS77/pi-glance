@@ -89,6 +89,19 @@ export function setUsageTotals(state: GlanceState, usage: UsageTotals): boolean 
 	return true;
 }
 
+export function addUsageTotals(state: GlanceState, delta: UsageTotals): boolean {
+	if (delta.input === 0 && delta.output === 0 && delta.cacheRead === 0 && delta.cacheWrite === 0 && delta.cost === 0) return false;
+	state.usage = {
+		input: state.usage.input + delta.input,
+		output: state.usage.output + delta.output,
+		cacheRead: state.usage.cacheRead + delta.cacheRead,
+		cacheWrite: state.usage.cacheWrite + delta.cacheWrite,
+		cost: state.usage.cost + delta.cost,
+	};
+	touch(state);
+	return true;
+}
+
 export function setProviderCount(state: GlanceState, availableCount: number): boolean {
 	if (state.providers.availableCount === availableCount) return false;
 	state.providers.availableCount = availableCount;
