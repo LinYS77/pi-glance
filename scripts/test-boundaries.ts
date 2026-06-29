@@ -417,6 +417,7 @@ function assertEditorSeamImports(files: SourceFile[]): void {
 	if (!editor.text.includes("resolveGlanceRenderStyles(config.theme")) fail(`${editor.path}: editor styling should resolve styles through the shared adapter context`);
 	if (!/renderGlanceLine\([\s\S]*?\{ styles \}/.test(editor.text)) fail(`${editor.path}: editor should pass its render-pass styles into status-line rendering`);
 	if (!editor.text.includes("cachedStatusStyleKey") || !editor.text.includes("styles.cacheKey")) fail(`${editor.path}: editor status cache should include style cacheKey awareness`);
+	if (!/handleInput\(data: string\): void\s*{[\s\S]*?super\.handleInput\(data\)/.test(editor.text)) fail(`${editor.path}: GlanceEditor.handleInput must continue delegating raw input to CustomEditor`);
 	if (editor.text.includes("interface GlanceEditorOptions extends EditorOptions")) fail(`${editor.path}: GlanceEditorOptions must not extend Pi EditorOptions; keep pi-glance render options separate`);
 	if (!editor.text.includes("readonly editorOptions?: EditorOptions") || !editor.text.includes("readonly renderStyleContext?: GlanceRenderStyleContext")) fail(`${editor.path}: GlanceEditorOptions should wrap Pi editorOptions separately from renderStyleContext`);
 	if (!editor.text.includes("super(tui, theme, appKeybindings, glanceOptions?.editorOptions)")) fail(`${editor.path}: GlanceEditor must pass only editorOptions through to CustomEditor`);

@@ -551,20 +551,24 @@ for (const width of WIDTHS) {
 	const config = defaultConfig();
 	config.editor.topMarginRows = 0;
 	config.editor.minContentRows = 2;
-	const editor = makeLiveEditor(dirtyState(), config, true, 40, keybindingsWith({ "tui.input.newLine": ["\u000a"], "app.thinking.cycle": ["\u001b[Z"] }));
+	const editor = makeLiveEditor(dirtyState(), config, true, 40, keybindingsWith({ "tui.input.newLine": ["\u000a"] }));
 	let thinkingNotifications = 0;
 	const thinkingEditor = new GlanceEditor(
 		{ terminal: { rows: 40 }, requestRender: () => undefined } as unknown as TUI,
 		theme,
-		keybindingsWith({ "tui.input.newLine": ["\u000a"], "app.thinking.cycle": ["\u001b[Z"] }),
+		keybindingsWith({ "app.thinking.cycle": ["t"] }),
 		() => dirtyState(),
 		() => config,
 		() => {
 			thinkingNotifications++;
 		},
 	);
-	thinkingEditor.handleInput("\u001b[Z");
-	assert.equal(thinkingNotifications, 1, "GlanceEditor should keep app thinking-cycle keybinding delegation");
+	thinkingEditor.handleInput("t");
+	assert.equal(thinkingNotifications, 1, "GlanceEditor should invoke the thinking-cycle callback exactly once for the matching key");
+	assert.equal(thinkingEditor.getText(), "t", "thinking-cycle input should still delegate through CustomEditor to Pi editor text handling");
+	thinkingEditor.handleInput("x");
+	assert.equal(thinkingNotifications, 1, "non-thinking input should not trigger the thinking-cycle callback");
+	assert.equal(thinkingEditor.getText(), "tx", "non-thinking printable input should continue to use inherited Pi editor handling");
 
 	editor.setText("中文🙂wide");
 	editor.handleInput("\u000a");
@@ -576,6 +580,26 @@ for (const width of WIDTHS) {
 	for (const line of frame) {
 		assert.ok(visibleWidth(line) <= 48, `unicode editor frame line should fit width 48: ${line}`);
 	}
+}
+
+{
+	const config = defaultConfig();
+	const interruptEditor = makeLiveEditor(dirtyState(), config, true, 40, keybindingsWith({ "app.interrupt": ["\u001b"] }));
+	let interrupts = 0;
+	interruptEditor.onEscape = () => {
+		interrupts++;
+	};
+	interruptEditor.setText("keep editing");
+	interruptEditor.handleInput("\u001b");
+	assert.equal(interrupts, 1, "GlanceEditor should delegate app.interrupt to CustomEditor onEscape exactly once");
+	assert.equal(interruptEditor.getText(), "keep editing", "app.interrupt should be handled by CustomEditor without mutating editor text");
+
+	const editorKeyEditor = makeLiveEditor(dirtyState(), config, true);
+	editorKeyEditor.handleInput("abc");
+	editorKeyEditor.handleInput("\u001b[D");
+	assert.deepEqual(editorKeyEditor.getCursor(), { line: 0, col: 2 }, "left-arrow editor keybinding should move the inherited Pi editor cursor");
+	editorKeyEditor.handleInput("\u007f");
+	assert.equal(editorKeyEditor.getText(), "ac", "backspace editor keybinding should delete through inherited Pi editor behavior");
 }
 
 {
