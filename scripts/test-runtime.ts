@@ -629,8 +629,90 @@ function createRuntimeHarness(options: RuntimeHarnessOptions = {}): RuntimeHarne
 	const entryAfterTree = test.getEntryReads();
 	const branchAfterTree = test.getBranchReads();
 	await harness.runtime.events.sessionCompact({}, test.ctx as ExtensionContext);
-	assert.ok(test.getEntryReads() > entryAfterTree, "session_compact should remain a structural full entries scan");
-	assert.ok(test.getBranchReads() > branchAfterTree, "session_compact should remain a structural full branch scan");
+	assert.ok(test.getEntryReads() > entryAfterTree, "session_compact should keep entries scan for usage totals");
+	assert.equal(test.getBranchReads(), branchAfterTree, "session_compact should use explicit context-unknown state instead of a branch scan");
+}
+
+{
+	const git = createGitHarness();
+	const test = createContext({
+		model: { id: "initial-compact-model", provider: "openai", contextWindow: 100_000 },
+		contextUsage: { tokens: 10_000, contextWindow: 100_000, percent: 10 },
+		entries: [sessionMessage("assistant", { usage: { input: 1, output: 2, cacheRead: 3, cacheWrite: 4, cost: { total: 0.1 } } })],
+	});
+	const harness = createRuntimeHarness({
+		loadConfigSyncConfig: defaultConfig(),
+		showPaneResults: Array.from({ length: 7 }, () => ({ action: "cancel" }) as GlancePaneResult),
+		git,
+	});
+
+	harness.runtime.events.sessionStart({}, test.ctx);
+	const entryBaseline = test.getEntryReads();
+	const branchBaseline = test.getBranchReads();
+	assert.ok(entryBaseline > 0, "session_compact context-unknown test baseline should include session_start entries read");
+	assert.ok(branchBaseline > 0, "session_compact context-unknown test baseline should include session_start branch read");
+	const scheduleBaseline = git.schedules.length;
+	const renderBaseline = test.getRenderRequests();
+	test.setContextUsage({ tokens: 99_999, contextWindow: 100_000, percent: 99.999 });
+	await harness.runtime.events.sessionCompact({}, test.ctx as ExtensionContext);
+
+	assert.ok(test.getEntryReads() > entryBaseline, "session_compact should still scan entries for usage totals in context-unknown test");
+	assert.equal(test.getBranchReads(), branchBaseline, "session_compact should not scan branch in context-unknown test");
+	assert.deepEqual(git.schedules.slice(scheduleBaseline), [true], "session_compact should preserve immediate git refresh behavior");
+	assert.ok(test.getRenderRequests() > renderBaseline, "session_compact should request render after clearing context");
+	await harness.runtime.commands.openPane("", test.ctx);
+	let previewState = harness.showPanePreviewStates.at(-1);
+	assert.ok(previewState, "session_compact context clear should open /glance with preview state");
+	assert.deepEqual(previewState.usage, { input: 1, output: 2, cacheRead: 3, cacheWrite: 4, cost: 0.1 }, "session_compact should preserve usage totals from entries");
+	assert.equal(previewState.context.tokens, null, "session_compact should clear visible context tokens to unknown");
+	assert.equal(previewState.context.window, 100_000, "session_compact should preserve current context window");
+	assert.equal(previewState.context.percent, null, "session_compact should clear visible context percent to unknown");
+
+	test.setAvailableProviders(["openai", "anthropic"]);
+	test.setModel({ id: "post-compact-model", provider: "anthropic", contextWindow: 200_000 });
+	test.setContextUsage({ tokens: 88_000, contextWindow: 200_000, percent: 44 });
+	const branchAfterCompact = test.getBranchReads();
+	await harness.runtime.events.modelSelect({}, test.ctx as ExtensionContext);
+	await harness.runtime.events.turnStart({}, test.ctx as ExtensionContext);
+	await harness.runtime.events.toolExecutionEnd({}, test.ctx as ExtensionContext);
+	await harness.runtime.events.messageEnd({ message: { role: "user", usage: { totalTokens: 999 } } }, test.ctx as ExtensionContext);
+	await harness.runtime.events.messageEnd({ message: { role: "toolResult", usage: { totalTokens: 999 } } }, test.ctx as ExtensionContext);
+	await harness.runtime.events.messageEnd({ message: assistantMessage({ responseId: "missing-usage-after-compact" }) }, test.ctx as ExtensionContext);
+	await harness.runtime.events.messageEnd({ message: assistantMessage({ responseId: "zero-usage-after-compact", usage: { totalTokens: 0, input: 10, output: 10 } }) }, test.ctx as ExtensionContext);
+	await harness.runtime.events.messageEnd({ message: assistantMessage({ responseId: "aborted-after-compact", stopReason: "aborted", usage: { totalTokens: 100, input: 10 } }) }, test.ctx as ExtensionContext);
+	await harness.runtime.events.messageEnd({ message: assistantMessage({ responseId: "error-after-compact", stopReason: "error", usage: { totalTokens: 100, input: 10 } }) }, test.ctx as ExtensionContext);
+	assert.equal(test.getBranchReads(), branchAfterCompact, "lifecycle/message events after compact should not scan branch while context is unknown");
+	await harness.runtime.commands.openPane("", test.ctx);
+	previewState = harness.showPanePreviewStates.at(-1);
+	assert.ok(previewState, "post-compact stale context check should open /glance with preview state");
+	assert.equal(previewState.providers.availableCount, 2, "post-compact lifecycle refreshes should still update provider count");
+	assert.equal(previewState.model.id, "post-compact-model", "post-compact model_select should still update model id");
+	assert.equal(previewState.context.tokens, null, "post-compact lifecycle/message refreshes should not refill stale context tokens");
+	assert.equal(previewState.context.window, 200_000, "post-compact lifecycle refreshes should still update context window");
+	assert.equal(previewState.context.percent, null, "post-compact lifecycle/message refreshes should not refill stale context percent");
+
+	test.setContextUsage({ tokens: 55_000, contextWindow: 200_000, percent: 27.5 });
+	const branchBeforeKnownAssistant = test.getBranchReads();
+	await harness.runtime.events.messageEnd({ message: assistantMessage({ responseId: "known-after-compact", usage: { totalTokens: 55_000, input: 5, output: 6, cost: { total: 0.2 } } }) }, test.ctx as ExtensionContext);
+	assert.equal(test.getBranchReads(), branchBeforeKnownAssistant, "valid assistant context recovery should not scan branch");
+	await harness.runtime.commands.openPane("", test.ctx);
+	previewState = harness.showPanePreviewStates.at(-1);
+	assert.ok(previewState, "valid assistant context recovery should open /glance with preview state");
+	assert.equal(previewState.context.tokens, 55_000, "valid assistant context usage should clear unknown and refresh context tokens");
+	assert.equal(previewState.context.window, 200_000, "valid assistant context usage should keep the current context window");
+	assert.equal(previewState.context.percent, 27.5, "valid assistant context usage should clear unknown and refresh context percent");
+
+	test.setSessionBranch([{ type: "compaction" }]);
+	test.setSessionEntries([sessionMessage("assistant", { usage: { input: 8, output: 9, cost: { total: 0.3 } } })]);
+	test.setContextUsage({ tokens: 66_000, contextWindow: 200_000, percent: 33 });
+	const branchBeforeFullSync = test.getBranchReads();
+	await harness.runtime.events.sessionTree({}, test.ctx as ExtensionContext);
+	assert.ok(test.getBranchReads() > branchBeforeFullSync, "session_tree should still sync context-unknown state from branch-derived facts");
+	await harness.runtime.commands.openPane("", test.ctx);
+	previewState = harness.showPanePreviewStates.at(-1);
+	assert.ok(previewState, "full branch sync unknown check should open /glance with preview state");
+	assert.equal(previewState.context.tokens, null, "full branch sync should restore explicit unknown context when branch is compacted without known assistant usage");
+	assert.equal(previewState.context.percent, null, "full branch sync should clear context percent when branch is compacted without known assistant usage");
 }
 
 {

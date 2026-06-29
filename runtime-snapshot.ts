@@ -34,6 +34,10 @@ export interface StateLifecycleInputs extends StateThinkingInputs {
 	contextUsage?: StateContextUsageInputs;
 }
 
+export interface StateCompactInputs extends StateLifecycleInputs {
+	usage: UsageTotals;
+}
+
 interface StateMessageCostInputs {
 	total?: number;
 	input?: number;
@@ -184,10 +188,16 @@ export function lifecycleInputsFromContext(ctx: ExtensionContext, thinkingLevel:
 	};
 }
 
-export function stateInputsFromContext(ctx: ExtensionContext, thinkingLevel: string): StateInputs {
+export function compactInputsFromContext(ctx: ExtensionContext, thinkingLevel: string): StateCompactInputs {
 	return {
 		...lifecycleInputsFromContext(ctx, thinkingLevel),
 		usage: usageTotalsFromEntries(ctx.sessionManager.getEntries()),
+	};
+}
+
+export function stateInputsFromContext(ctx: ExtensionContext, thinkingLevel: string): StateInputs {
+	return {
+		...compactInputsFromContext(ctx, thinkingLevel),
 		unknownContextAfterLatestCompaction: hasUnknownContextAfterLatestCompaction(ctx.sessionManager.getBranch()),
 	};
 }

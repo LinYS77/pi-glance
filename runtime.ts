@@ -5,7 +5,7 @@ import { GitRefresher } from "./git.js";
 import { readPiUiTheme, resolveRuntimeRenderStyleContext } from "./render-style-context.js";
 import { runtimePlanFor, type RuntimeEventFacts, type RuntimeEventKind, type RuntimeRefreshPlan } from "./runtime-policy.js";
 import type { GlanceRenderStyleContext } from "./theme-adapter.js";
-import { assistantMessageHasKnownContextUsage, lifecycleInputsFromContext, stateInputsFromContext, thinkingInputsFromContext, usageTotalsFromAssistantMessage, type StateMessageInputs } from "./runtime-snapshot.js";
+import { assistantMessageHasKnownContextUsage, compactInputsFromContext, lifecycleInputsFromContext, stateInputsFromContext, thinkingInputsFromContext, usageTotalsFromAssistantMessage, type StateInputs, type StateMessageInputs } from "./runtime-snapshot.js";
 import { addUsageTotals, clearContextUsage, clearCurrentRunThroughput, createInitialState, refreshContextUsage, refreshModel, refreshWorkspace, setCurrentRunThroughput, setGitSnapshot, setLastTurnThroughput, setProviderCount, setUsageTotals } from "./state.js";
 import { ThroughputRunTracker, type ThroughputRunStateIntent } from "./throughput-run-tracker.js";
 import type { GitSnapshot, GlanceConfig, GlanceState } from "./types.js";
@@ -123,9 +123,23 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 		return config;
 	}
 
+	function markContextUnknownAfterCompaction(): void {
+		unknownContextAfterLatestCompaction = true;
+	}
+
+	function syncContextUnknownFromFullScan(inputs: Pick<StateInputs, "unknownContextAfterLatestCompaction">): void {
+		unknownContextAfterLatestCompaction = inputs.unknownContextAfterLatestCompaction;
+	}
+
+	function clearContextUnknownAfterKnownAssistantUsage(message: StateMessageInputs): void {
+		if (unknownContextAfterLatestCompaction && assistantMessageHasKnownContextUsage(message)) {
+			unknownContextAfterLatestCompaction = false;
+		}
+	}
+
 	function readStateInputs(ctx: ExtensionContext) {
 		const inputs = stateInputsFromContext(ctx, adapters.getThinkingLevel());
-		unknownContextAfterLatestCompaction = inputs.unknownContextAfterLatestCompaction;
+		syncContextUnknownFromFullScan(inputs);
 		return inputs;
 	}
 
@@ -203,6 +217,19 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 			const workspaceChanged = plan.refreshWorkspace ? refreshWorkspace(state, inputs) : false;
 			setProviderCount(state, inputs.availableProviderCount);
 			if (plan.refreshModel) refreshModel(state, inputs, getConfig());
+			if (plan.context === "refresh") refreshContextUsage(state, { ...inputs, unknownContextAfterLatestCompaction });
+			else if (plan.context === "clear") clearContextUsage(state, inputs);
+			if (plan.git === "immediate") scheduleGitRefresh(true);
+			else if (plan.git === "onWorkspaceChange" && workspaceChanged) scheduleGitRefresh(true);
+			return;
+		}
+		if (plan.snapshot === "compact") {
+			markContextUnknownAfterCompaction();
+			const inputs = compactInputsFromContext(ctx, adapters.getThinkingLevel());
+			const workspaceChanged = plan.refreshWorkspace ? refreshWorkspace(state, inputs) : false;
+			setProviderCount(state, inputs.availableProviderCount);
+			if (plan.refreshModel) refreshModel(state, inputs, getConfig());
+			if (plan.refreshUsageTotals) setUsageTotals(state, inputs.usage);
 			if (plan.context === "refresh") refreshContextUsage(state, { ...inputs, unknownContextAfterLatestCompaction });
 			else if (plan.context === "clear") clearContextUsage(state, inputs);
 			if (plan.git === "immediate") scheduleGitRefresh(true);
@@ -354,9 +381,7 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 				await executeRuntimePlan("session_compact", ctx);
 			},
 			messageEnd: async (event, ctx) => {
-				if (event.message.role === "assistant" && unknownContextAfterLatestCompaction && assistantMessageHasKnownContextUsage(event.message)) {
-					unknownContextAfterLatestCompaction = false;
-				}
+				if (event.message.role === "assistant") clearContextUnknownAfterKnownAssistantUsage(event.message);
 				await executeRuntimePlan("message_end", ctx, { messageRole: event.message.role }, () => {
 					applyAssistantMessageUsageDelta(event.message);
 				});

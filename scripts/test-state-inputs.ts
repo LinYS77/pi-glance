@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { hasUnknownContextAfterLatestCompaction, lifecycleInputsFromContext, stateInputsFromContext, thinkingInputsFromContext, usageTotalsFromAssistantMessage, usageTotalsFromEntries, type StateSessionEntry } from "../runtime-snapshot.js";
+import { compactInputsFromContext, hasUnknownContextAfterLatestCompaction, lifecycleInputsFromContext, stateInputsFromContext, thinkingInputsFromContext, usageTotalsFromAssistantMessage, usageTotalsFromEntries, type StateSessionEntry } from "../runtime-snapshot.js";
 
 function message(role: string, options: { usage?: Record<string, unknown>; stopReason?: string } = {}): StateSessionEntry {
 	return {
@@ -145,6 +145,37 @@ assert.deepEqual(
 		contextUsage: { tokens: 456, contextWindow: 456000, percent: 0.1 },
 	},
 	"lifecycleInputsFromContext should read workspace/model/thinking/provider/context without entries or branch scans",
+);
+
+const branchlessCompactInputs = compactInputsFromContext(
+	{
+		cwd: "/fallback-compact",
+		model: { id: "compact-model", provider: "compact-provider", contextWindow: 789000 },
+		modelRegistry: {
+			getAvailable: () => [{ provider: "compact-provider" }, { provider: "other-provider" }],
+		},
+		getContextUsage: () => ({ tokens: 789, contextWindow: 789000, percent: 0.1 }),
+		sessionManager: {
+			getCwd: () => "/workspace-compact",
+			getEntries: () => [message("assistant", { usage: { input: 2, output: 3, cacheRead: 4, cacheWrite: 5, cost: { total: 0.75 } } })],
+			getBranch: () => {
+				throw new Error("compact inputs should not scan session branch");
+			},
+		},
+	} as unknown as ExtensionContext,
+	"low",
+);
+assert.deepEqual(
+	branchlessCompactInputs,
+	{
+		cwd: "/workspace-compact",
+		model: { id: "compact-model", provider: "compact-provider", contextWindow: 789000 },
+		thinkingLevel: "low",
+		availableProviderCount: 2,
+		contextUsage: { tokens: 789, contextWindow: 789000, percent: 0.1 },
+		usage: { input: 2, output: 3, cacheRead: 4, cacheWrite: 5, cost: 0.75 },
+	},
+	"compactInputsFromContext should read compact usage/workspace/model/context without branch scans",
 );
 
 assert.deepEqual(
