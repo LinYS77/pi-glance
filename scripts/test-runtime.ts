@@ -9,10 +9,15 @@ interface Notification {
 	type: "info" | "warning" | "error" | undefined;
 }
 
+type CapturedFooterFactory = (tui: { requestRender(): void }, theme: unknown) => unknown;
+type CapturedEditorFactory = (tui: { terminal: { rows: number }; requestRender(): void }, theme: unknown, keybindings: unknown) => unknown;
+
 interface TestContext {
 	ctx: ExtensionCommandContext;
 	surfaceCalls: string[];
 	notifications: Notification[];
+	footerFactories: CapturedFooterFactory[];
+	editorFactories: CapturedEditorFactory[];
 	getRenderRequests(): number;
 	setCwd(cwd: string): void;
 }
@@ -107,6 +112,8 @@ function createGitHarness(): GitRefresherHarness {
 function createContext(options: { cwd?: string; mode?: "tui" | "rpc" | "json" | "print"; hasUI?: boolean; availableProviders?: string[]; invokeFooterFactory?: boolean } = {}): TestContext {
 	const surfaceCalls: string[] = [];
 	const notifications: Notification[] = [];
+	const footerFactories: CapturedFooterFactory[] = [];
+	const editorFactories: CapturedEditorFactory[] = [];
 	let renderRequests = 0;
 	let cwd = options.cwd ?? "/repo";
 	const mode = options.mode ?? "tui";
@@ -135,11 +142,15 @@ function createContext(options: { cwd?: string; mode?: "tui" | "rpc" | "json" | 
 			notify: (message: string, type?: "info" | "warning" | "error") => notifications.push({ message, type }),
 			setFooter: (factory: unknown) => {
 				surfaceCalls.push(factory ? "setFooter:install" : "setFooter:clear");
-				if (factory && invokeFooterFactory) {
-					(factory as (tui: unknown, theme: unknown) => unknown)(fakeTui, fakeTheme);
+				if (factory) {
+					footerFactories.push(factory as CapturedFooterFactory);
+					if (invokeFooterFactory) (factory as CapturedFooterFactory)(fakeTui, fakeTheme);
 				}
 			},
-			setEditorComponent: (factory: unknown) => surfaceCalls.push(factory ? "setEditorComponent:install" : "setEditorComponent:clear"),
+			setEditorComponent: (factory: unknown) => {
+				surfaceCalls.push(factory ? "setEditorComponent:install" : "setEditorComponent:clear");
+				if (factory) editorFactories.push(factory as CapturedEditorFactory);
+			},
 		},
 		getContextUsage: () => ({ tokens: 42, contextWindow: 200_000, percent: 0.021 }),
 	} as unknown as ExtensionCommandContext;
@@ -148,11 +159,36 @@ function createContext(options: { cwd?: string; mode?: "tui" | "rpc" | "json" | 
 		ctx,
 		surfaceCalls,
 		notifications,
+		footerFactories,
+		editorFactories,
 		getRenderRequests: () => renderRequests,
 		setCwd: (nextCwd: string) => {
 			cwd = nextCwd;
 		},
 	};
+}
+
+function invokeFooterFactory(test: TestContext, index: number, requestRender: () => void): unknown {
+	const factory = test.footerFactories[index];
+	assert.ok(factory, `expected footer factory ${index}`);
+	return factory({ requestRender }, {});
+}
+
+function invokeEditorFactory(test: TestContext, index: number, requestRender: () => void): unknown {
+	const factory = test.editorFactories[index];
+	assert.ok(factory, `expected editor factory ${index}`);
+	const editorTheme = {
+		borderColor: (text: string) => text,
+		selectList: {
+			selectedPrefix: (text: string) => text,
+			selectedText: (text: string) => text,
+			description: (text: string) => text,
+			scrollInfo: (text: string) => text,
+			noMatch: (text: string) => text,
+		},
+	};
+	const keybindings = { matches: () => false };
+	return factory({ terminal: { rows: 40 }, requestRender }, editorTheme, keybindings);
 }
 
 function createRuntimeHarness(options: RuntimeHarnessOptions = {}): RuntimeHarness {
@@ -266,6 +302,119 @@ function createRuntimeHarness(options: RuntimeHarnessOptions = {}): RuntimeHarne
 
 	await harness.runtime.commands.openPane("", test.ctx);
 	assert.deepEqual(harness.showPaneInitials[1], nextConfig, "after successful save, later pane opens should receive the next active config");
+}
+
+{
+	const initialConfig = defaultConfig();
+	const nextConfig = nextEnabledConfig(initialConfig);
+	const git = createGitHarness();
+	const test = createContext({ invokeFooterFactory: false });
+	const harness = createRuntimeHarness({
+		loadConfigSyncConfig: initialConfig,
+		showPaneResults: [{ action: "save", config: nextConfig }],
+		git,
+	});
+
+	harness.runtime.events.sessionStart({}, test.ctx);
+	assert.equal(test.footerFactories.length, 1, "initial install should register one footer factory");
+	let staleFooterRenders = 0;
+	let currentFooterRenders = 0;
+	invokeFooterFactory(test, 0, () => staleFooterRenders++);
+	git.options?.onSnapshot("/repo", gitSnapshot("before-footer-reinstall"));
+	assert.equal(staleFooterRenders, 1, "initial footer factory should own render before reinstall");
+
+	await harness.runtime.commands.openPane("", test.ctx);
+	assert.equal(test.footerFactories.length, 2, "enabled save should register a replacement footer factory");
+	assert.equal(staleFooterRenders, 1, "enabled reinstall should clear the previous render callback before post-save render");
+
+	invokeFooterFactory(test, 1, () => currentFooterRenders++);
+	invokeFooterFactory(test, 0, () => staleFooterRenders++);
+	git.options?.onSnapshot("/repo", gitSnapshot("after-footer-reinstall"));
+	assert.equal(staleFooterRenders, 1, "stale footer factory should not regain render ownership after reinstall");
+	assert.equal(currentFooterRenders, 1, "newest footer factory should remain the active render owner after stale factory invocation");
+}
+
+{
+	const initialConfig = defaultConfig();
+	const nextConfig = nextEnabledConfig(initialConfig);
+	const git = createGitHarness();
+	const test = createContext({ invokeFooterFactory: false });
+	const harness = createRuntimeHarness({
+		loadConfigSyncConfig: initialConfig,
+		showPaneResults: [{ action: "save", config: nextConfig }],
+		git,
+	});
+
+	harness.runtime.events.sessionStart({}, test.ctx);
+	assert.equal(test.editorFactories.length, 1, "initial install should register one editor factory");
+	let staleEditorRenders = 0;
+	let currentEditorRenders = 0;
+	invokeEditorFactory(test, 0, () => staleEditorRenders++);
+	git.options?.onSnapshot("/repo", gitSnapshot("before-editor-reinstall"));
+	assert.equal(staleEditorRenders, 1, "initial editor factory should own render before reinstall");
+
+	await harness.runtime.commands.openPane("", test.ctx);
+	assert.equal(test.editorFactories.length, 2, "enabled save should register a replacement editor factory");
+	assert.equal(staleEditorRenders, 1, "enabled reinstall should clear the previous editor render callback before post-save render");
+
+	invokeEditorFactory(test, 1, () => currentEditorRenders++);
+	invokeEditorFactory(test, 0, () => staleEditorRenders++);
+	git.options?.onSnapshot("/repo", gitSnapshot("after-editor-reinstall"));
+	assert.equal(staleEditorRenders, 1, "stale editor factory should not regain render ownership after reinstall");
+	assert.equal(currentEditorRenders, 1, "newest editor factory should remain the active render owner after stale factory invocation");
+}
+
+{
+	const initialConfig = defaultConfig();
+	const nextConfig = disabledConfig(initialConfig);
+	const git = createGitHarness();
+	const test = createContext({ invokeFooterFactory: false });
+	const harness = createRuntimeHarness({
+		loadConfigSyncConfig: initialConfig,
+		showPaneResults: [{ action: "save", config: nextConfig }],
+		git,
+	});
+
+	harness.runtime.events.sessionStart({}, test.ctx);
+	let staleFooterRenders = 0;
+	let staleEditorRenders = 0;
+	invokeFooterFactory(test, 0, () => staleFooterRenders++);
+	invokeEditorFactory(test, 0, () => staleEditorRenders++);
+	git.options?.onSnapshot("/repo", gitSnapshot("before-disabled-clear"));
+	assert.equal(staleEditorRenders, 1, "latest initial editor factory should own render before disabled clear");
+
+	await harness.runtime.commands.openPane("", test.ctx);
+	assert.equal(staleFooterRenders, 0, "disabled clear should not use older footer render callback during post-save render");
+	assert.equal(staleEditorRenders, 1, "disabled clear should remove latest editor render callback before post-save render");
+
+	invokeFooterFactory(test, 0, () => staleFooterRenders++);
+	invokeEditorFactory(test, 0, () => staleEditorRenders++);
+	git.options?.onSnapshot("/repo", gitSnapshot("after-disabled-clear"));
+	assert.equal(staleFooterRenders, 0, "stale footer factory should not revive render ownership after disabled clear");
+	assert.equal(staleEditorRenders, 1, "stale editor factory should not revive render ownership after disabled clear");
+}
+
+{
+	const initialConfig = defaultConfig();
+	const git = createGitHarness();
+	const test = createContext({ invokeFooterFactory: false });
+	const harness = createRuntimeHarness({ loadConfigSyncConfig: initialConfig, git });
+
+	harness.runtime.events.sessionStart({}, test.ctx);
+	let staleFooterRenders = 0;
+	let staleEditorRenders = 0;
+	invokeFooterFactory(test, 0, () => staleFooterRenders++);
+	invokeEditorFactory(test, 0, () => staleEditorRenders++);
+	git.options?.onSnapshot("/repo", gitSnapshot("before-shutdown"));
+	assert.equal(staleEditorRenders, 1, "latest initial editor factory should own render before shutdown");
+
+	await harness.runtime.events.sessionShutdown({}, test.ctx as ExtensionContext);
+	invokeFooterFactory(test, 0, () => staleFooterRenders++);
+	invokeEditorFactory(test, 0, () => staleEditorRenders++);
+	git.options?.onSnapshot("/repo", gitSnapshot("after-shutdown"));
+	assert.equal(staleFooterRenders, 0, "stale footer factory should not revive render ownership after shutdown");
+	assert.equal(staleEditorRenders, 1, "stale editor factory should not revive render ownership after shutdown");
+	assert.equal(git.disposeCount, 1, "shutdown should still dispose the runtime git refresher");
 }
 
 {

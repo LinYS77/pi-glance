@@ -2,7 +2,7 @@ import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import { ICONS } from "./palette.js";
 import { SEGMENT_BY_ID } from "./segment-registry.js";
 import { renderSegment } from "./segments.js";
-import { resolveBuiltInGlanceStyles, type ResolvedGlanceStyles } from "./theme-adapter.js";
+import { resolveGlanceRenderStyles, type GlanceRenderStyleContext, type ResolvedGlanceStyles } from "./theme-adapter.js";
 import type { GlanceConfig, GlanceState, SegmentRenderContext, SegmentRenderResult, WidthMode } from "./types.js";
 
 const RESET = "\x1b[0m";
@@ -35,9 +35,10 @@ function renderEnabledSegments(
 	config: GlanceConfig,
 	width: number,
 	providerCount = 1,
+	styleContext: GlanceRenderStyleContext = {},
 ): { styles: ResolvedGlanceStyles; segments: SegmentRenderResult[] } {
 	const widthMode = config.display.adaptive ? widthModeFor(width) : "full";
-	const styles = resolveBuiltInGlanceStyles(config.theme);
+	const styles = resolveGlanceRenderStyles(config.theme, styleContext);
 	const icons = ICONS[config.icons];
 	const ctx: SegmentRenderContext = {
 		state,
@@ -80,9 +81,15 @@ function fitSegments(styles: ResolvedGlanceStyles, segments: SegmentRenderResult
 	return joined;
 }
 
-export function renderGlanceLine(state: GlanceState, config: GlanceConfig, width: number, providerCount = state.providers.availableCount): string {
+export function renderGlanceLine(
+	state: GlanceState,
+	config: GlanceConfig,
+	width: number,
+	providerCount = state.providers.availableCount,
+	styleContext: GlanceRenderStyleContext = {},
+): string {
 	if (!config.enabled) return "";
-	const { styles, segments } = renderEnabledSegments(state, config, width, providerCount);
+	const { styles, segments } = renderEnabledSegments(state, config, width, providerCount, styleContext);
 	const line = fitSegments(styles, segments, width);
 	if (line.width > width) {
 		return truncateToWidth(line.text, width, styles.dim("…"));

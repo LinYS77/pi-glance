@@ -10,10 +10,10 @@ import {
 	surfaceMetrics,
 } from "./surface-layout.js";
 import { renderGlanceLine } from "./status-line.js";
-import { resolveBuiltInGlanceStyles } from "./theme-adapter.js";
+import { resolveGlanceRenderStyles, type GlanceRenderStyleContext } from "./theme-adapter.js";
 import type { GlanceConfig, GlanceState } from "./types.js";
 
-interface InputSurfaceRenderOptions {
+interface InputSurfaceRenderOptions extends GlanceRenderStyleContext {
 	contentLines?: string[];
 	focused?: boolean;
 	showTitle?: boolean;
@@ -55,7 +55,7 @@ export function renderInputSurface(
 	options: InputSurfaceRenderOptions = {},
 ): string[] {
 	const { safeWidth, innerWidth } = surfaceMetrics(width);
-	const styles = resolveBuiltInGlanceStyles(config.theme);
+	const styles = resolveGlanceRenderStyles(config.theme, options);
 	const minRows = Math.max(2, Math.min(4, config.editor.minContentRows));
 	const contentLines = options.contentLines ?? [""];
 	const rows = Math.max(minRows, contentLines.length);
@@ -68,7 +68,7 @@ export function renderInputSurface(
 		showTitle: options.showTitle,
 	});
 	const statusBudget = planSurfaceStatusBudget(innerWidth, title.width);
-	const status = renderGlanceLine(state, config, statusBudget, state.providers.availableCount);
+	const status = renderGlanceLine(state, config, statusBudget, state.providers.availableCount, { styles });
 	const top = renderSurfaceChunks(planSurfaceTopFrame({ width: safeWidth, left: title, status }).chunks, {
 		border: styles.border,
 		title: styles.title,

@@ -2,7 +2,9 @@ import type { ExtensionCommandContext, ExtensionContext } from "@earendil-works/
 import { GlanceEditor } from "./editor.js";
 import { GlanceFooter } from "./footer.js";
 import { GitRefresher } from "./git.js";
+import { readPiUiTheme, resolveRuntimeRenderStyleContext } from "./render-style-context.js";
 import { runtimePlanFor, type RuntimeEventFacts, type RuntimeEventKind, type RuntimeRefreshPlan } from "./runtime-policy.js";
+import type { GlanceRenderStyleContext } from "./theme-adapter.js";
 import { stateInputsFromContext } from "./runtime-snapshot.js";
 import { clearContextUsage, clearCurrentRunThroughput, createInitialState, refreshContextUsage, refreshModel, refreshWorkspace, setCurrentRunThroughput, setGitSnapshot, setLastTurnThroughput, setProviderCount, setUsageTotals } from "./state.js";
 import { ThroughputRunTracker, type ThroughputRunStateIntent } from "./throughput-run-tracker.js";
@@ -21,12 +23,16 @@ export interface CreateGitRefresherOptions {
 	onSnapshot(cwd: string, snapshot: GitSnapshot): void;
 }
 
+export interface RuntimeShowPaneOptions {
+	readonly renderStyleContext?: GlanceRenderStyleContext;
+}
+
 export interface GlanceRuntimeAdapters {
 	getThinkingLevel(): string;
 	loadConfigSync(): GlanceConfig;
 	loadConfig(): Promise<GlanceConfig>;
 	saveConfig(config: GlanceConfig): Promise<void>;
-	showPane(initial: GlanceConfig, ctx: ExtensionCommandContext, previewState?: GlanceState): Promise<GlancePaneResult>;
+	showPane(initial: GlanceConfig, ctx: ExtensionCommandContext, previewState?: GlanceState, options?: RuntimeShowPaneOptions): Promise<GlancePaneResult>;
 	createGitRefresher?: (options: CreateGitRefresherOptions) => RuntimeGitRefresher;
 	nowMs?: () => number;
 }
@@ -100,6 +106,7 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 	let footer: GlanceFooter | undefined;
 	let gitRefresher: RuntimeGitRefresher | undefined;
 	let requestRender: (() => void) | undefined;
+	let uiGeneration = 0;
 	const throughputTracker = new ThroughputRunTracker();
 	const nowMs = adapters.nowMs ?? Date.now;
 
@@ -123,6 +130,17 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 	function renderNow(): void {
 		footer?.invalidate();
 		requestRender?.();
+	}
+
+	function isCurrentUiGeneration(generation: number): boolean {
+		return generation === uiGeneration;
+	}
+
+	function setUiRequestRender(generation: number, callback: () => void): void {
+		if (!isCurrentUiGeneration(generation)) return;
+		requestRender = () => {
+			if (isCurrentUiGeneration(generation)) callback();
+		};
 	}
 
 	function ensureGitRefresher(): RuntimeGitRefresher {
@@ -167,6 +185,13 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 		footer = undefined;
 	}
 
+	function invalidateUiOwnership(): number {
+		uiGeneration++;
+		requestRender = undefined;
+		clearFooter();
+		return uiGeneration;
+	}
+
 	function clearGitRefresher(): void {
 		gitRefresher?.dispose();
 		gitRefresher = undefined;
@@ -174,11 +199,10 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 
 	function clearUI(ctx: ExtensionContext): void {
 		if (!isTuiMode(ctx)) return;
-		clearFooter();
+		invalidateUiOwnership();
 		clearGitRefresher();
 		ctx.ui.setEditorComponent(undefined);
 		ctx.ui.setFooter(undefined);
-		requestRender = undefined;
 	}
 
 	function installInputSurface(ctx: ExtensionContext): void {
@@ -190,16 +214,21 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 			return;
 		}
 
+		const renderStyleContext = resolveRuntimeRenderStyleContext(activeConfig, { piTheme: readPiUiTheme(ctx.ui) });
+		const generation = invalidateUiOwnership();
+
 		ensureGitRefresher().schedule(true);
-		clearFooter();
 		ctx.ui.setFooter((tui) => {
-			requestRender = () => tui.requestRender();
-			footer = new GlanceFooter();
-			return footer;
+			const nextFooter = new GlanceFooter();
+			if (isCurrentUiGeneration(generation)) {
+				setUiRequestRender(generation, () => tui.requestRender());
+				footer = nextFooter;
+			}
+			return nextFooter;
 		});
 
 		ctx.ui.setEditorComponent((tui, theme, keybindings) => {
-			requestRender = () => tui.requestRender();
+			setUiRequestRender(generation, () => tui.requestRender());
 			return new GlanceEditor(
 				tui,
 				theme,
@@ -209,6 +238,7 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 				() => {
 					void executeRuntimePlan("editor_thinking_cycle", ctx);
 				},
+				renderStyleContext ? { renderStyleContext } : undefined,
 			);
 		});
 	}
@@ -222,7 +252,8 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 				}
 				const current = await ensureConfig();
 				ensureState(ctx);
-				const result = await adapters.showPane(current, ctx, state);
+				const renderStyleContext = resolveRuntimeRenderStyleContext(current, { piTheme: readPiUiTheme(ctx.ui) });
+				const result = await adapters.showPane(current, ctx, state, renderStyleContext ? { renderStyleContext } : undefined);
 				if (result.action === "cancel") {
 					ctx.ui.notify("pi-glance configuration cancelled", "info");
 					return;

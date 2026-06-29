@@ -3,7 +3,8 @@ import { readFile } from "node:fs/promises";
 import { visibleWidth, type Component, type TUI } from "@earendil-works/pi-tui";
 import type { Theme } from "@earendil-works/pi-coding-agent";
 import { defaultConfig } from "../config.js";
-import { showGlancePane } from "../pane.js";
+import { showGlancePane, type GlancePaneOptions } from "../pane.js";
+import { createPiRenderStyleContext } from "../render-style-context.js";
 import { GLANCE_THEMES, themeLabel } from "../themes.js";
 import { testState } from "./helpers.js";
 import type { GlanceConfig, GlanceState } from "../types.js";
@@ -17,6 +18,10 @@ const theme = {
 
 function stripAnsi(text: string): string {
 	return text.replace(ANSI_PATTERN, "");
+}
+
+function rawText(component: Component, width = 120): string {
+	return component.render(width).join("\n");
 }
 
 function plainRender(component: Component, width = 120): string[] {
@@ -56,7 +61,11 @@ function makeState(): GlanceState {
 	});
 }
 
-async function makePane(config: GlanceConfig = defaultConfig(), previewState: GlanceState = makeState()): Promise<{ component: Component; renders: () => number; done: () => unknown }> {
+async function makePane(
+	config: GlanceConfig = defaultConfig(),
+	previewState: GlanceState | null = makeState(),
+	options: GlancePaneOptions = {},
+): Promise<{ component: Component; renders: () => number; done: () => unknown }> {
 	let component: Component | undefined;
 	let renderRequests = 0;
 	let doneResult: unknown;
@@ -78,7 +87,8 @@ async function makePane(config: GlanceConfig = defaultConfig(), previewState: Gl
 				},
 			},
 		},
-		previewState,
+		previewState ?? undefined,
+		options,
 	);
 
 	assert.ok(component, "pane component should be created");
@@ -149,6 +159,14 @@ function assertNoRawThemeIds(text: string, context: string): void {
 	}
 }
 
+function ansiPiTheme(name: string, code: number) {
+	return {
+		name,
+		getColorMode: () => "test-pane-ansi",
+		fg: (_color: string, text: string) => `\x1b[${code}m${text}\x1b[0m`,
+	};
+}
+
 function assertThemeRow(text: string, label: string): void {
 	const line = text.split("\n").find((candidate) => candidate.includes("Theme") && candidate.includes(label));
 	assert.ok(line, `Theme row should show ${label}`);
@@ -176,6 +194,18 @@ assertNotContains(initial, "[J/K] switch", "category help should not describe re
 assertNotContains(initial, "Changes stay local", "empty default status copy should stay removed");
 assertNotContains(initial, "NOTES", "old notes section should stay removed");
 assertNotContains(initial, "[Tab]", "tab navigation should stay removed");
+
+const injectedPreviewContext = createPiRenderStyleContext(ansiPiTheme("pane-pi-preview", 95));
+assert.ok(injectedPreviewContext, "test Pi preview style context should resolve");
+const injectedPreviewPane = await makePane(defaultConfig(), makeState(), { renderStyleContext: injectedPreviewContext });
+const injectedPreviewRaw = rawText(injectedPreviewPane.component, 120);
+assertContains(injectedPreviewRaw, "\x1b[95mAsk pi to improve the input surface...\x1b[0m", "pane preview with runtime state should honor injected render style context");
+const injectedPreviewPlain = plainText(injectedPreviewPane.component, 120);
+assertContains(injectedPreviewPlain, "» General", "injected preview style context should not change pane settings controls");
+assertContains(injectedPreviewPlain, "✓ Saved", "injected preview style context should not dirty the pane");
+
+const injectedStaticPreviewPane = await makePane(defaultConfig(), null, { renderStyleContext: injectedPreviewContext });
+assertContains(rawText(injectedStaticPreviewPane.component, 120), "\x1b[95mAsk pi to improve the input surface...\x1b[0m", "pane static preview should honor injected render style context");
 
 const replySpeedPreviewConfig = defaultConfig();
 replySpeedPreviewConfig.segments = replySpeedPreviewConfig.segments.map((segment) =>

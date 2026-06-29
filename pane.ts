@@ -13,11 +13,16 @@ import {
 	type ThemeBrowserThemeViewModel,
 } from "./pane-model.js";
 import { renderInputSurface, renderInputSurfacePreview } from "./renderer.js";
+import type { GlanceRenderStyleContext } from "./theme-adapter.js";
 import type { GlanceConfig, GlanceState } from "./types.js";
 
 type PaneResult = { action: "save"; config: GlanceConfig } | { action: "cancel" };
 type Done = (result: GlanceConfig | null) => void;
 type Tone = (text: string) => string;
+
+export interface GlancePaneOptions {
+	readonly renderStyleContext?: GlanceRenderStyleContext;
+}
 
 interface PaneColors {
 	accent: Tone;
@@ -163,6 +168,7 @@ class GlanceConfigPane implements Component {
 		private readonly done: Done,
 		private readonly requestRender: () => void,
 		private readonly previewState?: GlanceState,
+		private readonly options: GlancePaneOptions = {},
 	) {
 		this.model = createPaneModel(initial);
 	}
@@ -185,15 +191,14 @@ class GlanceConfigPane implements Component {
 	}
 
 	private renderPreview(lines: string[], layout: PaneLayout): void {
+		const previewOptions = {
+			contentLines: ["Ask pi to improve the input surface..."],
+			focused: true,
+			...(this.options.renderStyleContext ?? {}),
+		};
 		const preview = this.previewState
-			? renderInputSurface(this.previewState, this.model.draft, layout.width, {
-					contentLines: ["Ask pi to improve the input surface..."],
-					focused: true,
-				})
-			: renderInputSurfacePreview(this.model.draft, layout.width, {
-					contentLines: ["Ask pi to improve the input surface..."],
-					focused: true,
-				});
+			? renderInputSurface(this.previewState, this.model.draft, layout.width, previewOptions)
+			: renderInputSurfacePreview(this.model.draft, layout.width, previewOptions);
 		for (const previewLine of preview) {
 			lines.push(previewLine);
 		}
@@ -363,7 +368,12 @@ interface GlancePaneUI {
 	): Promise<T>;
 }
 
-export async function showGlancePane(initial: GlanceConfig, ctx: { ui: GlancePaneUI }, previewState?: GlanceState): Promise<PaneResult> {
+export async function showGlancePane(
+	initial: GlanceConfig,
+	ctx: { ui: GlancePaneUI },
+	previewState?: GlanceState,
+	options: GlancePaneOptions = {},
+): Promise<PaneResult> {
 	return ctx.ui.custom<PaneResult>((tui, theme, _kb, done) => {
 		return new GlanceConfigPane(
 			initial,
@@ -371,6 +381,7 @@ export async function showGlancePane(initial: GlanceConfig, ctx: { ui: GlancePan
 			(result) => done(result ? { action: "save", config: result } : { action: "cancel" }),
 			() => tui.requestRender(),
 			previewState,
+			options,
 		);
 	});
 }

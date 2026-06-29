@@ -3,11 +3,12 @@ import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import { defaultConfig } from "../config.js";
 import { stripControls } from "../format.js";
 import { PALETTES, fg } from "../palette.js";
+import { resolveBuiltInGlanceStyles, type GlanceRenderStyleContext } from "../theme-adapter.js";
 import { GLANCE_THEME_IDS } from "../themes.js";
 import { testState } from "./helpers.js";
 import type { GlanceConfig, GlanceState, SegmentId } from "../types.js";
 
-type RenderGlanceLine = (state: GlanceState, config: GlanceConfig, width: number, providerCount?: number) => string;
+type RenderGlanceLine = (state: GlanceState, config: GlanceConfig, width: number, providerCount?: number, styleContext?: GlanceRenderStyleContext) => string;
 
 const RESET = "\x1b[0m";
 
@@ -101,6 +102,18 @@ for (const themeId of GLANCE_THEME_IDS) {
 			`${themeId}.${id} status segment should keep byte-equivalent legacy palette styling through adapter`,
 		);
 	}
+}
+
+{
+	const config = configWithSegments(["model"], (next) => {
+		next.theme = "light";
+	});
+	const darkStyles = resolveBuiltInGlanceStyles("dark");
+	assert.equal(
+		renderGlanceLine(modelState(1), config, 120, 1, { styles: darkStyles }),
+		`${fg(PALETTES.dark.segments.model.fg, "ai GPT 5.5")}${RESET}`,
+		"status-line should honor an injected shared style context instead of resolving config.theme independently",
+	);
 }
 
 for (const themeId of ["light", "dark", "high-contrast-light"] as const) {

@@ -4,7 +4,9 @@ import type { KeybindingsManager } from "@earendil-works/pi-coding-agent";
 import { defaultConfig } from "../config.js";
 import { GlanceEditor } from "../editor.js";
 import { PALETTES, fg } from "../palette.js";
+import { createPiRenderStyleContext } from "../render-style-context.js";
 import { renderInputSurface } from "../renderer.js";
+import { resolveBuiltInGlanceStyles } from "../theme-adapter.js";
 import { renderGlanceLine } from "../status-line.js";
 import {
 	planSurfaceBottomFrame,
@@ -130,6 +132,14 @@ function makeLiveEditor(state: GlanceState, config: GlanceConfig, focused: boole
 	);
 	editor.focused = focused;
 	return editor;
+}
+
+function ansiPiTheme(name: string, code: number) {
+	return {
+		name,
+		getColorMode: () => "test-ansi",
+		fg: (_color: string, text: string) => `\x1b[${code}m${text}\x1b[0m`,
+	};
 }
 
 function topBorderIndex(lines: readonly string[]): number {
@@ -328,6 +338,25 @@ for (const themeId of RENDERER_STYLE_PARITY_THEMES) {
 }
 
 {
+	const lightConfig = defaultConfig();
+	lightConfig.theme = "light";
+	lightConfig.editor.topMarginRows = 0;
+	lightConfig.editor.minContentRows = 2;
+	onlySegments(lightConfig, ["model"]);
+	const darkConfig = defaultConfig();
+	darkConfig.theme = "dark";
+	darkConfig.editor.topMarginRows = lightConfig.editor.topMarginRows;
+	darkConfig.editor.minContentRows = lightConfig.editor.minContentRows;
+	onlySegments(darkConfig, ["model"]);
+	const contentLines = ["short", "Ask pi to improve the input surface with a long prompt that must be clipped"];
+	assert.deepEqual(
+		renderInputSurface(dirtyState(), lightConfig, 56, { contentLines, focused: true, styles: resolveBuiltInGlanceStyles("dark") }),
+		renderLegacyStyledInputSurface(dirtyState(), darkConfig, 56, { contentLines, focused: true }),
+		"renderer should share an injected style instance with status-line instead of letting status resolve config.theme independently",
+	);
+}
+
+{
 	const config = defaultConfig();
 	config.theme = "dark";
 	config.editor.topMarginRows = 0;
@@ -402,6 +431,35 @@ for (const themeId of EDITOR_STYLE_PARITY_THEMES) {
 	const darkTop = rawTopBorder(editor.render(120));
 	assert.ok(darkTop.includes(fg(PALETTES.dark.segments.model.fg, "ai GPT 5.5")), "live status cache should invalidate when style cacheKey changes on the same config object");
 	assert.equal(darkTop.includes(fg(PALETTES.light.segments.model.fg, "ai GPT 5.5")), false, "live status cache should not reuse stale light ANSI after theme/cacheKey change");
+}
+
+{
+	const state = editorStyleState;
+	const config = defaultConfig();
+	config.theme = "light";
+	config.editor.topMarginRows = 0;
+	onlySegments(config, ["model"]);
+	const firstContext = createPiRenderStyleContext(ansiPiTheme("editor-pi-a", 31));
+	const secondContext = createPiRenderStyleContext(ansiPiTheme("editor-pi-b", 32));
+	assert.ok(firstContext?.styles && secondContext?.styles, "test Pi render style contexts should resolve");
+	const renderStyleContext = { styles: firstContext.styles };
+	const editor = new GlanceEditor(
+		{ terminal: { rows: 40 }, requestRender: () => undefined } as unknown as TUI,
+		theme,
+		keybindings,
+		() => state,
+		() => config,
+		undefined,
+		{ renderStyleContext },
+	);
+	editor.focused = true;
+	editor.setText("cache check");
+	const firstTop = rawTopBorder(editor.render(120));
+	assert.ok(firstTop.includes("\x1b[31mai GPT 5.5\x1b[0m"), "injected Pi editor style context should style live status through the context");
+	renderStyleContext.styles = secondContext.styles;
+	const secondTop = rawTopBorder(editor.render(120));
+	assert.ok(secondTop.includes("\x1b[32mai GPT 5.5\x1b[0m"), "live status cache should invalidate when injected style cacheKey changes");
+	assert.equal(secondTop.includes("\x1b[31mai GPT 5.5\x1b[0m"), false, "live status cache should not reuse stale injected Pi ANSI after context cacheKey change");
 }
 
 interface Scenario {

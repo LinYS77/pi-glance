@@ -20,6 +20,7 @@ const SURFACE_LAYOUT_MODULE = "surface-layout.ts";
 const SETTINGS_CATALOG_MODULE = "settings-catalog.ts";
 const PANE_MODEL_MODULE = "pane-model.ts";
 const THEME_ADAPTER_MODULE = "theme-adapter.ts";
+const RENDER_STYLE_CONTEXT_MODULE = "render-style-context.ts";
 const GUARD_SCRIPT = join("scripts", "test-boundaries.ts");
 const LEGACY_NAMESPACE = ["@mariozechner", ""].join("/");
 
@@ -186,6 +187,70 @@ function assertThemeAdapterSeamImports(files: SourceFile[]): void {
 		if (specifier.startsWith(".") && !allowedLocalSpecifiers.has(specifier)) fail(`${themeAdapter.path}: theme adapter may only import palette/theme/types helpers, not ${specifier}`);
 		if (!specifier.startsWith(".")) fail(`${themeAdapter.path}: theme adapter must not import external module ${specifier}`);
 	}
+	if (!themeAdapter.text.includes("interface GlanceRenderStyleContext")) fail(`${themeAdapter.path}: theme adapter should expose a shared render style context seam`);
+	if (!themeAdapter.text.includes("resolveGlanceRenderStyles")) fail(`${themeAdapter.path}: theme adapter should expose a shared render style resolver`);
+	if (!themeAdapter.text.includes("interface PiThemeLike")) fail(`${themeAdapter.path}: theme adapter should expose a structural Pi theme-like style source skeleton`);
+	if (!themeAdapter.text.includes("resolvePiThemeStyles")) fail(`${themeAdapter.path}: theme adapter should expose an adapter-only Pi theme style resolver`);
+}
+
+function assertPiThemeResolverAdapterOnly(files: SourceFile[]): void {
+	const allowed = new Set([THEME_ADAPTER_MODULE, RENDER_STYLE_CONTEXT_MODULE, GUARD_SCRIPT, join("scripts", "test-themes.ts")]);
+	for (const file of files) {
+		if (allowed.has(file.path)) continue;
+		if (/resolvePiThemeStyles|PiThemeLike|PiThemeColorToken/.test(file.text)) {
+			fail(`${file.path}: Pi theme style resolver skeleton must remain adapter/provider/test-only in this slice`);
+		}
+	}
+}
+
+function assertRenderStyleContextSeam(files: SourceFile[]): void {
+	const renderStyleContext = files.find((candidate) => basename(candidate.path) === RENDER_STYLE_CONTEXT_MODULE);
+	assert.ok(renderStyleContext, "render-style-context.ts inactive runtime style provider seam should exist");
+
+	const allowedSpecifiers = new Set(["./theme-adapter.js", "./types.js"]);
+	const importPattern = /(?:import|export)\s+(type\s+)?(?:[^"'`]*?\s+from\s+)?["']([^"']+)["']/g;
+	for (const match of renderStyleContext.text.matchAll(importPattern)) {
+		const specifier = match[2]!;
+		if (specifier.startsWith("@earendil-works/pi-")) fail(`${renderStyleContext.path}: provider seam must not import pi package ${specifier}`);
+		if (IO_NETWORK_PROCESS_IMPORTS.has(specifier)) fail(`${renderStyleContext.path}: provider seam must not import IO/network/process module ${specifier}`);
+		if (!allowedSpecifiers.has(specifier)) fail(`${renderStyleContext.path}: provider seam must not import ${specifier}`);
+	}
+	if (!renderStyleContext.text.includes("createPiRenderStyleContext")) fail(`${renderStyleContext.path}: provider seam should expose Pi theme to GlanceRenderStyleContext conversion`);
+	if (!renderStyleContext.text.includes("resolveRuntimeRenderStyleContext")) fail(`${renderStyleContext.path}: provider seam should expose inactive runtime context resolver`);
+	if (!renderStyleContext.text.includes("enablePiThemeStyles")) fail(`${renderStyleContext.path}: runtime Pi style activation should require an explicit future enable flag`);
+	if (/getAllThemes|getTheme\s*\(|setTheme\s*\(/.test(renderStyleContext.text)) fail(`${renderStyleContext.path}: provider seam must not enumerate, load, or set Pi themes`);
+}
+
+function assertPiThemeRuntimeProviderBoundary(files: SourceFile[]): void {
+	const runtime = files.find((candidate) => basename(candidate.path) === "runtime.ts");
+	assert.ok(runtime, "runtime.ts should exist");
+	if (!runtime.text.includes("./render-style-context.js")) fail(`${runtime.path}: runtime should import the inactive render style provider seam`);
+	if (!runtime.text.includes("resolveRuntimeRenderStyleContext(activeConfig")) fail(`${runtime.path}: runtime should prepare render style context through the inactive provider seam for editor install`);
+	if (!runtime.text.includes("resolveRuntimeRenderStyleContext(current")) fail(`${runtime.path}: runtime should prepare render style context through the inactive provider seam for pane preview`);
+	if (!runtime.text.includes("readPiUiTheme(ctx.ui)")) fail(`${runtime.path}: runtime should read the public current UI theme only through the provider seam helper`);
+	if (/resolvePiThemeStyles|PiThemeLike|PiThemeColorToken|ctx\.ui\.theme|getAllThemes|getTheme\s*\(|setTheme\s*\(/.test(runtime.text)) {
+		fail(`${runtime.path}: runtime must not directly use Pi theme adapters or enumerate/set Pi themes`);
+	}
+
+	for (const file of files) {
+		if (new Set([RENDER_STYLE_CONTEXT_MODULE, GUARD_SCRIPT]).has(file.path)) continue;
+		if (/ctx\.ui\.theme|getAllThemes|getTheme\s*\(|setTheme\s*\(/.test(file.text)) {
+			fail(`${file.path}: Pi UI theme APIs must stay limited to the inactive provider seam in this slice`);
+		}
+	}
+}
+
+function assertPanePreviewStyleContextBoundary(files: SourceFile[]): void {
+	const pane = files.find((candidate) => basename(candidate.path) === "pane.ts");
+	assert.ok(pane, "pane.ts should exist");
+	if (!pane.text.includes("GlancePaneOptions")) fail(`${pane.path}: pane should expose optional preview style context options`);
+	if (!pane.text.includes("renderStyleContext")) fail(`${pane.path}: pane preview should accept an optional render style context`);
+	if (!pane.text.includes("GlanceRenderStyleContext")) fail(`${pane.path}: pane should only depend on the generic render style context type`);
+	if (/render-style-context|resolvePiThemeStyles|PiThemeLike|PiThemeColorToken|readPiUiTheme|createPiRenderStyleContext/.test(pane.text)) {
+		fail(`${pane.path}: pane must not depend on Pi-specific style providers or resolver types`);
+	}
+	if (!/renderInputSurface\([\s\S]*?previewOptions/.test(pane.text)) fail(`${pane.path}: runtime-state pane preview should forward preview style context options`);
+	if (!/renderInputSurfacePreview\([\s\S]*?previewOptions/.test(pane.text)) fail(`${pane.path}: static pane preview should forward preview style context options`);
 }
 
 function assertRenderModulesHaveNoIo(files: SourceFile[]): void {
@@ -288,7 +353,7 @@ function assertStatusLineSeamImports(files: SourceFile[]): void {
 		if (forbiddenLocalSpecifiers.has(specifier)) fail(`${statusLine.path}: status-line must not import UI/runtime/state/config module ${specifier}`);
 		if (!allowedSpecifiers.has(specifier)) fail(`${statusLine.path}: status-line must not import ${specifier}`);
 	}
-	if (!statusLine.text.includes("resolveBuiltInGlanceStyles(config.theme)")) fail(`${statusLine.path}: status-line styling should resolve built-in styles through the adapter`);
+	if (!statusLine.text.includes("resolveGlanceRenderStyles(config.theme")) fail(`${statusLine.path}: status-line styling should resolve styles through the shared adapter context`);
 	if (/\bPALETTES\b|(^|[^.\w$])fg\s*\(/.test(statusLine.text)) fail(`${statusLine.path}: status-line must not style through direct palette/fg access after adapter wiring`);
 }
 
@@ -318,7 +383,8 @@ function assertRendererSeamImports(files: SourceFile[]): void {
 		if (forbiddenLocalSpecifiers.has(specifier)) fail(`${renderer.path}: renderer must not import UI/runtime/state/config/palette module ${specifier}`);
 		if (!allowedSpecifiers.has(specifier)) fail(`${renderer.path}: renderer must not import ${specifier}`);
 	}
-	if (!renderer.text.includes("resolveBuiltInGlanceStyles(config.theme)")) fail(`${renderer.path}: renderer styling should resolve built-in styles through the adapter`);
+	if (!renderer.text.includes("resolveGlanceRenderStyles(config.theme")) fail(`${renderer.path}: renderer styling should resolve styles through the shared adapter context`);
+	if (!/renderGlanceLine\([\s\S]*?\{ styles \}/.test(renderer.text)) fail(`${renderer.path}: renderer should pass its resolved styles into status-line rendering`);
 	if (/\bPALETTES\b|(^|[^.\w$])fg\s*\(/.test(renderer.text)) fail(`${renderer.path}: renderer must not style through direct palette/fg access after adapter wiring`);
 }
 
@@ -348,8 +414,13 @@ function assertEditorSeamImports(files: SourceFile[]): void {
 		if (forbiddenLocalSpecifiers.has(specifier)) fail(`${editor.path}: editor must not import UI/runtime/state/config/palette module ${specifier}`);
 		if (!allowedSpecifiers.has(specifier)) fail(`${editor.path}: editor must not import ${specifier}`);
 	}
-	if (!editor.text.includes("resolveBuiltInGlanceStyles(config.theme)")) fail(`${editor.path}: editor styling should resolve built-in styles through the adapter`);
+	if (!editor.text.includes("resolveGlanceRenderStyles(config.theme")) fail(`${editor.path}: editor styling should resolve styles through the shared adapter context`);
+	if (!/renderGlanceLine\([\s\S]*?\{ styles \}/.test(editor.text)) fail(`${editor.path}: editor should pass its render-pass styles into status-line rendering`);
 	if (!editor.text.includes("cachedStatusStyleKey") || !editor.text.includes("styles.cacheKey")) fail(`${editor.path}: editor status cache should include style cacheKey awareness`);
+	if (editor.text.includes("interface GlanceEditorOptions extends EditorOptions")) fail(`${editor.path}: GlanceEditorOptions must not extend Pi EditorOptions; keep pi-glance render options separate`);
+	if (!editor.text.includes("readonly editorOptions?: EditorOptions") || !editor.text.includes("readonly renderStyleContext?: GlanceRenderStyleContext")) fail(`${editor.path}: GlanceEditorOptions should wrap Pi editorOptions separately from renderStyleContext`);
+	if (!editor.text.includes("super(tui, theme, appKeybindings, glanceOptions?.editorOptions)")) fail(`${editor.path}: GlanceEditor must pass only editorOptions through to CustomEditor`);
+	if (/super\(tui, theme, appKeybindings, glanceOptions\)/.test(editor.text)) fail(`${editor.path}: GlanceEditor must not pass pi-glance renderStyleContext through to CustomEditor`);
 	if (/\bPALETTES\b|(^|[^.\w$])fg\s*\(/.test(editor.text)) fail(`${editor.path}: editor must not style through direct palette/fg access after adapter wiring`);
 }
 
@@ -452,6 +523,10 @@ assertSurfaceLayoutSeamImports(sourceFiles);
 assertSettingsCatalogSeamImports(sourceFiles);
 assertPaneModelSeamImports(sourceFiles);
 assertThemeAdapterSeamImports(sourceFiles);
+assertPiThemeResolverAdapterOnly(sourceFiles);
+assertRenderStyleContextSeam(sourceFiles);
+assertPiThemeRuntimeProviderBoundary(sourceFiles);
+assertPanePreviewStyleContextBoundary(sourceFiles);
 assertRenderModulesHaveNoIo(sourceFiles);
 assertRuntimeSnapshotAdapterSeam(sourceFiles);
 assertRuntimePolicyPureModule(sourceFiles);

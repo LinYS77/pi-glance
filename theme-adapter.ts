@@ -9,10 +9,10 @@ export interface ResolvedGlanceSegmentStyles {
 }
 
 export interface ResolvedGlanceStyles {
-	readonly source: "glance";
-	readonly themeId: GlanceThemeName;
+	readonly source: "glance" | "pi";
+	readonly themeId: string;
 	readonly label: string;
-	readonly cacheKey: `glance:${GlanceThemeName}`;
+	readonly cacheKey: string;
 	readonly text: TextStyler;
 	readonly dim: TextStyler;
 	readonly warn: TextStyler;
@@ -21,6 +21,34 @@ export interface ResolvedGlanceStyles {
 	readonly border: TextStyler;
 	readonly title: TextStyler;
 	readonly segments: Record<SegmentId, ResolvedGlanceSegmentStyles>;
+}
+
+export interface GlanceRenderStyleContext {
+	readonly styles?: ResolvedGlanceStyles;
+}
+
+export type PiThemeColorToken =
+	| "accent"
+	| "border"
+	| "borderAccent"
+	| "borderMuted"
+	| "success"
+	| "error"
+	| "warning"
+	| "muted"
+	| "dim"
+	| "text";
+
+export interface PiThemeLike {
+	readonly name?: string;
+	readonly sourcePath?: string;
+	fg(color: PiThemeColorToken, text: string): string;
+	getColorMode?(): string;
+}
+
+export interface PiThemeStyleOptions {
+	readonly cacheKey?: string;
+	readonly label?: string;
 }
 
 const STYLE_SEGMENT_IDS = ["git", "model", "context", "tokens", "cost", "throughput"] as const satisfies readonly SegmentId[];
@@ -34,6 +62,36 @@ function resolveBuiltInSegmentStyles(theme: GlanceThemeName): Record<SegmentId, 
 	return Object.fromEntries(
 		STYLE_SEGMENT_IDS.map((segment) => [segment, { fg: styleFromRgb(palette.segments[segment].fg) }]),
 	) as Record<SegmentId, ResolvedGlanceSegmentStyles>;
+}
+
+function styleFromPiTokens(theme: PiThemeLike, tokens: readonly PiThemeColorToken[]): TextStyler {
+	return (text) => {
+		for (const token of tokens) {
+			try {
+				const styled = theme.fg(token, text);
+				if (typeof styled === "string") return styled;
+			} catch {
+				// Fake/test theme sources may omit fallback tokens; try the next public semantic token.
+			}
+		}
+		return text;
+	};
+}
+
+function piThemeCacheKey(theme: PiThemeLike, options: PiThemeStyleOptions): string {
+	if (options.cacheKey !== undefined) return `pi:${options.cacheKey}`;
+	return `pi:${JSON.stringify([theme.name ?? "", theme.getColorMode?.() ?? "", theme.sourcePath ?? ""])}`;
+}
+
+function resolvePiSegmentStyles(theme: PiThemeLike): Record<SegmentId, ResolvedGlanceSegmentStyles> {
+	return {
+		git: { fg: styleFromPiTokens(theme, ["success", "accent", "text"]) },
+		model: { fg: styleFromPiTokens(theme, ["text"]) },
+		context: { fg: styleFromPiTokens(theme, ["accent", "text"]) },
+		tokens: { fg: styleFromPiTokens(theme, ["muted", "dim", "text"]) },
+		cost: { fg: styleFromPiTokens(theme, ["warning", "accent", "text"]) },
+		throughput: { fg: styleFromPiTokens(theme, ["muted", "dim", "text"]) },
+	};
 }
 
 export function resolveBuiltInGlanceStyles(theme: GlanceThemeName): ResolvedGlanceStyles {
@@ -52,4 +110,25 @@ export function resolveBuiltInGlanceStyles(theme: GlanceThemeName): ResolvedGlan
 		title: styleFromRgb(palette.title),
 		segments: resolveBuiltInSegmentStyles(theme),
 	};
+}
+
+export function resolvePiThemeStyles(theme: PiThemeLike, options: PiThemeStyleOptions = {}): ResolvedGlanceStyles {
+	return {
+		source: "pi",
+		themeId: theme.name ?? "pi-theme",
+		label: options.label ?? theme.name ?? "Pi theme",
+		cacheKey: piThemeCacheKey(theme, options),
+		text: styleFromPiTokens(theme, ["text"]),
+		dim: styleFromPiTokens(theme, ["dim", "muted", "text"]),
+		warn: styleFromPiTokens(theme, ["warning", "accent", "text"]),
+		error: styleFromPiTokens(theme, ["error", "warning", "text"]),
+		separator: styleFromPiTokens(theme, ["muted", "dim", "text"]),
+		border: styleFromPiTokens(theme, ["border", "borderMuted", "muted", "text"]),
+		title: styleFromPiTokens(theme, ["accent", "borderAccent", "text"]),
+		segments: resolvePiSegmentStyles(theme),
+	};
+}
+
+export function resolveGlanceRenderStyles(theme: GlanceThemeName, context: GlanceRenderStyleContext = {}): ResolvedGlanceStyles {
+	return context.styles ?? resolveBuiltInGlanceStyles(theme);
 }

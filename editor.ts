@@ -16,8 +16,13 @@ import {
 	SURFACE_AUTOCOMPLETE_INDENT,
 	SURFACE_CONTENT_PADDING_X,
 } from "./surface-layout.js";
-import { resolveBuiltInGlanceStyles, type ResolvedGlanceStyles } from "./theme-adapter.js";
+import { resolveGlanceRenderStyles, type GlanceRenderStyleContext, type ResolvedGlanceStyles } from "./theme-adapter.js";
 import type { GlanceConfig, GlanceState } from "./types.js";
+
+export interface GlanceEditorOptions {
+	readonly editorOptions?: EditorOptions;
+	readonly renderStyleContext?: GlanceRenderStyleContext;
+}
 
 function stripBorderColor(line: string, borderColor: (text: string) => string): string {
 	const sample = borderColor("─");
@@ -75,9 +80,9 @@ export class GlanceEditor extends CustomEditor {
 		private readonly getState: () => GlanceState,
 		private readonly getConfig: () => GlanceConfig,
 		private readonly onThinkingLevelMaybeChanged?: () => void,
-		options?: EditorOptions,
+		private readonly glanceOptions?: GlanceEditorOptions,
 	) {
-		super(tui, theme, appKeybindings, options);
+		super(tui, theme, appKeybindings, glanceOptions?.editorOptions);
 	}
 
 	handleInput(data: string): void {
@@ -87,7 +92,7 @@ export class GlanceEditor extends CustomEditor {
 	}
 
 	private currentStyles(config: GlanceConfig = this.getConfig()): ResolvedGlanceStyles {
-		return resolveBuiltInGlanceStyles(config.theme);
+		return resolveGlanceRenderStyles(config.theme, this.glanceOptions?.renderStyleContext);
 	}
 
 	private renderStatus(width: number, styles: ResolvedGlanceStyles): string {
@@ -102,7 +107,7 @@ export class GlanceEditor extends CustomEditor {
 		) {
 			return this.cachedStatus;
 		}
-		const status = renderGlanceLine(state, config, width, state.providers.availableCount);
+		const status = renderGlanceLine(state, config, width, state.providers.availableCount, { styles });
 		this.cachedWidth = width;
 		this.cachedVersion = state.version;
 		this.cachedConfig = config;

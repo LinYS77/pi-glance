@@ -1,7 +1,9 @@
 import { strict as assert } from "node:assert";
 import { readFile } from "node:fs/promises";
+import { defaultConfig } from "../config.js";
 import { PALETTES, fg } from "../palette.js";
-import { resolveBuiltInGlanceStyles } from "../theme-adapter.js";
+import { createPiRenderStyleContext, readPiUiTheme, resolveRuntimeRenderStyleContext } from "../render-style-context.js";
+import { resolveBuiltInGlanceStyles, resolvePiThemeStyles, type PiThemeColorToken, type PiThemeLike } from "../theme-adapter.js";
 import { GLANCE_THEME_CATALOG } from "../theme-catalog.js";
 import { GLANCE_THEMES, GLANCE_THEME_IDS, isGlanceThemeName, themeLabel } from "../themes.js";
 import type { GlancePalette, Rgb, SegmentId } from "../types.js";
@@ -2437,5 +2439,88 @@ for (const themeId of GLANCE_THEME_IDS) {
 	}
 }
 assert.equal(styleCacheKeys.size, GLANCE_THEME_IDS.length, "resolved style cache keys should be unique across all built-in themes");
+
+const PI_TOKEN_COLORS: Record<PiThemeColorToken, Rgb> = {
+	accent: { r: 10, g: 20, b: 30 },
+	border: { r: 11, g: 21, b: 31 },
+	borderAccent: { r: 12, g: 22, b: 32 },
+	borderMuted: { r: 13, g: 23, b: 33 },
+	success: { r: 14, g: 24, b: 34 },
+	error: { r: 15, g: 25, b: 35 },
+	warning: { r: 16, g: 26, b: 36 },
+	muted: { r: 17, g: 27, b: 37 },
+	dim: { r: 18, g: 28, b: 38 },
+	text: { r: 19, g: 29, b: 39 },
+};
+
+function fakePiTheme(colors: Partial<Record<PiThemeColorToken, Rgb>>, name = "fake-pi", mode = "truecolor", sourcePath = "/tmp/fake-pi.json"): PiThemeLike {
+	return {
+		name,
+		sourcePath,
+		getColorMode: () => mode,
+		fg: (token, text) => {
+			const color = colors[token];
+			if (!color) throw new Error(`missing fake pi theme token ${token}`);
+			return fg(color, text);
+		},
+	};
+}
+
+{
+	const piTheme = fakePiTheme(PI_TOKEN_COLORS);
+	const styles = resolvePiThemeStyles(piTheme);
+	const secondStyles = resolvePiThemeStyles(piTheme);
+	assert.equal(styles.source, "pi", "Pi theme adapter source should identify future Pi theme styles");
+	assert.equal(styles.themeId, "fake-pi", "Pi theme adapter should use public theme name as themeId");
+	assert.equal(styles.label, "fake-pi", "Pi theme adapter should default label to public theme name");
+	assert.equal(styles.cacheKey, secondStyles.cacheKey, "Pi theme cacheKey should be deterministic across calls");
+	assert.equal(styles.cacheKey, 'pi:["fake-pi","truecolor","/tmp/fake-pi.json"]', "Pi theme cacheKey should include name, color mode, and source path");
+	assert.equal(resolvePiThemeStyles(piTheme, { cacheKey: "manual", label: "Manual Pi" }).cacheKey, "pi:manual", "Pi theme adapter should accept explicit cacheKey override for future host identity");
+	assert.equal(resolvePiThemeStyles(piTheme, { cacheKey: "manual", label: "Manual Pi" }).label, "Manual Pi", "Pi theme adapter should accept explicit label override");
+
+	assert.equal(styles.text("txt"), fg(PI_TOKEN_COLORS.text, "txt"), "Pi text should map to text token");
+	assert.equal(styles.dim("dim"), fg(PI_TOKEN_COLORS.dim, "dim"), "Pi dim should map to dim token");
+	assert.equal(styles.warn("warn"), fg(PI_TOKEN_COLORS.warning, "warn"), "Pi warn should map to warning token");
+	assert.equal(styles.error("error"), fg(PI_TOKEN_COLORS.error, "error"), "Pi error should map to error token");
+	assert.equal(styles.separator(" · "), fg(PI_TOKEN_COLORS.muted, " · "), "Pi separator should map to muted token");
+	assert.equal(styles.border("│"), fg(PI_TOKEN_COLORS.border, "│"), "Pi border should map to border token");
+	assert.equal(styles.title("title"), fg(PI_TOKEN_COLORS.accent, "title"), "Pi title should map to accent token");
+	assert.equal(styles.segments.git.fg("git"), fg(PI_TOKEN_COLORS.success, "git"), "Pi git segment should map to success token");
+	assert.equal(styles.segments.model.fg("model"), fg(PI_TOKEN_COLORS.text, "model"), "Pi model segment should map to text token");
+	assert.equal(styles.segments.context.fg("ctx"), fg(PI_TOKEN_COLORS.accent, "ctx"), "Pi context segment should map to accent token");
+	assert.equal(styles.segments.tokens.fg("tok"), fg(PI_TOKEN_COLORS.muted, "tok"), "Pi tokens segment should map to muted token");
+	assert.equal(styles.segments.cost.fg("cost"), fg(PI_TOKEN_COLORS.warning, "cost"), "Pi cost segment should map to warning token");
+	assert.equal(styles.segments.throughput.fg("spd"), fg(PI_TOKEN_COLORS.muted, "spd"), "Pi throughput segment should map to muted token");
+
+	assert.equal(readPiUiTheme({ theme: piTheme }), piTheme, "runtime style provider seam should read the public current UI theme shape");
+	assert.equal(readPiUiTheme(undefined), undefined, "runtime style provider seam should tolerate missing UI host in tests/non-TUI harnesses");
+	assert.equal(createPiRenderStyleContext(undefined), undefined, "Pi render style context helper should stay empty when no current Pi theme is available");
+	const directContext = createPiRenderStyleContext(piTheme);
+	assert.equal(directContext?.styles?.source, "pi", "Pi render style context helper should convert a current Pi theme into injectable styles");
+	assert.equal(directContext?.styles?.cacheKey, styles.cacheKey, "Pi render style context helper should reuse adapter cache identity");
+	assert.equal(resolveRuntimeRenderStyleContext(defaultConfig(), { piTheme }), undefined, "runtime render style context should remain inactive for current configs without a future explicit enable condition");
+	const futureContext = resolveRuntimeRenderStyleContext(defaultConfig(), { piTheme, enablePiThemeStyles: true });
+	assert.equal(futureContext?.styles?.source, "pi", "runtime render style context has a future explicit enable seam for Pi theme styles");
+	assert.equal(futureContext?.styles?.text("txt"), fg(PI_TOKEN_COLORS.text, "txt"), "future enabled runtime context should carry Pi token styling when explicitly requested");
+}
+
+{
+	const fallbackTheme = fakePiTheme({
+		accent: PI_TOKEN_COLORS.accent,
+		muted: PI_TOKEN_COLORS.muted,
+		text: PI_TOKEN_COLORS.text,
+	}, "fallback-pi", "256color", "");
+	const styles = resolvePiThemeStyles(fallbackTheme);
+	assert.equal(styles.cacheKey, 'pi:["fallback-pi","256color",""]', "Pi theme fallback cacheKey should stay deterministic without sourcePath");
+	assert.equal(styles.dim("dim"), fg(PI_TOKEN_COLORS.muted, "dim"), "missing Pi dim should fall back to muted");
+	assert.equal(styles.warn("warn"), fg(PI_TOKEN_COLORS.accent, "warn"), "missing Pi warning should fall back to accent");
+	assert.equal(styles.error("error"), fg(PI_TOKEN_COLORS.text, "error"), "missing Pi error/warning should fall back to text");
+	assert.equal(styles.separator("sep"), fg(PI_TOKEN_COLORS.muted, "sep"), "missing Pi separator-specific tokens should fall back to muted");
+	assert.equal(styles.border("border"), fg(PI_TOKEN_COLORS.muted, "border"), "missing Pi border tokens should fall back to muted");
+	assert.equal(styles.title("title"), fg(PI_TOKEN_COLORS.accent, "title"), "missing Pi title accent alternatives should use accent");
+	assert.equal(styles.segments.git.fg("git"), fg(PI_TOKEN_COLORS.accent, "git"), "missing Pi success should fall back git to accent");
+	assert.equal(styles.segments.cost.fg("cost"), fg(PI_TOKEN_COLORS.accent, "cost"), "missing Pi warning should fall back cost to accent");
+	assert.equal(styles.segments.tokens.fg("tok"), fg(PI_TOKEN_COLORS.muted, "tok"), "missing Pi token-specific colors should fall back tokens to muted");
+}
 
 console.log("✓ theme config checks passed");
