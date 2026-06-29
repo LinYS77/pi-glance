@@ -1,8 +1,8 @@
 import { strict as assert } from "node:assert";
 import type { ExtensionCommandContext, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { defaultConfig } from "../config.js";
-import { createGlanceRuntime, type CreateGitRefresherOptions, type GlancePaneResult, type GlanceRuntimeAdapters, type RuntimeGitRefresher } from "../runtime.js";
-import type { GitSnapshot, GlanceConfig } from "../types.js";
+import { createGlanceRuntime, type CreateGitRefresherOptions, type GlancePaneResult, type GlanceRuntimeAdapters, type RuntimeGitRefresher, type RuntimeShowPaneOptions } from "../runtime.js";
+import type { GitSnapshot, GlanceConfig, GlanceState } from "../types.js";
 
 interface Notification {
 	message: string;
@@ -34,6 +34,7 @@ interface RuntimeHarnessOptions {
 	loadConfigSyncConfig?: GlanceConfig;
 	loadConfigConfig?: GlanceConfig;
 	showPaneResults?: GlancePaneResult[];
+	onSaveConfig?: (config: GlanceConfig) => void | Promise<void>;
 	saveConfigError?: Error;
 	git?: GitRefresherHarness;
 }
@@ -41,6 +42,9 @@ interface RuntimeHarnessOptions {
 interface RuntimeHarness {
 	runtime: ReturnType<typeof createGlanceRuntime>;
 	showPaneInitials: GlanceConfig[];
+	showPaneContexts: ExtensionCommandContext[];
+	showPanePreviewStates: Array<GlanceState | undefined>;
+	showPaneOptions: Array<RuntimeShowPaneOptions | undefined>;
 	savedConfigs: GlanceConfig[];
 	getLoadConfigCalls(): number;
 }
@@ -193,6 +197,9 @@ function invokeEditorFactory(test: TestContext, index: number, requestRender: ()
 
 function createRuntimeHarness(options: RuntimeHarnessOptions = {}): RuntimeHarness {
 	const showPaneInitials: GlanceConfig[] = [];
+	const showPaneContexts: ExtensionCommandContext[] = [];
+	const showPanePreviewStates: Array<GlanceState | undefined> = [];
+	const showPaneOptions: Array<RuntimeShowPaneOptions | undefined> = [];
 	const savedConfigs: GlanceConfig[] = [];
 	let loadConfigCalls = 0;
 	const loadConfigSyncConfig = options.loadConfigSyncConfig ?? defaultConfig();
@@ -206,11 +213,15 @@ function createRuntimeHarness(options: RuntimeHarnessOptions = {}): RuntimeHarne
 			return loadConfigConfig;
 		},
 		saveConfig: async (config) => {
+			await options.onSaveConfig?.(config);
 			if (options.saveConfigError) throw options.saveConfigError;
 			savedConfigs.push(config);
 		},
-		showPane: async (initial) => {
+		showPane: async (initial, ctx, previewState, paneOptions) => {
 			showPaneInitials.push(cloneConfig(initial));
+			showPaneContexts.push(ctx);
+			showPanePreviewStates.push(previewState);
+			showPaneOptions.push(paneOptions);
 			const result = showPaneResults.shift();
 			assert.ok(result, "expected queued showPane result");
 			return result;
@@ -220,6 +231,9 @@ function createRuntimeHarness(options: RuntimeHarnessOptions = {}): RuntimeHarne
 	return {
 		runtime: createGlanceRuntime(adapters),
 		showPaneInitials,
+		showPaneContexts,
+		showPanePreviewStates,
+		showPaneOptions,
 		savedConfigs,
 		getLoadConfigCalls: () => loadConfigCalls,
 	};
@@ -273,9 +287,14 @@ function createRuntimeHarness(options: RuntimeHarnessOptions = {}): RuntimeHarne
 	assert.deepEqual(test.surfaceCalls.slice(surfaceBaseline), [], "save failure should not reinstall or clear the input surface");
 	assert.deepEqual(git.schedules.slice(scheduleBaseline), [], "save failure should not schedule git refreshes");
 	assert.equal(test.getRenderRequests(), renderBaseline, "save failure should not request a render");
+	assert.deepEqual(harness.savedConfigs, [], "failed save should not record a persisted config");
+	git.options?.onSnapshot("/repo", gitSnapshot("after-enabled-save-failure"));
+	assert.equal(test.getRenderRequests(), renderBaseline + 1, "save failure should preserve the existing render owner for later git updates");
 
 	await harness.runtime.commands.openPane("", test.ctx);
 	assert.deepEqual(harness.showPaneInitials[1], initialConfig, "after failed save, the active config should still be the previous config");
+	assert.equal(harness.showPanePreviewStates[1]?.git.branch, "after-enabled-save-failure", "later pane opens after failed save should receive the current preview state");
+	assert.equal(harness.showPaneOptions[1], undefined, "inactive Pi style provider should keep pane options undefined after failed save");
 }
 
 {
@@ -283,25 +302,159 @@ function createRuntimeHarness(options: RuntimeHarnessOptions = {}): RuntimeHarne
 	const nextConfig = nextEnabledConfig(initialConfig);
 	const git = createGitHarness();
 	const test = createContext();
+	let surfaceBaseline = -1;
+	let scheduleBaseline = -1;
+	let renderBaseline = -1;
 	const harness = createRuntimeHarness({
 		loadConfigSyncConfig: initialConfig,
 		showPaneResults: [{ action: "save", config: nextConfig }, { action: "cancel" }],
+		onSaveConfig: (savingConfig) => {
+			assert.equal(savingConfig, nextConfig, "saveConfig should receive the pane result config before active config is swapped");
+			assert.deepEqual(git.options?.getConfig(), initialConfig.git, "active config should remain unchanged while disk save is still pending");
+			assert.deepEqual(test.surfaceCalls.slice(surfaceBaseline), [], "enabled->enabled save should not reinstall the surface before disk save succeeds");
+			assert.deepEqual(git.schedules.slice(scheduleBaseline), [], "enabled->enabled save should not schedule git refresh before disk save succeeds");
+			assert.equal(test.getRenderRequests(), renderBaseline, "enabled->enabled save should not render before disk save succeeds");
+		},
 		git,
 	});
 
 	harness.runtime.events.sessionStart({}, test.ctx);
-	const surfaceBaseline = test.surfaceCalls.length;
-	const renderBaseline = test.getRenderRequests();
+	surfaceBaseline = test.surfaceCalls.length;
+	scheduleBaseline = git.schedules.length;
+	renderBaseline = test.getRenderRequests();
 	await harness.runtime.commands.openPane("", test.ctx);
 
 	assert.deepEqual(harness.savedConfigs, [nextConfig], "save success should pass the next config to saveConfig");
 	assert.equal(hasNotification(test.notifications, "pi-glance configuration saved", "info"), true, "save success should notify saved");
+	assert.equal(harness.showPaneContexts[0], test.ctx, "showPane should receive the command context passed to /glance");
+	assert.equal(harness.showPanePreviewStates[0]?.workspace.path, "/repo", "showPane should receive the current runtime state for preview rendering");
+	assert.equal(harness.showPaneOptions[0], undefined, "inactive Pi style provider should keep pane options undefined by default");
 	assert.deepEqual(test.surfaceCalls.slice(surfaceBaseline), ["setFooter:install", "setEditorComponent:install"], "save success should reinstall the enabled TUI input surface");
+	assert.ok(git.schedules.length > scheduleBaseline, "enabled->enabled save success should schedule git refreshes only after disk save succeeds");
 	assert.ok(test.getRenderRequests() > renderBaseline, "save success should request a render after reinstalling the surface");
 	assert.deepEqual(git.options?.getConfig(), nextConfig.git, "existing git refresher should read the updated active git config after save success");
 
 	await harness.runtime.commands.openPane("", test.ctx);
 	assert.deepEqual(harness.showPaneInitials[1], nextConfig, "after successful save, later pane opens should receive the next active config");
+	assert.equal(harness.showPaneOptions[1], undefined, "later pane opens should also omit inactive style options");
+}
+
+{
+	const initialConfig = defaultConfig();
+	const nextConfig = disabledConfig(initialConfig);
+	const git = createGitHarness();
+	const test = createContext();
+	let surfaceBaseline = -1;
+	let renderBaseline = -1;
+	const harness = createRuntimeHarness({
+		loadConfigSyncConfig: initialConfig,
+		showPaneResults: [{ action: "save", config: nextConfig }, { action: "cancel" }],
+		onSaveConfig: () => {
+			assert.deepEqual(git.options?.getConfig(), initialConfig.git, "enabled->disabled active config should remain enabled while disk save is pending");
+			assert.deepEqual(test.surfaceCalls.slice(surfaceBaseline), [], "enabled->disabled save should not clear the surface before disk save succeeds");
+			assert.equal(test.getRenderRequests(), renderBaseline, "enabled->disabled save should not render before disk save succeeds");
+		},
+		git,
+	});
+
+	harness.runtime.events.sessionStart({}, test.ctx);
+	surfaceBaseline = test.surfaceCalls.length;
+	renderBaseline = test.getRenderRequests();
+	await harness.runtime.commands.openPane("", test.ctx);
+
+	assert.deepEqual(harness.savedConfigs, [nextConfig], "enabled->disabled success should persist the disabled config");
+	assert.deepEqual(test.surfaceCalls.slice(surfaceBaseline), ["setEditorComponent:clear", "setFooter:clear"], "enabled->disabled success should clear the TUI input surface after disk save succeeds");
+	assert.equal(git.disposeCount, 1, "enabled->disabled success should dispose the active git refresher");
+	assert.equal(test.getRenderRequests(), renderBaseline, "enabled->disabled success should not render through the cleared surface");
+
+	await harness.runtime.commands.openPane("", test.ctx);
+	assert.deepEqual(harness.showPaneInitials[1], nextConfig, "after enabled->disabled save, later pane opens should receive disabled active config");
+	assert.equal(harness.showPaneOptions[1], undefined, "disabled active config should still omit inactive pane style options");
+}
+
+{
+	const initialConfig = disabledConfig();
+	const nextConfig = nextEnabledConfig(initialConfig);
+	const git = createGitHarness();
+	const test = createContext();
+	let surfaceBaseline = -1;
+	const harness = createRuntimeHarness({
+		loadConfigSyncConfig: initialConfig,
+		showPaneResults: [{ action: "save", config: nextConfig }, { action: "cancel" }],
+		onSaveConfig: () => {
+			assert.equal(git.created, 0, "disabled->enabled save should not create a git refresher before disk save succeeds");
+			assert.deepEqual(test.surfaceCalls.slice(surfaceBaseline), [], "disabled->enabled save should not install the surface before disk save succeeds");
+		},
+		git,
+	});
+
+	harness.runtime.events.sessionStart({}, test.ctx);
+	surfaceBaseline = test.surfaceCalls.length;
+	await harness.runtime.commands.openPane("", test.ctx);
+
+	assert.deepEqual(harness.savedConfigs, [nextConfig], "disabled->enabled success should persist the enabled config");
+	assert.deepEqual(test.surfaceCalls.slice(surfaceBaseline), ["setFooter:install", "setEditorComponent:install"], "disabled->enabled success should install the TUI input surface after disk save succeeds");
+	assert.equal(git.created, 1, "disabled->enabled success should create the git refresher after disk save succeeds");
+	assert.deepEqual(git.schedules, [true], "disabled->enabled success should schedule one immediate git refresh after installing the surface");
+	assert.deepEqual(git.options?.getConfig(), nextConfig.git, "new git refresher should read the enabled active git config after save success");
+
+	await harness.runtime.commands.openPane("", test.ctx);
+	assert.deepEqual(harness.showPaneInitials[1], nextConfig, "after disabled->enabled save, later pane opens should receive enabled active config");
+	assert.equal(harness.showPaneOptions[1], undefined, "enabled active config should still omit inactive pane style options");
+}
+
+{
+	const initialConfig = disabledConfig();
+	const nextConfig = nextEnabledConfig(initialConfig);
+	const git = createGitHarness();
+	const test = createContext();
+	const harness = createRuntimeHarness({
+		loadConfigSyncConfig: initialConfig,
+		showPaneResults: [{ action: "save", config: nextConfig }, { action: "cancel" }],
+		saveConfigError: new Error("blocked"),
+		git,
+	});
+
+	harness.runtime.events.sessionStart({}, test.ctx);
+	const surfaceBaseline = test.surfaceCalls.length;
+	await harness.runtime.commands.openPane("", test.ctx);
+
+	assert.equal(hasNotification(test.notifications, "pi-glance configuration save failed; keeping previous configuration", "error"), true, "disabled-start save failure should notify the exact error copy");
+	assert.deepEqual(harness.savedConfigs, [], "disabled-start failed save should not record a persisted config");
+	assert.deepEqual(test.surfaceCalls.slice(surfaceBaseline), [], "disabled-start save failure should not install or clear the input surface");
+	assert.equal(git.created, 0, "disabled-start save failure should not create a git refresher");
+
+	await harness.runtime.commands.openPane("", test.ctx);
+	assert.deepEqual(harness.showPaneInitials[1], initialConfig, "after disabled-start failed save, later pane opens should receive the previous disabled config");
+	assert.equal(harness.showPaneOptions[1], undefined, "failed disabled-start save should keep inactive pane style options undefined");
+}
+
+for (const startingEnabled of [true, false] as const) {
+	const initialConfig = startingEnabled ? defaultConfig() : disabledConfig();
+	const git = createGitHarness();
+	const test = createContext();
+	const harness = createRuntimeHarness({
+		loadConfigSyncConfig: initialConfig,
+		showPaneResults: [{ action: "cancel" }, { action: "cancel" }],
+		git,
+	});
+
+	harness.runtime.events.sessionStart({}, test.ctx);
+	const surfaceBaseline = test.surfaceCalls.length;
+	const scheduleBaseline = git.schedules.length;
+	const renderBaseline = test.getRenderRequests();
+	await harness.runtime.commands.openPane("", test.ctx);
+
+	assert.equal(hasNotification(test.notifications, "pi-glance configuration cancelled", "info"), true, `${startingEnabled ? "enabled" : "disabled"} cancel should notify cancellation`);
+	assert.deepEqual(harness.savedConfigs, [], `${startingEnabled ? "enabled" : "disabled"} cancel should not save config`);
+	assert.deepEqual(test.surfaceCalls.slice(surfaceBaseline), [], `${startingEnabled ? "enabled" : "disabled"} cancel should not install or clear the surface`);
+	assert.deepEqual(git.schedules.slice(scheduleBaseline), [], `${startingEnabled ? "enabled" : "disabled"} cancel should not schedule git refreshes`);
+	assert.equal(test.getRenderRequests(), renderBaseline, `${startingEnabled ? "enabled" : "disabled"} cancel should not request render`);
+	assert.equal(harness.showPanePreviewStates[0]?.workspace.path, "/repo", `${startingEnabled ? "enabled" : "disabled"} cancel pane should receive current preview state`);
+	assert.equal(harness.showPaneOptions[0], undefined, `${startingEnabled ? "enabled" : "disabled"} cancel pane should omit inactive style options`);
+
+	await harness.runtime.commands.openPane("", test.ctx);
+	assert.deepEqual(harness.showPaneInitials[1], initialConfig, `${startingEnabled ? "enabled" : "disabled"} cancel should preserve active config for later pane opens`);
 }
 
 {
@@ -480,8 +633,9 @@ function createRuntimeHarness(options: RuntimeHarnessOptions = {}): RuntimeHarne
 
 	harness.runtime.events.sessionStart({}, test.ctx);
 	await harness.runtime.commands.openPane("", test.ctx);
-	const previewState = harness.showPaneInitials.length;
-	assert.equal(previewState, 1, "TUI /glance should still open after provider-count snapshot setup");
+	assert.equal(harness.showPaneInitials.length, 1, "TUI /glance should still open after provider-count snapshot setup");
+	assert.equal(harness.showPanePreviewStates[0]?.providers.availableCount, 2, "showPane preview state should include current unique provider count");
+	assert.equal(harness.showPaneOptions[0], undefined, "inactive Pi style provider should keep showPane options undefined by default");
 }
 
 console.log("✓ runtime seam checks passed");

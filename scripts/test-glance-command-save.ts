@@ -175,6 +175,8 @@ async function main(): Promise<void> {
 		const notificationsBeforeCancel = test.notifications.length;
 		test.customResults.push({ action: "cancel" });
 		await command("", test.ctx);
+		const disabledActivePane = test.renderedPanes.at(-1)?.join("\n") ?? "";
+		assert.match(disabledActivePane, /Enabled\s+off/, "after successful disabled save, the next /glance pane should receive disabled active config");
 		assert.equal(hasNotification(test.notifications.slice(notificationsBeforeCancel), "pi-glance configuration cancelled", "info"), true, "cancel should keep the existing cancellation notice");
 		assert.equal(
 			hasNotification(test.notifications.slice(notificationsBeforeCancel), "pi-glance configuration save failed; keeping previous configuration", "error"),
