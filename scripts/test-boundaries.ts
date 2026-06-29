@@ -228,13 +228,14 @@ function assertPiThemeRuntimeProviderBoundary(files: SourceFile[]): void {
 	if (!runtime.text.includes("resolveRuntimeRenderStyleContext(activeConfig")) fail(`${runtime.path}: runtime should prepare render style context through the inactive provider seam for editor install`);
 	if (!runtime.text.includes("resolveRuntimeRenderStyleContext(current")) fail(`${runtime.path}: runtime should prepare render style context through the inactive provider seam for pane preview`);
 	if (!runtime.text.includes("readPiUiTheme(ctx.ui)")) fail(`${runtime.path}: runtime should read the public current UI theme only through the provider seam helper`);
-	if (/resolvePiThemeStyles|PiThemeLike|PiThemeColorToken|ctx\.ui\.theme|getAllThemes|getTheme\s*\(|setTheme\s*\(/.test(runtime.text)) {
+	if (/enablePiThemeStyles/.test(runtime.text)) fail(`${runtime.path}: runtime must not activate Pi theme styles without a future explicit product decision`);
+	if (/resolvePiThemeStyles|PiThemeLike|PiThemeColorToken|ctx\.ui\.theme|ctx\.ui\.setTheme|getAllThemes|getTheme\s*\(|setTheme\s*\(/.test(runtime.text)) {
 		fail(`${runtime.path}: runtime must not directly use Pi theme adapters or enumerate/set Pi themes`);
 	}
 
 	for (const file of files) {
 		if (new Set([RENDER_STYLE_CONTEXT_MODULE, GUARD_SCRIPT]).has(file.path)) continue;
-		if (/ctx\.ui\.theme|getAllThemes|getTheme\s*\(|setTheme\s*\(/.test(file.text)) {
+		if (/ctx\.ui\.theme|ctx\.ui\.setTheme|getAllThemes|getTheme\s*\(|setTheme\s*\(/.test(file.text)) {
 			fail(`${file.path}: Pi UI theme APIs must stay limited to the inactive provider seam in this slice`);
 		}
 	}

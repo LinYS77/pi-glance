@@ -19,6 +19,7 @@ interface TestContext {
 	footerFactories: CapturedFooterFactory[];
 	editorFactories: CapturedEditorFactory[];
 	getRenderRequests(): number;
+	getThemeReads(): number;
 	setCwd(cwd: string): void;
 }
 
@@ -86,6 +87,14 @@ function gitSnapshot(branch = "main"): GitSnapshot {
 	};
 }
 
+function fakePiTheme(name = "runtime-current-pi-theme") {
+	return {
+		name,
+		getColorMode: () => "test-mode",
+		fg: (_color: string, text: string) => `<<pi-theme:${text}>>`,
+	};
+}
+
 function hasNotification(notifications: Notification[], message: string, type: Notification["type"]): boolean {
 	return notifications.some((notification) => notification.message === message && notification.type === type);
 }
@@ -113,12 +122,13 @@ function createGitHarness(): GitRefresherHarness {
 	return harness;
 }
 
-function createContext(options: { cwd?: string; mode?: "tui" | "rpc" | "json" | "print"; hasUI?: boolean; availableProviders?: string[]; invokeFooterFactory?: boolean } = {}): TestContext {
+function createContext(options: { cwd?: string; mode?: "tui" | "rpc" | "json" | "print"; hasUI?: boolean; availableProviders?: string[]; invokeFooterFactory?: boolean; uiTheme?: unknown } = {}): TestContext {
 	const surfaceCalls: string[] = [];
 	const notifications: Notification[] = [];
 	const footerFactories: CapturedFooterFactory[] = [];
 	const editorFactories: CapturedEditorFactory[] = [];
 	let renderRequests = 0;
+	let themeReads = 0;
 	let cwd = options.cwd ?? "/repo";
 	const mode = options.mode ?? "tui";
 	const hasUI = options.hasUI ?? (mode === "tui" || mode === "rpc");
@@ -143,6 +153,10 @@ function createContext(options: { cwd?: string; mode?: "tui" | "rpc" | "json" | 
 			getBranch: () => [],
 		},
 		ui: {
+			get theme() {
+				themeReads++;
+				return options.uiTheme;
+			},
 			notify: (message: string, type?: "info" | "warning" | "error") => notifications.push({ message, type }),
 			setFooter: (factory: unknown) => {
 				surfaceCalls.push(factory ? "setFooter:install" : "setFooter:clear");
@@ -166,6 +180,7 @@ function createContext(options: { cwd?: string; mode?: "tui" | "rpc" | "json" | 
 		footerFactories,
 		editorFactories,
 		getRenderRequests: () => renderRequests,
+		getThemeReads: () => themeReads,
 		setCwd: (nextCwd: string) => {
 			cwd = nextCwd;
 		},
@@ -262,6 +277,29 @@ function createRuntimeHarness(options: RuntimeHarnessOptions = {}): RuntimeHarne
 	assert.deepEqual(test.surfaceCalls, ["setEditorComponent:clear", "setFooter:clear"], "disabled TUI sessionStart should synchronously restore editor and footer");
 	assert.equal(git.created, 0, "disabled sessionStart should not create a git refresher");
 	assert.equal(harness.getLoadConfigCalls(), 0, "disabled sessionStart should not call the async loadConfig adapter");
+}
+
+{
+	const currentPiTheme = fakePiTheme();
+	const git = createGitHarness();
+	const test = createContext({ uiTheme: currentPiTheme });
+	const harness = createRuntimeHarness({ loadConfigSyncConfig: defaultConfig(), showPaneResults: [{ action: "cancel" }], git });
+
+	harness.runtime.events.sessionStart({}, test.ctx);
+	assert.equal(test.getThemeReads(), 1, "TUI install may read the current UI theme through the inactive provider seam");
+	assert.equal(test.editorFactories.length, 1, "enabled TUI install should still register one editor factory with a current Pi theme present");
+	const editor = invokeEditorFactory(test, 0, () => undefined) as { focused: boolean; setText(text: string): void; render(width: number): string[] };
+	editor.focused = true;
+	editor.setText("inactive provider check");
+	assert.equal(
+		editor.render(100).join("\n").includes("<<pi-theme:"),
+		false,
+		"current Pi UI theme presence alone should not pass a renderStyleContext into GlanceEditor",
+	);
+
+	await harness.runtime.commands.openPane("", test.ctx);
+	assert.equal(test.getThemeReads(), 2, "TUI /glance may also read the current UI theme through the inactive provider seam");
+	assert.equal(harness.showPaneOptions[0], undefined, "current Pi UI theme presence alone should not pass pane render style options");
 }
 
 {
@@ -618,13 +656,29 @@ for (const startingEnabled of [true, false] as const) {
 	}
 }
 
-{
-	const test = createContext({ mode: "rpc", hasUI: true });
-	const harness = createRuntimeHarness({ loadConfigSyncConfig: defaultConfig(), showPaneResults: [{ action: "cancel" }] });
+for (const mode of ["rpc", "json", "print"] as const) {
+	const git = createGitHarness();
+	const test = createContext({ mode, hasUI: true, uiTheme: fakePiTheme(`${mode}-theme`) });
+	const harness = createRuntimeHarness({ loadConfigSyncConfig: defaultConfig(), showPaneResults: [{ action: "cancel" }], git });
 
+	harness.runtime.events.sessionStart({}, test.ctx);
+	await harness.runtime.events.modelSelect({}, test.ctx as ExtensionContext);
+	await harness.runtime.events.thinkingLevelSelect({}, test.ctx as ExtensionContext);
+	await harness.runtime.events.toolExecutionEnd({}, test.ctx as ExtensionContext);
+	await harness.runtime.events.sessionTree({}, test.ctx as ExtensionContext);
+	await harness.runtime.events.sessionCompact({}, test.ctx as ExtensionContext);
+	await harness.runtime.events.messageEnd({ message: { role: "assistant" } }, test.ctx as ExtensionContext);
+	await harness.runtime.events.turnEnd({ turnIndex: 1, message: { role: "assistant" } }, test.ctx as ExtensionContext);
+	harness.runtime.events.agentStart({}, test.ctx as ExtensionContext);
+	await harness.runtime.events.agentEnd({ messages: [] }, test.ctx as ExtensionContext);
 	await harness.runtime.commands.openPane("", test.ctx);
-	assert.deepEqual(harness.showPaneInitials, [], "non-TUI /glance should not invoke the custom pane adapter");
-	assert.equal(hasNotification(test.notifications, "pi-glance configuration pane requires TUI mode", "error"), true, "non-TUI /glance should notify that the pane requires TUI mode");
+	await harness.runtime.events.sessionShutdown({}, test.ctx as ExtensionContext);
+
+	assert.deepEqual(test.surfaceCalls, [], `${mode} mode should not touch TUI surface APIs across lifecycle events even when hasUI/theme exist`);
+	assert.equal(git.created, 0, `${mode} mode should not create the TUI-only git refresher across lifecycle events`);
+	assert.equal(test.getThemeReads(), 0, `${mode} mode should not read the current UI theme because TUI-only provider paths are skipped`);
+	assert.deepEqual(harness.showPaneInitials, [], `${mode} /glance should not invoke the custom pane adapter`);
+	assert.equal(hasNotification(test.notifications, "pi-glance configuration pane requires TUI mode", "error"), true, `${mode} /glance should notify that the pane requires TUI mode`);
 }
 
 {
