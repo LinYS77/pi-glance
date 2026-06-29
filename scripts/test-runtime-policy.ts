@@ -73,13 +73,13 @@ const lifecycleWithModelOnWorkspaceChange: RuntimeRefreshPlan = {
 	render: true,
 };
 
-const reliableNoModelOnWorkspaceChange: RuntimeRefreshPlan = {
+const lifecycleNoModelOnWorkspaceChange: RuntimeRefreshPlan = {
 	ensureConfig: true,
 	ensureState: true,
-	snapshot: "reliable",
+	snapshot: "lifecycle",
 	refreshWorkspace: true,
 	refreshModel: false,
-	refreshUsageTotals: true,
+	refreshUsageTotals: false,
 	context: "refresh",
 	git: "onWorkspaceChange",
 	render: true,
@@ -153,8 +153,8 @@ for (const role of ["user", "system", undefined]) {
 	);
 }
 
-assertPlan("turn_end", reliableNoModelOnWorkspaceChange);
-assertPlan("agent_end", reliableNoModelOnWorkspaceChange);
+assertPlan("turn_end", lifecycleNoModelOnWorkspaceChange);
+assertPlan("agent_end", lifecycleNoModelOnWorkspaceChange);
 
 assertPlan("thinking_level_select", {
 	ensureConfig: true,
@@ -192,7 +192,7 @@ assertPlan("config_save_success", {
 	render: true,
 });
 
-for (const kind of ["model_select", "turn_start", "tool_execution_end"] as const) {
+for (const kind of ["model_select", "turn_start", "tool_execution_end", "turn_end", "agent_end"] as const) {
 	assert.equal(runtimePlanFor(kind).snapshot, "lifecycle", `${kind} should use the narrow lifecycle snapshot reader`);
 	assert.equal(runtimePlanFor(kind).refreshUsageTotals, false, `${kind} should not request a usage totals refresh`);
 }
@@ -206,6 +206,9 @@ for (const kind of ["thinking_level_select", "editor_thinking_cycle"] as const) 
 for (const kind of ["turn_start", "turn_end", "agent_end"] as const) {
 	assert.notEqual(runtimePlanFor(kind).git, "immediate", `${kind} should not force immediate git refresh`);
 	assert.equal(runtimePlanFor(kind).git, "onWorkspaceChange", `${kind} should only refresh git when workspace changes`);
+}
+for (const kind of ["turn_end", "agent_end"] as const) {
+	assert.equal(runtimePlanFor(kind).refreshModel, false, `${kind} should preserve no-model-refresh behavior`);
 }
 
 assert.equal(runtimePlanFor("message_end", { messageRole: "assistant" }).git, "onWorkspaceChange", "assistant message_end should only refresh git when workspace changes");

@@ -79,13 +79,25 @@ const RELIABLE_WITH_MODEL_IMMEDIATE_PLAN: RuntimeRefreshPlan = {
 	render: true,
 };
 
-const RELIABLE_NO_MODEL_ON_WORKSPACE_CHANGE_PLAN: RuntimeRefreshPlan = {
+const TURN_END_PLAN: RuntimeRefreshPlan = {
 	ensureConfig: true,
 	ensureState: true,
-	snapshot: "reliable",
+	snapshot: "lifecycle",
 	refreshWorkspace: true,
 	refreshModel: false,
-	refreshUsageTotals: true,
+	refreshUsageTotals: false,
+	context: "refresh",
+	git: "onWorkspaceChange",
+	render: true,
+};
+
+const AGENT_END_PLAN: RuntimeRefreshPlan = {
+	ensureConfig: true,
+	ensureState: true,
+	snapshot: "lifecycle",
+	refreshWorkspace: true,
+	refreshModel: false,
+	refreshUsageTotals: false,
 	context: "refresh",
 	git: "onWorkspaceChange",
 	render: true,
@@ -182,8 +194,9 @@ export function runtimePlanFor(kind: RuntimeEventKind, facts: RuntimeEventFacts 
 		case "message_end":
 			return facts.messageRole === "assistant" ? clonePlan(ASSISTANT_MESSAGE_END_PLAN) : clonePlan(ENSURE_ONLY_PLAN);
 		case "turn_end":
+			return clonePlan(TURN_END_PLAN);
 		case "agent_end":
-			return clonePlan(RELIABLE_NO_MODEL_ON_WORKSPACE_CHANGE_PLAN);
+			return clonePlan(AGENT_END_PLAN);
 		case "thinking_level_select":
 			return clonePlan(THINKING_LEVEL_SELECT_PLAN);
 		case "editor_thinking_cycle":
