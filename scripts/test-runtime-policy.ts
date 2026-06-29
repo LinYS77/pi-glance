@@ -211,6 +211,30 @@ for (const kind of ["turn_end", "agent_end"] as const) {
 	assert.equal(runtimePlanFor(kind).refreshModel, false, `${kind} should preserve no-model-refresh behavior`);
 }
 
+const policyControlledKinds: readonly RuntimeEventKind[] = [
+	"model_select",
+	"thinking_level_select",
+	"turn_start",
+	"tool_execution_end",
+	"session_tree",
+	"session_compact",
+	"message_end",
+	"turn_end",
+	"agent_end",
+	"config_save_success",
+	"editor_thinking_cycle",
+];
+const fullReconciliationKinds = new Set<RuntimeEventKind>(["session_tree", "config_save_success"]);
+for (const kind of policyControlledKinds) {
+	const facts = kind === "message_end" ? { messageRole: "assistant" } : undefined;
+	assert.equal(
+		runtimePlanFor(kind, facts).snapshot === "reliable",
+		fullReconciliationKinds.has(kind),
+		`${kind} final matrix reliable/full-snapshot membership should stay locked`,
+	);
+}
+assert.equal(runtimePlanFor("session_compact").snapshot, "compact", "session_compact final matrix should use the compact branchless snapshot reader");
+
 assert.equal(runtimePlanFor("message_end", { messageRole: "assistant" }).git, "onWorkspaceChange", "assistant message_end should only refresh git when workspace changes");
 assert.equal(runtimePlanFor("message_end", { messageRole: "user" }).render, false, "non-assistant message_end should not render");
 

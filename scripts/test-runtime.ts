@@ -327,6 +327,149 @@ function createRuntimeHarness(options: RuntimeHarnessOptions = {}): RuntimeHarne
 	};
 }
 
+type ScanExpectation = "same" | "increased";
+
+interface ScanCounts {
+	entries: number;
+	branch: number;
+}
+
+function scanCounts(test: TestContext): ScanCounts {
+	return {
+		entries: test.getEntryReads(),
+		branch: test.getBranchReads(),
+	};
+}
+
+function assertScanCounter(label: string, counter: "entries" | "branch", before: ScanCounts, after: ScanCounts, expectation: ScanExpectation): void {
+	if (expectation === "same") {
+		assert.equal(after[counter], before[counter], `${label} should not scan session ${counter}`);
+		return;
+	}
+	assert.ok(after[counter] > before[counter], `${label} should scan session ${counter}`);
+}
+
+function assertScanDelta(label: string, before: ScanCounts, test: TestContext, expected: { entries: ScanExpectation; branch: ScanExpectation }): void {
+	const after = scanCounts(test);
+	assertScanCounter(label, "entries", before, after, expected.entries);
+	assertScanCounter(label, "branch", before, after, expected.branch);
+}
+
+function createScanMatrixContext(): TestContext {
+	return createContext({
+		entries: [sessionMessage("assistant", { usage: { input: 1, output: 2, cacheRead: 3, cacheWrite: 4, cost: { total: 0.25 } } })],
+		branch: [{ type: "compaction" }, sessionMessage("assistant", { usage: { totalTokens: 1 } })],
+	});
+}
+
+interface RuntimeScanMatrixCase {
+	name: string;
+	showPaneResults?: GlancePaneResult[];
+	prepare?: (harness: RuntimeHarness, test: TestContext) => void | Promise<void>;
+	invoke: (harness: RuntimeHarness, test: TestContext) => void | Promise<void>;
+}
+
+async function assertRuntimeScanMatrixCase(matrixCase: RuntimeScanMatrixCase, expected: { entries: ScanExpectation; branch: ScanExpectation }): Promise<void> {
+	const git = createGitHarness();
+	const test = createScanMatrixContext();
+	const harness = createRuntimeHarness({ loadConfigSyncConfig: defaultConfig(), showPaneResults: matrixCase.showPaneResults, git });
+	harness.runtime.events.sessionStart({}, test.ctx);
+	await matrixCase.prepare?.(harness, test);
+	const baseline = scanCounts(test);
+	await matrixCase.invoke(harness, test);
+	assertScanDelta(matrixCase.name, baseline, test, expected);
+}
+
+{
+	const test = createScanMatrixContext();
+	const harness = createRuntimeHarness({ loadConfigSyncConfig: defaultConfig(), git: createGitHarness() });
+	const beforeSessionStart = scanCounts(test);
+	harness.runtime.events.sessionStart({}, test.ctx);
+	assertScanDelta("session_start", beforeSessionStart, test, { entries: "increased", branch: "increased" });
+}
+
+for (const matrixCase of [
+	{
+		name: "session_tree",
+		invoke: (harness, test) => harness.runtime.events.sessionTree({}, test.ctx as ExtensionContext),
+	},
+	{
+		name: "config_save_success",
+		showPaneResults: [{ action: "save", config: nextEnabledConfig(defaultConfig()) }],
+		invoke: (harness, test) => harness.runtime.commands.openPane("", test.ctx),
+	},
+] satisfies RuntimeScanMatrixCase[]) {
+	await assertRuntimeScanMatrixCase(matrixCase, { entries: "increased", branch: "increased" });
+}
+
+await assertRuntimeScanMatrixCase(
+	{
+		name: "session_compact",
+		invoke: (harness, test) => harness.runtime.events.sessionCompact({}, test.ctx as ExtensionContext),
+	},
+	{ entries: "increased", branch: "same" },
+);
+
+for (const matrixCase of [
+	{
+		name: "thinking_level_select",
+		invoke: (harness, test) => harness.runtime.events.thinkingLevelSelect({}, test.ctx as ExtensionContext),
+	},
+	{
+		name: "editor_thinking_cycle",
+		invoke: async (_harness, test) => {
+			const editor = invokeEditorFactory(
+				test,
+				0,
+				() => undefined,
+				{ matches: (data, action) => action === "app.thinking.cycle" && data === "t" },
+			) as { handleInput(data: string): void };
+			editor.handleInput("t");
+			await Promise.resolve();
+		},
+	},
+	{
+		name: "model_select",
+		invoke: (harness, test) => harness.runtime.events.modelSelect({}, test.ctx as ExtensionContext),
+	},
+	{
+		name: "turn_start",
+		invoke: (harness, test) => harness.runtime.events.turnStart({}, test.ctx as ExtensionContext),
+	},
+	{
+		name: "tool_execution_end",
+		invoke: (harness, test) => harness.runtime.events.toolExecutionEnd({}, test.ctx as ExtensionContext),
+	},
+	{
+		name: "assistant message_end",
+		invoke: (harness, test) => harness.runtime.events.messageEnd({ message: assistantMessage({ usage: { input: 2, output: 3, totalTokens: 5, cost: { total: 0.1 } } }) }, test.ctx as ExtensionContext),
+	},
+	{
+		name: "non-assistant message_end",
+		invoke: (harness, test) => harness.runtime.events.messageEnd({ message: { role: "user", usage: { input: 2, output: 3, totalTokens: 5 } } }, test.ctx as ExtensionContext),
+	},
+	{
+		name: "turn_end",
+		prepare: (harness, test) => harness.runtime.events.agentStart({}, test.ctx as ExtensionContext),
+		invoke: (harness, test) => harness.runtime.events.turnEnd({ turnIndex: 1, message: assistantMessage({ usage: { output: 4, totalTokens: 4 } }) }, test.ctx as ExtensionContext),
+	},
+	{
+		name: "agent_start",
+		invoke: (harness, test) => harness.runtime.events.agentStart({}, test.ctx as ExtensionContext),
+	},
+	{
+		name: "agent_end",
+		prepare: (harness, test) => harness.runtime.events.agentStart({}, test.ctx as ExtensionContext),
+		invoke: (harness, test) => harness.runtime.events.agentEnd({ messages: [assistantMessage({ usage: { output: 4, totalTokens: 4 } })] }, test.ctx as ExtensionContext),
+	},
+	{
+		name: "session_shutdown",
+		invoke: (harness, test) => harness.runtime.events.sessionShutdown({}, test.ctx as ExtensionContext),
+	},
+] satisfies RuntimeScanMatrixCase[]) {
+	await assertRuntimeScanMatrixCase(matrixCase, { entries: "same", branch: "same" });
+}
+
 {
 	const config = defaultConfig();
 	const git = createGitHarness();
