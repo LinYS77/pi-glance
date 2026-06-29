@@ -12,6 +12,18 @@ interface Notification {
 type CapturedFooterFactory = (tui: { requestRender(): void }, theme: unknown) => unknown;
 type CapturedEditorFactory = (tui: { terminal: { rows: number }; requestRender(): void }, theme: unknown, keybindings: unknown) => unknown;
 
+interface MutableModelInfo {
+	id?: string;
+	provider?: string;
+	contextWindow?: number;
+}
+
+interface MutableContextUsage {
+	tokens: number | null;
+	contextWindow: number;
+	percent: number | null;
+}
+
 interface TestContext {
 	ctx: ExtensionCommandContext;
 	surfaceCalls: string[];
@@ -21,6 +33,9 @@ interface TestContext {
 	getRenderRequests(): number;
 	getThemeReads(): number;
 	setCwd(cwd: string): void;
+	setAvailableProviders(providers: string[]): void;
+	setModel(model: MutableModelInfo | undefined): void;
+	setContextUsage(usage: MutableContextUsage | undefined): void;
 }
 
 interface GitRefresherHarness {
@@ -122,7 +137,7 @@ function createGitHarness(): GitRefresherHarness {
 	return harness;
 }
 
-function createContext(options: { cwd?: string; mode?: "tui" | "rpc" | "json" | "print"; hasUI?: boolean; availableProviders?: string[]; invokeFooterFactory?: boolean; uiTheme?: unknown } = {}): TestContext {
+function createContext(options: { cwd?: string; mode?: "tui" | "rpc" | "json" | "print"; hasUI?: boolean; availableProviders?: string[]; model?: MutableModelInfo; contextUsage?: MutableContextUsage; invokeFooterFactory?: boolean; uiTheme?: unknown } = {}): TestContext {
 	const surfaceCalls: string[] = [];
 	const notifications: Notification[] = [];
 	const footerFactories: CapturedFooterFactory[] = [];
@@ -130,9 +145,11 @@ function createContext(options: { cwd?: string; mode?: "tui" | "rpc" | "json" | 
 	let renderRequests = 0;
 	let themeReads = 0;
 	let cwd = options.cwd ?? "/repo";
+	let availableProviders = options.availableProviders ?? ["test-provider"];
+	let model: MutableModelInfo | undefined = options.model ?? { id: "test-model", provider: "test-provider", contextWindow: 200_000 };
+	let contextUsage: MutableContextUsage | undefined = options.contextUsage ?? { tokens: 42, contextWindow: 200_000, percent: 0.021 };
 	const mode = options.mode ?? "tui";
 	const hasUI = options.hasUI ?? (mode === "tui" || mode === "rpc");
-	const availableProviders = options.availableProviders ?? ["test-provider"];
 	const invokeFooterFactory = options.invokeFooterFactory ?? true;
 	const fakeTui = { requestRender: () => renderRequests++ };
 	const fakeTheme = {};
@@ -143,7 +160,9 @@ function createContext(options: { cwd?: string; mode?: "tui" | "rpc" | "json" | 
 		get cwd() {
 			return cwd;
 		},
-		model: { id: "test-model", provider: "test-provider", contextWindow: 200_000 },
+		get model() {
+			return model;
+		},
 		modelRegistry: {
 			getAvailable: () => availableProviders.map((provider) => ({ provider, id: `${provider}-model` })),
 		},
@@ -170,7 +189,7 @@ function createContext(options: { cwd?: string; mode?: "tui" | "rpc" | "json" | 
 				if (factory) editorFactories.push(factory as CapturedEditorFactory);
 			},
 		},
-		getContextUsage: () => ({ tokens: 42, contextWindow: 200_000, percent: 0.021 }),
+		getContextUsage: () => contextUsage,
 	} as unknown as ExtensionCommandContext;
 
 	return {
@@ -183,6 +202,15 @@ function createContext(options: { cwd?: string; mode?: "tui" | "rpc" | "json" | 
 		getThemeReads: () => themeReads,
 		setCwd: (nextCwd: string) => {
 			cwd = nextCwd;
+		},
+		setAvailableProviders: (providers: string[]) => {
+			availableProviders = providers;
+		},
+		setModel: (nextModel: MutableModelInfo | undefined) => {
+			model = nextModel;
+		},
+		setContextUsage: (usage: MutableContextUsage | undefined) => {
+			contextUsage = usage;
 		},
 	};
 }
@@ -300,6 +328,48 @@ function createRuntimeHarness(options: RuntimeHarnessOptions = {}): RuntimeHarne
 	await harness.runtime.commands.openPane("", test.ctx);
 	assert.equal(test.getThemeReads(), 2, "TUI /glance may also read the current UI theme through the inactive provider seam");
 	assert.equal(harness.showPaneOptions[0], undefined, "current Pi UI theme presence alone should not pass pane render style options");
+}
+
+{
+	const test = createContext();
+	const harness = createRuntimeHarness({ loadConfigSyncConfig: defaultConfig(), showPaneResults: [{ action: "cancel" }] });
+
+	harness.runtime.events.sessionStart({}, test.ctx);
+	test.setAvailableProviders(["openai", "anthropic", "openai", "local"]);
+	test.setModel({ id: "claude-opus-4-20250514", provider: "anthropic", contextWindow: 500_000 });
+	test.setContextUsage({ tokens: 123_456, contextWindow: 500_000, percent: 24.6912 });
+	await harness.runtime.events.modelSelect({}, test.ctx as ExtensionContext);
+	await harness.runtime.commands.openPane("", test.ctx);
+
+	const previewState = harness.showPanePreviewStates.at(-1);
+	assert.ok(previewState, "model_select smoke test should open /glance with preview state");
+	assert.equal(previewState.providers.availableCount, 3, "preview state should refresh unique provider count after model_select");
+	assert.equal(previewState.model.id, "claude-opus-4-20250514", "preview state should refresh model id after model_select");
+	assert.equal(previewState.model.provider, "anthropic", "preview state should refresh model provider after model_select");
+	assert.equal(previewState.context.tokens, 123_456, "preview state should refresh context tokens after model_select");
+	assert.equal(previewState.context.window, 500_000, "preview state should refresh context window after model_select");
+	assert.equal(previewState.context.percent, 24.6912, "preview state should refresh context percent after model_select");
+}
+
+{
+	const git = createGitHarness();
+	const test = createContext({ cwd: "/repo" });
+	const harness = createRuntimeHarness({ loadConfigSyncConfig: defaultConfig(), showPaneResults: [{ action: "cancel" }], git });
+
+	harness.runtime.events.sessionStart({}, test.ctx);
+	const scheduleBaseline = git.schedules.length;
+	test.setCwd("/workspace/fresh-repo");
+	await harness.runtime.events.turnStart({}, test.ctx as ExtensionContext);
+	assert.ok(git.schedules.length > scheduleBaseline, "workspace-changing turn_start should schedule a git refresh");
+	git.options?.onSnapshot("/workspace/fresh-repo", gitSnapshot("fresh-preview-branch"));
+	await harness.runtime.commands.openPane("", test.ctx);
+
+	const previewState = harness.showPanePreviewStates.at(-1);
+	assert.ok(previewState, "workspace/git smoke test should open /glance with preview state");
+	assert.equal(previewState.workspace.path, "/workspace/fresh-repo", "preview state should refresh workspace path after turn_start");
+	assert.equal(previewState.workspace.name, "fresh-repo", "preview state should refresh workspace display name after turn_start");
+	assert.equal(previewState.git.branch, "fresh-preview-branch", "preview state should include the latest matching git snapshot after workspace refresh");
+	assert.equal(previewState.git.status, "dirty", "preview state should include git snapshot status after workspace refresh");
 }
 
 {
