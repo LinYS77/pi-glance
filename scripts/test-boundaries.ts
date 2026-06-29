@@ -10,7 +10,8 @@ const ALLOWED_PI_IMPORTS = new Set([
 ]);
 const FOOTER_MODULE = "footer.ts";
 const STATUS_LINE_MODULE = "status-line.ts";
-const RENDER_MODULES = new Set(["editor.ts", "renderer.ts", "pane.ts", "segments.ts", "surface-layout.ts", FOOTER_MODULE, STATUS_LINE_MODULE]);
+const INPUT_SURFACE_FRAME_MODULE = "input-surface-frame.ts";
+const RENDER_MODULES = new Set(["editor.ts", "renderer.ts", "pane.ts", "segments.ts", "surface-layout.ts", INPUT_SURFACE_FRAME_MODULE, FOOTER_MODULE, STATUS_LINE_MODULE]);
 const INDEX_MODULE = "index.ts";
 const PURE_CONFIG_OPTIONS_MODULE = "config-options.ts";
 const RUNTIME_POLICY_MODULE = "runtime-policy.ts";
@@ -23,6 +24,20 @@ const THEME_ADAPTER_MODULE = "theme-adapter.ts";
 const RENDER_STYLE_CONTEXT_MODULE = "render-style-context.ts";
 const GUARD_SCRIPT = join("scripts", "test-boundaries.ts");
 const LEGACY_NAMESPACE = ["@mariozechner", ""].join("/");
+const LOW_LEVEL_FRAME_COMPOSITION_TOKENS = [
+	"planSurfaceTopFrame",
+	"planSurfaceBottomFrame",
+	"planSurfaceRow",
+	"planSurfaceStatusBudget",
+	"planWorkspaceTitle",
+	"renderSurfaceChunks",
+	"renderSurfaceTopMargin",
+	"safeSurfaceWidth",
+	"surfaceMetrics",
+	"SURFACE_AUTOCOMPLETE_INDENT",
+	"SURFACE_CONTENT_PADDING_X",
+] as const;
+const LOW_LEVEL_FRAME_COMPOSITION_PATTERN = new RegExp(`\\b(?:${LOW_LEVEL_FRAME_COMPOSITION_TOKENS.join("|")})\\b`);
 
 interface SourceFile {
 	path: string;
@@ -54,6 +69,29 @@ async function readText(path: string): Promise<string> {
 
 function fail(message: string): never {
 	assert.fail(message);
+}
+
+function importSpecifiers(file: SourceFile): string[] {
+	const importPattern = /(?:import|export)\s+(?:type\s+)?(?:[^"'`]*?\s+from\s+)?["']([^"']+)["']/g;
+	return [...file.text.matchAll(importPattern)].map((match) => match[1]!);
+}
+
+function namedImportsFrom(file: SourceFile, specifier: string): string[] {
+	const namedImportPattern = /import\s+\{([\s\S]*?)\}\s+from\s+["']([^"']+)["']/g;
+	const names: string[] = [];
+	for (const match of file.text.matchAll(namedImportPattern)) {
+		if (match[2] !== specifier) continue;
+		for (const raw of match[1]!.split(",")) {
+			const name = raw.trim().replace(/^type\s+/, "").split(/\s+as\s+/)[0]?.trim();
+			if (name) names.push(name);
+		}
+	}
+	return names;
+}
+
+function assertNoLowLevelFrameCompositionTokens(file: SourceFile, label: string): void {
+	const match = file.text.match(LOW_LEVEL_FRAME_COMPOSITION_PATTERN);
+	if (match) fail(`${file.path}: ${label} must not directly use low-level frame composition primitive ${match[0]}`);
 }
 
 function assertNoLegacyNamespace(files: SourceFile[]): void {
@@ -108,7 +146,7 @@ function assertNoCorePatching(files: SourceFile[]): void {
 function assertSurfaceLayoutSeamImports(files: SourceFile[]): void {
 	const surfaceLayout = files.find((candidate) => basename(candidate.path) === SURFACE_LAYOUT_MODULE);
 	if (!surfaceLayout) return;
-	const forbiddenModulePattern = /(?:^|\/)(?:renderer|editor|pane|status-line)(?:\.js)?$/;
+	const forbiddenModulePattern = /(?:^|\/)(?:input-surface-frame|renderer|editor|pane|status-line)(?:\.js)?$/;
 	const importPattern = /(?:import|export)\s+(?:[^"'`]*?\s+from\s+)?["']([^"']+)["']/g;
 	for (const match of surfaceLayout.text.matchAll(importPattern)) {
 		const specifier = match[1]!;
@@ -121,7 +159,7 @@ function assertSurfaceLayoutSeamImports(files: SourceFile[]): void {
 function assertSettingsCatalogSeamImports(files: SourceFile[]): void {
 	const settingsCatalog = files.find((candidate) => basename(candidate.path) === SETTINGS_CATALOG_MODULE);
 	if (!settingsCatalog) return;
-	const forbiddenModulePattern = /(?:^|\/)(?:renderer|editor|pane|pane-model|surface-layout)(?:\.js)?$/;
+	const forbiddenModulePattern = /(?:^|\/)(?:renderer|editor|pane|pane-model|surface-layout|input-surface-frame|status-line)(?:\.js)?$/;
 	const importPattern = /(?:import|export)\s+(?:[^"'`]*?\s+from\s+)?["']([^"']+)["']/g;
 	for (const match of settingsCatalog.text.matchAll(importPattern)) {
 		const specifier = match[1]!;
@@ -161,7 +199,7 @@ function assertPaneModelSeamImports(files: SourceFile[]): void {
 	assert.ok(paneModel, "pane-model.ts pure model seam should exist");
 
 	const allowedLocalSpecifiers = new Set(["./config.js", "./settings-catalog.js", "./types.js"]);
-	const forbiddenLocalModulePattern = /(?:^|\/)(?:pane|editor|renderer|surface-layout)(?:\.js)?$/;
+	const forbiddenLocalModulePattern = /(?:^|\/)(?:pane|editor|renderer|surface-layout|input-surface-frame|status-line)(?:\.js)?$/;
 	const importPattern = /(?:import|export)\s+(?:[^"'`]*?\s+from\s+)?["']([^"']+)["']/g;
 	for (const match of paneModel.text.matchAll(importPattern)) {
 		const specifier = match[1]!;
@@ -177,7 +215,7 @@ function assertThemeAdapterSeamImports(files: SourceFile[]): void {
 	assert.ok(themeAdapter, "theme-adapter.ts pure style adapter seam should exist");
 
 	const allowedLocalSpecifiers = new Set(["./palette.js", "./themes.js", "./types.js"]);
-	const forbiddenLocalModulePattern = /(?:^|\/)(?:runtime|runtime-snapshot|state|config|config-options|settings-catalog|pane|pane-model|editor|renderer|status-line|surface-layout|footer)(?:\.js)?$/;
+	const forbiddenLocalModulePattern = /(?:^|\/)(?:runtime|runtime-snapshot|state|config|config-options|settings-catalog|pane|pane-model|editor|renderer|status-line|surface-layout|input-surface-frame|footer)(?:\.js)?$/;
 	const importPattern = /(?:import|export)\s+(?:type\s+)?(?:[^"'`]*?\s+from\s+)?["']([^"']+)["']/g;
 	for (const match of themeAdapter.text.matchAll(importPattern)) {
 		const specifier = match[1]!;
@@ -283,11 +321,83 @@ function assertRenderModulesHaveNoIo(files: SourceFile[]): void {
 	}
 }
 
+function assertInputSurfaceFrameSeamImports(files: SourceFile[]): void {
+	const inputSurfaceFrame = files.find((candidate) => basename(candidate.path) === INPUT_SURFACE_FRAME_MODULE);
+	assert.ok(inputSurfaceFrame, "input-surface-frame.ts frame composition seam should exist");
+
+	const allowedSpecifiers = new Set(["@earendil-works/pi-tui", "./status-line.js", "./surface-layout.js", "./theme-adapter.js", "./types.js"]);
+	const forbiddenLocalSpecifiers = new Set([
+		"./editor.js",
+		"./renderer.js",
+		"./pane.js",
+		"./runtime.js",
+		"./runtime-snapshot.js",
+		"./state.js",
+		"./footer.js",
+		"./config.js",
+		"./settings-catalog.js",
+		"./palette.js",
+		"./render-style-context.js",
+	]);
+	const imports = importSpecifiers(inputSurfaceFrame);
+	for (const specifier of imports) {
+		if (specifier.startsWith("@earendil-works/pi-") && specifier !== "@earendil-works/pi-tui") {
+			fail(`${inputSurfaceFrame.path}: frame seam may only import public pi-tui helpers, not ${specifier}`);
+		}
+		if (IO_NETWORK_PROCESS_IMPORTS.has(specifier)) fail(`${inputSurfaceFrame.path}: frame seam must not import IO/network/process module ${specifier}`);
+		if (forbiddenLocalSpecifiers.has(specifier)) fail(`${inputSurfaceFrame.path}: frame seam must not import UI/runtime/state/config/provider module ${specifier}`);
+		if (!allowedSpecifiers.has(specifier)) fail(`${inputSurfaceFrame.path}: frame seam must not import ${specifier}`);
+	}
+	if (!imports.includes("./surface-layout.js")) fail(`${inputSurfaceFrame.path}: frame seam should centralize low-level surface-layout frame primitives`);
+	if (!imports.includes("./status-line.js")) fail(`${inputSurfaceFrame.path}: frame seam should own default status-line placement`);
+	if (!inputSurfaceFrame.text.includes("export function measureInputSurfaceFrame") || !inputSurfaceFrame.text.includes("export function renderInputSurfaceFrame")) {
+		fail(`${inputSurfaceFrame.path}: frame seam should expose measurement and render entrypoints`);
+	}
+	if (!inputSurfaceFrame.text.includes("ResolvedGlanceStyles")) fail(`${inputSurfaceFrame.path}: frame seam should accept resolved styles directly`);
+	if (/GlanceRenderStyleContext|resolveGlanceRenderStyles|readPiUiTheme|createPiRenderStyleContext|enablePiThemeStyles|resolvePiThemeStyles|PiThemeLike|ctx\.ui\.theme|ctx\.ui\.setTheme|getAllThemes|getTheme\s*\(|setTheme\s*\(/.test(inputSurfaceFrame.text)) {
+		fail(`${inputSurfaceFrame.path}: frame seam must not depend on Pi theme provider/product APIs`);
+	}
+	if (!/renderGlanceLine\([\s\S]*?\{ styles: input\.styles \}/.test(inputSurfaceFrame.text)) fail(`${inputSurfaceFrame.path}: default status rendering should pass resolved styles into status-line`);
+	if (/\bPALETTES\b|(^|[^.\w$])fg\s*\(/.test(inputSurfaceFrame.text)) fail(`${inputSurfaceFrame.path}: frame seam must not style through direct palette/fg access`);
+}
+
+function assertProductionFrameCompositionSeam(files: SourceFile[]): void {
+	const productionFiles = files.filter((candidate) => !candidate.path.startsWith("scripts/"));
+	const allowedSurfaceLayoutConsumers = new Set([INPUT_SURFACE_FRAME_MODULE, "editor.ts"]);
+	for (const file of productionFiles) {
+		if (!importSpecifiers(file).includes("./surface-layout.js")) continue;
+		const moduleName = basename(file.path);
+		if (!allowedSurfaceLayoutConsumers.has(moduleName)) {
+			fail(`${file.path}: production frame composition must go through input-surface-frame, not surface-layout directly`);
+		}
+	}
+
+	const renderer = files.find((candidate) => basename(candidate.path) === "renderer.ts");
+	assert.ok(renderer, "renderer.ts preview/static render seam should exist");
+	const rendererImports = importSpecifiers(renderer);
+	if (!rendererImports.includes("./input-surface-frame.js")) fail(`${renderer.path}: renderer preview path must import input-surface-frame`);
+	if (rendererImports.includes("./surface-layout.js") || rendererImports.includes("./status-line.js")) {
+		fail(`${renderer.path}: renderer preview path must not import surface-layout or status-line directly`);
+	}
+	assertNoLowLevelFrameCompositionTokens(renderer, "renderer preview path");
+	if (/\brenderGlanceLine\b/.test(renderer.text)) fail(`${renderer.path}: renderer preview path should receive status rendering through input-surface-frame`);
+
+	const editor = files.find((candidate) => basename(candidate.path) === "editor.ts");
+	assert.ok(editor, "editor.ts live input surface seam should exist");
+	const editorImports = importSpecifiers(editor);
+	if (!editorImports.includes("./input-surface-frame.js")) fail(`${editor.path}: editor live path must import input-surface-frame`);
+	assertNoLowLevelFrameCompositionTokens(editor, "editor live path");
+	if (editorImports.includes("./surface-layout.js")) {
+		const names = namedImportsFrom(editor, "./surface-layout.js");
+		assert.deepEqual(names, ["formatSurfaceScrollIndicator"], `${editor.path}: editor may only import formatSurfaceScrollIndicator from surface-layout for scroll adapter extraction`);
+	}
+}
+
 function assertRuntimeSnapshotAdapterSeam(files: SourceFile[]): void {
 	const runtimeSnapshot = files.find((candidate) => basename(candidate.path) === RUNTIME_SNAPSHOT_MODULE);
 	assert.ok(runtimeSnapshot, "runtime-snapshot.ts state input adapter seam should exist");
 
-	const forbiddenRenderModulePattern = /(?:^|\/)(?:editor|renderer|pane|segments|surface-layout)(?:\.js)?$/;
+	const forbiddenRenderModulePattern = /(?:^|\/)(?:editor|renderer|pane|segments|surface-layout|input-surface-frame|status-line|footer)(?:\.js)?$/;
 	const importPattern = /import\s+(type\s+)?(?:[^"'`]*?\s+from\s+)?["']([^"']+)["']/g;
 	for (const match of runtimeSnapshot.text.matchAll(importPattern)) {
 		const isTypeOnly = match[1] === "type ";
@@ -314,16 +424,45 @@ function assertRuntimePolicyPureModule(files: SourceFile[]): void {
 		"./renderer.js",
 		"./pane.js",
 		"./footer.js",
+		"./surface-layout.js",
+		"./input-surface-frame.js",
+		"./status-line.js",
+		"./segments.js",
 		"./git.js",
 		"./config.js",
 	]);
-	const importPattern = /(?:import|export)\s+(type\s+)?(?:[^"'`]*?\s+from\s+)?["']([^"']+)["']/g;
-	for (const match of runtimePolicy.text.matchAll(importPattern)) {
-		const specifier = match[2]!;
+	for (const specifier of importSpecifiers(runtimePolicy)) {
 		if (specifier.startsWith("@earendil-works/pi-")) fail(`${runtimePolicy.path}: runtime policy must not import pi/TUI package ${specifier}`);
 		if (IO_NETWORK_PROCESS_IMPORTS.has(specifier)) fail(`${runtimePolicy.path}: runtime policy must not import IO/network/process module ${specifier}`);
 		if (forbiddenLocalModules.has(specifier)) fail(`${runtimePolicy.path}: runtime policy must not import runtime/state/render/config module ${specifier}`);
 		fail(`${runtimePolicy.path}: runtime policy table should be import-free, found ${specifier}`);
+	}
+}
+
+function assertRuntimeStateSnapshotFrameBoundary(files: SourceFile[]): void {
+	const runtime = files.find((candidate) => basename(candidate.path) === "runtime.ts");
+	assert.ok(runtime, "runtime.ts should exist");
+	const forbiddenRuntimeFrameSpecifiers = new Set(["./input-surface-frame.js", "./surface-layout.js", "./status-line.js", "./renderer.js", "./pane.js", "./segments.js"]);
+	for (const specifier of importSpecifiers(runtime)) {
+		if (forbiddenRuntimeFrameSpecifiers.has(specifier)) fail(`${runtime.path}: runtime must not import frame composition/render modules directly (${specifier})`);
+	}
+
+	const forbiddenPureStateRenderSpecifiers = new Set([
+		"./input-surface-frame.js",
+		"./surface-layout.js",
+		"./status-line.js",
+		"./renderer.js",
+		"./editor.js",
+		"./pane.js",
+		"./segments.js",
+		"./footer.js",
+	]);
+	for (const moduleName of [STATE_MODULE, RUNTIME_SNAPSHOT_MODULE, RUNTIME_POLICY_MODULE]) {
+		const file = files.find((candidate) => basename(candidate.path) === moduleName);
+		assert.ok(file, `${moduleName} should exist`);
+		for (const specifier of importSpecifiers(file)) {
+			if (forbiddenPureStateRenderSpecifiers.has(specifier)) fail(`${file.path}: state/snapshot/policy modules must not import render module ${specifier}`);
+		}
 	}
 }
 
@@ -335,6 +474,7 @@ function assertStatusLineSeamImports(files: SourceFile[]): void {
 	const forbiddenLocalSpecifiers = new Set([
 		"./renderer.js",
 		"./surface-layout.js",
+		"./input-surface-frame.js",
 		"./editor.js",
 		"./pane.js",
 		"./runtime.js",
@@ -362,8 +502,10 @@ function assertRendererSeamImports(files: SourceFile[]): void {
 	const renderer = files.find((candidate) => basename(candidate.path) === "renderer.ts");
 	assert.ok(renderer, "renderer.ts preview/static render seam should exist");
 
-	const allowedSpecifiers = new Set(["@earendil-works/pi-tui", "./surface-layout.js", "./status-line.js", "./theme-adapter.js", "./types.js"]);
+	const allowedSpecifiers = new Set(["./input-surface-frame.js", "./theme-adapter.js", "./types.js"]);
 	const forbiddenLocalSpecifiers = new Set([
+		"./surface-layout.js",
+		"./status-line.js",
 		"./editor.js",
 		"./pane.js",
 		"./runtime.js",
@@ -385,7 +527,9 @@ function assertRendererSeamImports(files: SourceFile[]): void {
 		if (!allowedSpecifiers.has(specifier)) fail(`${renderer.path}: renderer must not import ${specifier}`);
 	}
 	if (!renderer.text.includes("resolveGlanceRenderStyles(config.theme")) fail(`${renderer.path}: renderer styling should resolve styles through the shared adapter context`);
-	if (!/renderGlanceLine\([\s\S]*?\{ styles \}/.test(renderer.text)) fail(`${renderer.path}: renderer should pass its resolved styles into status-line rendering`);
+	if (!renderer.text.includes("renderInputSurfaceFrame")) fail(`${renderer.path}: renderer preview path should delegate frame assembly to input-surface-frame`);
+	assertNoLowLevelFrameCompositionTokens(renderer, "renderer preview path");
+	if (/\brenderGlanceLine\b/.test(renderer.text)) fail(`${renderer.path}: renderer must not call status-line directly after frame seam migration`);
 	if (/\bPALETTES\b|(^|[^.\w$])fg\s*\(/.test(renderer.text)) fail(`${renderer.path}: renderer must not style through direct palette/fg access after adapter wiring`);
 }
 
@@ -393,7 +537,7 @@ function assertEditorSeamImports(files: SourceFile[]): void {
 	const editor = files.find((candidate) => basename(candidate.path) === "editor.ts");
 	assert.ok(editor, "editor.ts live input surface seam should exist");
 
-	const allowedSpecifiers = new Set(["@earendil-works/pi-coding-agent", "@earendil-works/pi-tui", "./format.js", "./status-line.js", "./surface-layout.js", "./theme-adapter.js", "./types.js"]);
+	const allowedSpecifiers = new Set(["@earendil-works/pi-coding-agent", "@earendil-works/pi-tui", "./format.js", "./input-surface-frame.js", "./status-line.js", "./surface-layout.js", "./theme-adapter.js", "./types.js"]);
 	const forbiddenLocalSpecifiers = new Set([
 		"./renderer.js",
 		"./pane.js",
@@ -416,8 +560,14 @@ function assertEditorSeamImports(files: SourceFile[]): void {
 		if (!allowedSpecifiers.has(specifier)) fail(`${editor.path}: editor must not import ${specifier}`);
 	}
 	if (!editor.text.includes("resolveGlanceRenderStyles(config.theme")) fail(`${editor.path}: editor styling should resolve styles through the shared adapter context`);
-	if (!/renderGlanceLine\([\s\S]*?\{ styles \}/.test(editor.text)) fail(`${editor.path}: editor should pass its render-pass styles into status-line rendering`);
+	if (!editor.text.includes("measureInputSurfaceFrame") || !editor.text.includes("renderInputSurfaceFrame")) fail(`${editor.path}: editor live frame path should delegate frame metrics/assembly to input-surface-frame`);
+	if (!/renderGlanceLine\([\s\S]*?\{ styles \}/.test(editor.text)) fail(`${editor.path}: editor cached status callback should pass its render-pass styles into status-line rendering`);
 	if (!editor.text.includes("cachedStatusStyleKey") || !editor.text.includes("styles.cacheKey")) fail(`${editor.path}: editor status cache should include style cacheKey awareness`);
+	assertNoLowLevelFrameCompositionTokens(editor, "editor live path");
+	if (importSpecifiers(editor).includes("./surface-layout.js")) {
+		const names = namedImportsFrom(editor, "./surface-layout.js");
+		assert.deepEqual(names, ["formatSurfaceScrollIndicator"], `${editor.path}: editor may only keep formatSurfaceScrollIndicator from surface-layout for scroll-indicator adaptation`);
+	}
 	if (!/handleInput\(data: string\): void\s*{[\s\S]*?super\.handleInput\(data\)/.test(editor.text)) fail(`${editor.path}: GlanceEditor.handleInput must continue delegating raw input to CustomEditor`);
 	if (editor.text.includes("interface GlanceEditorOptions extends EditorOptions")) fail(`${editor.path}: GlanceEditorOptions must not extend Pi EditorOptions; keep pi-glance render options separate`);
 	if (!editor.text.includes("readonly editorOptions?: EditorOptions") || !editor.text.includes("readonly renderStyleContext?: GlanceRenderStyleContext")) fail(`${editor.path}: GlanceEditorOptions should wrap Pi editorOptions separately from renderStyleContext`);
@@ -436,11 +586,13 @@ function assertStatusLineConsumers(files: SourceFile[]): void {
 	const rendererImports = [...renderer.text.matchAll(importPattern)].map((match) => match[1]!);
 	if (rendererImports.includes("./segments.js")) fail(`${renderer.path}: renderer must not import ./segments.js after status-line split`);
 	if (rendererImports.includes("./segment-registry.js")) fail(`${renderer.path}: renderer must not import ./segment-registry.js after status-line split`);
-	assert.ok(rendererImports.includes("./status-line.js"), "renderer.ts should import status-line seam for renderGlanceLine");
+	if (rendererImports.includes("./status-line.js")) fail(`${renderer.path}: renderer should receive status rendering through input-surface-frame after Slice 1B`);
+	assert.ok(rendererImports.includes("./input-surface-frame.js"), "renderer.ts should import input-surface-frame seam for preview frame assembly");
 
 	const editorImports = [...editor.text.matchAll(importPattern)].map((match) => match[1]!);
 	if (editorImports.includes("./renderer.js")) fail(`${editor.path}: editor must not import renderGlanceLine from renderer after status-line split`);
-	assert.ok(editorImports.includes("./status-line.js"), "editor.ts should import renderGlanceLine from status-line seam");
+	assert.ok(editorImports.includes("./input-surface-frame.js"), "editor.ts should import input-surface-frame seam for live frame assembly");
+	assert.ok(editorImports.includes("./status-line.js"), "editor.ts should still import status-line for cached live status rendering");
 }
 
 function assertStateModulePiFree(files: SourceFile[]): void {
@@ -494,7 +646,7 @@ function assertConfigOptionsPureModule(files: SourceFile[]): void {
 	const configOptions = files.find((candidate) => basename(candidate.path) === PURE_CONFIG_OPTIONS_MODULE);
 	assert.ok(configOptions, "config-options.ts pure option source should exist");
 
-	const forbiddenLocalModules = new Set(["./config.js", "./settings-catalog.js", "./pane.js", "./editor.js", "./renderer.js", "./surface-layout.js"]);
+	const forbiddenLocalModules = new Set(["./config.js", "./settings-catalog.js", "./pane.js", "./editor.js", "./renderer.js", "./surface-layout.js", "./input-surface-frame.js", "./status-line.js"]);
 	const importPattern = /import\s+(type\s+)?(?:[^"'`]*?\s+from\s+)?["']([^"']+)["']/g;
 	for (const match of configOptions.text.matchAll(importPattern)) {
 		const isTypeOnly = match[1] === "type ";
@@ -530,8 +682,11 @@ assertRenderStyleContextSeam(sourceFiles);
 assertPiThemeRuntimeProviderBoundary(sourceFiles);
 assertPanePreviewStyleContextBoundary(sourceFiles);
 assertRenderModulesHaveNoIo(sourceFiles);
+assertInputSurfaceFrameSeamImports(sourceFiles);
+assertProductionFrameCompositionSeam(sourceFiles);
 assertRuntimeSnapshotAdapterSeam(sourceFiles);
 assertRuntimePolicyPureModule(sourceFiles);
+assertRuntimeStateSnapshotFrameBoundary(sourceFiles);
 assertStatusLineSeamImports(sourceFiles);
 assertRendererSeamImports(sourceFiles);
 assertEditorSeamImports(sourceFiles);
