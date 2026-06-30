@@ -401,7 +401,9 @@ function assertRuntimePlanExecutorSeam(files: SourceFile[]): void {
 
 	const allowedSpecifiers = new Set(["@earendil-works/pi-coding-agent", "./runtime-policy.js", "./runtime-snapshot.js", "./state.js", "./types.js"]);
 	const forbiddenLocalSpecifiers = new Set([
+		"./runtime.js",
 		"./runtime-refresh-session.js",
+		"./throughput-run-tracker.js",
 		"./input-surface-frame.js",
 		"./surface-layout.js",
 		"./status-line.js",
@@ -414,6 +416,7 @@ function assertRuntimePlanExecutorSeam(files: SourceFile[]): void {
 		"./config-schema.js",
 		"./config-options.js",
 		"./settings-catalog.js",
+		"./pane-model.js",
 		"./render-style-context.js",
 		"./git.js",
 		"./theme-adapter.js",
@@ -429,10 +432,10 @@ function assertRuntimePlanExecutorSeam(files: SourceFile[]): void {
 			fail(`${executor.path}: plan executor may only type-import public pi coding-agent types, not ${specifier}`);
 		}
 		if (specifier === "@earendil-works/pi-coding-agent" && !isTypeOnly) fail(`${executor.path}: pi coding-agent import must be type-only`);
-		if (specifier === "./runtime-policy.js" && !isTypeOnly) fail(`${executor.path}: runtime-policy import should stay type-only; runtime.ts chooses plans`);
+		if (specifier === "./runtime-policy.js" && !isTypeOnly) fail(`${executor.path}: runtime-policy import should stay type-only; RuntimeRefreshSession chooses plans`);
 		if (specifier === "./types.js" && !isTypeOnly) fail(`${executor.path}: types import must be type-only`);
 		if (IO_NETWORK_PROCESS_IMPORTS.has(specifier)) fail(`${executor.path}: plan executor must not import IO/network/process module ${specifier}`);
-		if (forbiddenLocalSpecifiers.has(specifier)) fail(`${executor.path}: plan executor must not import UI/config/git/theme module ${specifier}`);
+		if (forbiddenLocalSpecifiers.has(specifier)) fail(`${executor.path}: plan executor must not import runtime/session/UI/config/git/theme/throughput module ${specifier}`);
 		if (!allowedSpecifiers.has(specifier)) fail(`${executor.path}: plan executor must not import ${specifier}`);
 	}
 	if (!executor.text.includes("interface RuntimePlanExecutionInput")) fail(`${executor.path}: plan executor should expose an explicit input interface`);
@@ -451,6 +454,7 @@ function assertRuntimeRefreshSessionSeam(files: SourceFile[]): void {
 
 	const allowedSpecifiers = new Set(["@earendil-works/pi-coding-agent", "./runtime-plan-executor.js", "./runtime-policy.js", "./runtime-snapshot.js", "./state.js", "./throughput-run-tracker.js", "./types.js"]);
 	const forbiddenLocalSpecifiers = new Set([
+		"./runtime.js",
 		"./input-surface-frame.js",
 		"./surface-layout.js",
 		"./status-line.js",
@@ -463,6 +467,7 @@ function assertRuntimeRefreshSessionSeam(files: SourceFile[]): void {
 		"./config-schema.js",
 		"./config-options.js",
 		"./settings-catalog.js",
+		"./pane-model.js",
 		"./render-style-context.js",
 		"./git.js",
 		"./theme-adapter.js",
@@ -480,17 +485,20 @@ function assertRuntimeRefreshSessionSeam(files: SourceFile[]): void {
 		if (specifier === "@earendil-works/pi-coding-agent" && !isTypeOnly) fail(`${session.path}: pi coding-agent import must be type-only`);
 		if (specifier === "./types.js" && !isTypeOnly) fail(`${session.path}: types import must be type-only`);
 		if (IO_NETWORK_PROCESS_IMPORTS.has(specifier)) fail(`${session.path}: refresh session must not import IO/network/process module ${specifier}`);
-		if (forbiddenLocalSpecifiers.has(specifier)) fail(`${session.path}: refresh session must not import UI/config/git/theme module ${specifier}`);
+		if (forbiddenLocalSpecifiers.has(specifier)) fail(`${session.path}: refresh session must not import runtime/UI/config/git/theme module ${specifier}`);
 		if (!allowedSpecifiers.has(specifier)) fail(`${session.path}: refresh session must not import ${specifier}`);
 	}
 	if (!session.text.includes("class RuntimeRefreshSession")) fail(`${session.path}: refresh session should expose RuntimeRefreshSession class`);
-	for (const member of ["getState", "ensureState", "execute", "messageEnd", "turnEnd", "agentStart", "agentEnd", "resetAccumulators", "sessionStart", "sessionShutdown", "clearContextUnknownAfterKnownAssistantUsage", "applyGitSnapshot"] as const) {
+	for (const member of ["getState", "ensureState", "resetState", "execute", "messageEnd", "turnEnd", "agentStart", "agentEnd", "resetAccumulators", "sessionStart", "sessionShutdown", "clearContextUnknownAfterKnownAssistantUsage", "applyGitSnapshot"] as const) {
 		if (!session.text.includes(member)) fail(`${session.path}: refresh session should expose ${member}`);
 	}
 	if (!session.text.includes("unknownContextAfterLatestCompaction")) fail(`${session.path}: refresh session should own context-unknown state`);
+	if (!session.text.includes("beforeRender")) fail(`${session.path}: refresh session should own beforeRender ordering around plan execution and final render`);
 	if (!session.text.includes("applyRuntimeRefreshPlan")) fail(`${session.path}: refresh session should delegate plan application to runtime-plan-executor`);
 	if (!session.text.includes("setGitSnapshot")) fail(`${session.path}: refresh session should own git snapshot state application`);
 	if (!session.text.includes("ThroughputRunTracker")) fail(`${session.path}: refresh session should own throughput run tracking after Slice 2C`);
+	if (!session.text.includes("setCurrentRunThroughput") || !session.text.includes("setLastTurnThroughput") || !session.text.includes("clearCurrentRunThroughput")) fail(`${session.path}: refresh session should own throughput state intent application after Slice 2C`);
+	if (!session.text.includes("appliedAssistantMessageObjects") || !session.text.includes("appliedAssistantMessageResponseIds")) fail(`${session.path}: refresh session should own assistant message dedupe accumulators after Slice 2C`);
 	if (!session.text.includes("usageTotalsFromAssistantMessage") || !session.text.includes("addUsageTotals")) fail(`${session.path}: refresh session should own assistant usage delta accumulation after Slice 2C`);
 	if (/GitRefresher|readPiUiTheme|resolveRuntimeRenderStyleContext|ctx\.ui\.theme|ctx\.ui\.setTheme|getAllThemes|getTheme\s*\(|setTheme\s*\(/.test(session.text)) {
 		fail(`${session.path}: refresh session must not depend on git implementation, UI, or Pi theme provider APIs`);
@@ -501,6 +509,7 @@ function assertRuntimeSnapshotAdapterSeam(files: SourceFile[]): void {
 	const runtimeSnapshot = files.find((candidate) => basename(candidate.path) === RUNTIME_SNAPSHOT_MODULE);
 	assert.ok(runtimeSnapshot, "runtime-snapshot.ts state input adapter seam should exist");
 
+	const forbiddenLocalSpecifiers = new Set(["./runtime.js", "./runtime-policy.js", "./runtime-plan-executor.js", "./runtime-refresh-session.js", "./state.js"]);
 	const forbiddenRenderModulePattern = /(?:^|\/)(?:editor|renderer|pane|segments|surface-layout|input-surface-frame|status-line|footer)(?:\.js)?$/;
 	const importPattern = /import\s+(type\s+)?(?:[^"'`]*?\s+from\s+)?["']([^"']+)["']/g;
 	for (const match of runtimeSnapshot.text.matchAll(importPattern)) {
@@ -512,7 +521,7 @@ function assertRuntimeSnapshotAdapterSeam(files: SourceFile[]): void {
 			continue;
 		}
 		if (IO_NETWORK_PROCESS_IMPORTS.has(specifier)) fail(`${runtimeSnapshot.path}: runtime-snapshot must not import IO/network/process module ${specifier}`);
-		if (forbiddenRenderModulePattern.test(specifier)) fail(`${runtimeSnapshot.path}: runtime-snapshot must not import render module ${specifier}`);
+		if (forbiddenLocalSpecifiers.has(specifier) || forbiddenRenderModulePattern.test(specifier)) fail(`${runtimeSnapshot.path}: runtime-snapshot must not import runtime/session/executor/state/render/UI module ${specifier}`);
 	}
 }
 
@@ -550,6 +559,7 @@ function assertRuntimeStateSnapshotFrameBoundary(files: SourceFile[]): void {
 	assert.ok(runtime, "runtime.ts should exist");
 	const runtimeImports = importSpecifiers(runtime);
 	if (!runtimeImports.includes("./runtime-refresh-session.js")) fail(`${runtime.path}: runtime should delegate refresh state ownership to runtime-refresh-session`);
+	if (runtimeImports.includes("./runtime-policy.js")) fail(`${runtime.path}: runtime should not import runtime-policy directly; refresh session should choose plans`);
 	if (runtimeImports.includes("./runtime-plan-executor.js")) fail(`${runtime.path}: runtime should not import runtime-plan-executor directly after refresh session extraction`);
 	if (runtimeImports.includes("./runtime-snapshot.js")) fail(`${runtime.path}: runtime should not import runtime-snapshot directly after accumulator migration`);
 	if (runtimeImports.includes("./throughput-run-tracker.js")) fail(`${runtime.path}: runtime should not import throughput tracker directly after accumulator migration`);
@@ -557,7 +567,7 @@ function assertRuntimeStateSnapshotFrameBoundary(files: SourceFile[]): void {
 	if (/plan\.snapshot|snapshot\s*===\s*["'](?:reliable|lifecycle|message|thinking|compact|none)["']/.test(runtime.text)) {
 		fail(`${runtime.path}: runtime must not contain snapshot-mode branching after plan executor extraction`);
 	}
-	if (/let\s+state\s*:|unknownContextAfterLatestCompaction|stateInputsFromContext|createInitialState|setGitSnapshot|usageTotalsFromAssistantMessage|addUsageTotals|ThroughputRunTracker|setCurrentRunThroughput|setLastTurnThroughput|clearCurrentRunThroughput/.test(runtime.text)) {
+	if (/let\s+state\s*:|unknownContextAfterLatestCompaction|stateInputsFromContext|thinkingInputsFromContext|lifecycleInputsFromContext|compactInputsFromContext|assistantMessageHasKnownContextUsage|createInitialState|setGitSnapshot|setUsageTotals|refreshContextUsage|clearContextUsage|refreshModel|refreshWorkspace|setProviderCount|usageTotalsFromAssistantMessage|addUsageTotals|ThroughputRunTracker|setCurrentRunThroughput|setLastTurnThroughput|clearCurrentRunThroughput/.test(runtime.text)) {
 		fail(`${runtime.path}: runtime must not own refresh state core after RuntimeRefreshSession extraction`);
 	}
 	const forbiddenRuntimeFrameSpecifiers = new Set(["./input-surface-frame.js", "./surface-layout.js", "./status-line.js", "./renderer.js", "./pane.js", "./segments.js"]);
@@ -762,6 +772,23 @@ function assertIndexThinWiring(files: SourceFile[]): void {
 	}
 }
 
+function assertPackageRuntimeRefreshTestWiring(packageJsonFile: SourceFile): void {
+	const packageJson = JSON.parse(packageJsonFile.text) as { scripts?: Record<string, string> };
+	const scripts = packageJson.scripts ?? {};
+	const expectedDedicatedScripts = new Map([
+		["test:runtime:plan-executor", "node .tmp-git-dev/scripts/test-runtime-plan-executor.js"],
+		["test:runtime:refresh-session", "node .tmp-git-dev/scripts/test-runtime-refresh-session.js"],
+	]);
+	const testDev = scripts["test:dev"] ?? "";
+	for (const [scriptName, target] of expectedDedicatedScripts) {
+		const script = scripts[scriptName];
+		if (!script) fail(`package.json: missing ${scriptName} script for runtime refresh seam validation`);
+		if (!script.includes("npm run build:dev --silent")) fail(`package.json: ${scriptName} should build test artifacts before running`);
+		if (!script.includes(target)) fail(`package.json: ${scriptName} should run ${target}`);
+		if (!testDev.includes(target)) fail(`package.json: test:dev should include ${target}`);
+	}
+}
+
 function assertConfigOptionsPureModule(files: SourceFile[]): void {
 	const configOptions = files.find((candidate) => basename(candidate.path) === PURE_CONFIG_OPTIONS_MODULE);
 	assert.ok(configOptions, "config-options.ts pure option source should exist");
@@ -818,5 +845,6 @@ assertFooterSeams(sourceFiles);
 assertProviderCountSnapshotSeam(sourceFiles);
 assertIndexThinWiring(sourceFiles);
 assertConfigOptionsPureModule(sourceFiles);
+assertPackageRuntimeRefreshTestWiring(packageFiles[0]!);
 
 console.log("✓ public import and render-boundary guard checks passed");
