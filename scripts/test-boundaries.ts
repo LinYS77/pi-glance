@@ -14,6 +14,7 @@ const INPUT_SURFACE_FRAME_MODULE = "input-surface-frame.ts";
 const RENDER_MODULES = new Set(["editor.ts", "renderer.ts", "pane.ts", "segments.ts", "surface-layout.ts", INPUT_SURFACE_FRAME_MODULE, FOOTER_MODULE, STATUS_LINE_MODULE]);
 const INDEX_MODULE = "index.ts";
 const PURE_CONFIG_OPTIONS_MODULE = "config-options.ts";
+const SEGMENT_DISPLAY_PRIMITIVES_MODULE = "segment-display-primitives.ts";
 const RUNTIME_POLICY_MODULE = "runtime-policy.ts";
 const RUNTIME_PLAN_EXECUTOR_MODULE = "runtime-plan-executor.ts";
 const RUNTIME_REFRESH_SESSION_MODULE = "runtime-refresh-session.ts";
@@ -789,6 +790,17 @@ function assertPackageRuntimeRefreshTestWiring(packageJsonFile: SourceFile): voi
 	}
 }
 
+function assertSegmentDisplayPrimitivesPureModule(files: SourceFile[]): void {
+	const primitives = files.find((candidate) => basename(candidate.path) === SEGMENT_DISPLAY_PRIMITIVES_MODULE);
+	assert.ok(primitives, "segment-display-primitives.ts pure display primitive module should exist");
+	for (const specifier of importSpecifiers(primitives)) {
+		fail(`${primitives.path}: display primitives should be import-free, found ${specifier}`);
+	}
+	for (const helper of ["formatTokens", "formatPercent", "formatCost"] as const) {
+		if (!primitives.text.includes(`export function ${helper}`)) fail(`${primitives.path}: should export ${helper}`);
+	}
+}
+
 function assertConfigOptionsPureModule(files: SourceFile[]): void {
 	const configOptions = files.find((candidate) => basename(candidate.path) === PURE_CONFIG_OPTIONS_MODULE);
 	assert.ok(configOptions, "config-options.ts pure option source should exist");
@@ -844,6 +856,7 @@ assertStateModulePiFree(sourceFiles);
 assertFooterSeams(sourceFiles);
 assertProviderCountSnapshotSeam(sourceFiles);
 assertIndexThinWiring(sourceFiles);
+assertSegmentDisplayPrimitivesPureModule(sourceFiles);
 assertConfigOptionsPureModule(sourceFiles);
 assertPackageRuntimeRefreshTestWiring(packageFiles[0]!);
 

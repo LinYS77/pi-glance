@@ -1,4 +1,5 @@
 import { CONTEXT_DISPLAY_MODE_VALUES, CONTEXT_UNKNOWN_MODE_VALUES } from "./config-options.js";
+import { formatPercent, formatTokens } from "./segment-display-primitives.js";
 import type { SegmentFeature } from "./segment-feature.js";
 import type { GlanceConfig, SegmentData, SegmentRenderContext } from "./types.js";
 
@@ -11,21 +12,6 @@ const CONTEXT_DISPLAY_LABELS: Record<GlanceConfig["context"]["display"], string>
 function nextIn<T extends string | number>(current: T, values: readonly T[]): T {
 	const index = values.indexOf(current);
 	return values[(index + 1) % values.length] ?? values[0]!;
-}
-
-function formatTokens(count: number | null | undefined): string {
-	if (count === null || count === undefined || !Number.isFinite(count)) return "?";
-	const abs = Math.abs(count);
-	if (abs < 1000) return `${Math.round(count)}`;
-	if (abs < 10_000) return `${(count / 1000).toFixed(1)}k`;
-	if (abs < 1_000_000) return `${Math.round(count / 1000)}k`;
-	if (abs < 10_000_000) return `${(count / 1_000_000).toFixed(1)}M`;
-	return `${Math.round(count / 1_000_000)}M`;
-}
-
-function formatPercent(percent: number | null | undefined): string {
-	if (percent === null || percent === undefined || !Number.isFinite(percent)) return "?";
-	return percent >= 10 ? `${percent.toFixed(0)}%` : `${percent.toFixed(1)}%`;
 }
 
 function contextDisplayLabel(mode: GlanceConfig["context"]["display"]): string {

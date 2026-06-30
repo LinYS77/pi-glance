@@ -2,33 +2,11 @@ import { homedir } from "node:os";
 import { basename } from "node:path";
 import { visibleWidth } from "@earendil-works/pi-tui";
 import type { WorkspaceLabelMode } from "./types.js";
+export { formatCost, formatPercent, formatTokens } from "./segment-display-primitives.js";
 
 const SMART_NAME_MAX_SURFACE_WIDTH = 83;
 const SMART_PARENT_MAX_SURFACE_WIDTH = 139;
 const HOME_PATH = normalizePath(homedir());
-
-export function formatTokens(count: number | null | undefined): string {
-	if (count === null || count === undefined || !Number.isFinite(count)) return "?";
-	const abs = Math.abs(count);
-	if (abs < 1000) return `${Math.round(count)}`;
-	if (abs < 10_000) return `${(count / 1000).toFixed(1)}k`;
-	if (abs < 1_000_000) return `${Math.round(count / 1000)}k`;
-	if (abs < 10_000_000) return `${(count / 1_000_000).toFixed(1)}M`;
-	return `${Math.round(count / 1_000_000)}M`;
-}
-
-export function formatCost(cost: number): string {
-	if (!Number.isFinite(cost) || cost <= 0) return "$0.000";
-	if (cost < 0.001) return "<$0.001";
-	if (cost < 1) return `$${cost.toFixed(3)}`;
-	if (cost < 10) return `$${cost.toFixed(2)}`;
-	return `$${cost.toFixed(1)}`;
-}
-
-export function formatPercent(percent: number | null | undefined): string {
-	if (percent === null || percent === undefined || !Number.isFinite(percent)) return "?";
-	return percent >= 10 ? `${percent.toFixed(0)}%` : `${percent.toFixed(1)}%`;
-}
 
 export function shortenModel(modelId: string | undefined, customNames: Record<string, string> = {}): string {
 	if (!modelId) return "no-model";

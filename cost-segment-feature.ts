@@ -1,16 +1,9 @@
+import { formatCost } from "./segment-display-primitives.js";
 import type { SegmentFeature } from "./segment-feature.js";
 import type { GlanceConfig, SegmentData, SegmentRenderContext } from "./types.js";
 
 function onOff(value: boolean): string {
 	return value ? "on" : "off";
-}
-
-function formatCost(cost: number): string {
-	if (!Number.isFinite(cost) || cost <= 0) return "$0.000";
-	if (cost < 0.001) return "<$0.001";
-	if (cost < 1) return `$${cost.toFixed(3)}`;
-	if (cost < 10) return `$${cost.toFixed(2)}`;
-	return `$${cost.toFixed(1)}`;
 }
 
 function collectCost(ctx: SegmentRenderContext): SegmentData | undefined {

@@ -54,12 +54,12 @@ const EXPECTED_FEATURE_FILES = [
 	"tokens-segment-feature.ts",
 ] as const;
 const VALUE_LOCAL_IMPORT_POLICY = {
-	"context-segment-feature.ts": new Set(["./config-options.js"]),
-	"cost-segment-feature.ts": new Set<string>(),
+	"context-segment-feature.ts": new Set(["./config-options.js", "./segment-display-primitives.js"]),
+	"cost-segment-feature.ts": new Set(["./segment-display-primitives.js"]),
 	"git-segment-feature.ts": new Set(["./config-options.js"]),
 	"model-segment-feature.ts": new Set(["./config-options.js"]),
 	"throughput-segment-feature.ts": new Set(["./config-schema.js"]),
-	"tokens-segment-feature.ts": new Set(["./config-options.js"]),
+	"tokens-segment-feature.ts": new Set(["./config-options.js", "./segment-display-primitives.js"]),
 } satisfies Record<(typeof EXPECTED_FEATURE_FILES)[number], ReadonlySet<string>>;
 
 interface SourceFile {
