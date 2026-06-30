@@ -3,11 +3,10 @@ import { GlanceEditor } from "./editor.js";
 import { GlanceFooter } from "./footer.js";
 import { GitRefresher } from "./git.js";
 import { readPiUiTheme, resolveRuntimeRenderStyleContext } from "./render-style-context.js";
-import { applyRuntimeRefreshPlan } from "./runtime-plan-executor.js";
-import { runtimePlanFor, type RuntimeEventFacts, type RuntimeEventKind } from "./runtime-policy.js";
+import { RuntimeRefreshSession } from "./runtime-refresh-session.js";
 import type { GlanceRenderStyleContext } from "./theme-adapter.js";
-import { assistantMessageHasKnownContextUsage, stateInputsFromContext, usageTotalsFromAssistantMessage, type StateInputs, type StateMessageInputs } from "./runtime-snapshot.js";
-import { addUsageTotals, clearCurrentRunThroughput, createInitialState, setCurrentRunThroughput, setGitSnapshot, setLastTurnThroughput } from "./state.js";
+import { usageTotalsFromAssistantMessage, type StateMessageInputs } from "./runtime-snapshot.js";
+import { addUsageTotals, clearCurrentRunThroughput, setCurrentRunThroughput, setLastTurnThroughput } from "./state.js";
 import { ThroughputRunTracker, type ThroughputRunStateIntent } from "./throughput-run-tracker.js";
 import type { GitSnapshot, GlanceConfig, GlanceState } from "./types.js";
 
@@ -103,12 +102,10 @@ function applyThroughputIntent(state: GlanceState, intent: ThroughputRunStateInt
 
 export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRuntime {
 	let config: GlanceConfig | undefined;
-	let state: GlanceState | undefined;
 	let footer: GlanceFooter | undefined;
 	let gitRefresher: RuntimeGitRefresher | undefined;
 	let requestRender: (() => void) | undefined;
 	let uiGeneration = 0;
-	let unknownContextAfterLatestCompaction = false;
 	let appliedAssistantMessageObjects = new WeakSet<object>();
 	let appliedAssistantMessageResponseIds = new Set<string>();
 	const throughputTracker = new ThroughputRunTracker();
@@ -122,29 +119,6 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 	function getConfig(): GlanceConfig {
 		if (!config) throw new Error("pi-glance config not loaded");
 		return config;
-	}
-
-	function setUnknownContextAfterLatestCompaction(value: boolean): void {
-		unknownContextAfterLatestCompaction = value;
-	}
-
-	function clearContextUnknownAfterKnownAssistantUsage(message: StateMessageInputs): void {
-		if (unknownContextAfterLatestCompaction && assistantMessageHasKnownContextUsage(message)) {
-			unknownContextAfterLatestCompaction = false;
-		}
-	}
-
-	function readStateInputs(ctx: ExtensionContext): StateInputs {
-		const inputs = stateInputsFromContext(ctx, adapters.getThinkingLevel());
-		setUnknownContextAfterLatestCompaction(inputs.unknownContextAfterLatestCompaction);
-		return inputs;
-	}
-
-	function ensureState(ctx: ExtensionContext): GlanceState {
-		if (!state) {
-			state = createInitialState(readStateInputs(ctx), getConfig());
-		}
-		return state;
 	}
 
 	function renderNow(): void {
@@ -163,12 +137,20 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 		};
 	}
 
+	const refreshSession = new RuntimeRefreshSession({
+		getConfig,
+		ensureConfig,
+		getThinkingLevel: () => adapters.getThinkingLevel(),
+		requestRender: renderNow,
+		scheduleGitRefresh,
+	});
+
 	function ensureGitRefresher(): RuntimeGitRefresher {
 		gitRefresher ??= (adapters.createGitRefresher ?? createDefaultGitRefresher)({
 			getConfig: () => getConfig().git,
-			getCwd: () => state?.workspace.path,
+			getCwd: () => refreshSession.getState()?.workspace.path,
 			onSnapshot: (cwd, snapshot) => {
-				if (state && setGitSnapshot(state, cwd, snapshot)) renderNow();
+				refreshSession.applyGitSnapshot(cwd, snapshot);
 			},
 		});
 		return gitRefresher;
@@ -188,6 +170,7 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 	}
 
 	function applyAssistantMessageUsageDelta(message: StateMessageInputs & { responseId?: unknown }): boolean {
+		const state = refreshSession.getState();
 		if (!state || message.role !== "assistant") return false;
 		const delta = usageTotalsFromAssistantMessage(message);
 		if (usageTotalsAreZero(delta)) return false;
@@ -199,26 +182,6 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 			appliedAssistantMessageObjects.add(message);
 		}
 		return addUsageTotals(state, delta);
-	}
-
-	async function executeRuntimePlan(kind: RuntimeEventKind, ctx: ExtensionContext, facts?: RuntimeEventFacts, beforeRender?: () => void): Promise<void> {
-		const plan = runtimePlanFor(kind, facts);
-		if (plan.ensureConfig) await ensureConfig();
-		if (plan.ensureState) ensureState(ctx);
-		if (state) {
-			applyRuntimeRefreshPlan({
-				state,
-				config: getConfig(),
-				ctx,
-				plan,
-				getThinkingLevel: () => adapters.getThinkingLevel(),
-				unknownContextAfterLatestCompaction,
-				setUnknownContextAfterLatestCompaction,
-				scheduleGitRefresh,
-			});
-		}
-		beforeRender?.();
-		if (plan.render) renderNow();
 	}
 
 	function clearFooter(): void {
@@ -248,7 +211,7 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 
 	function installInputSurface(ctx: ExtensionContext): void {
 		if (!isTuiMode(ctx)) return;
-		ensureState(ctx);
+		refreshSession.ensureState(ctx);
 		const activeConfig = getConfig();
 		if (!activeConfig.enabled) {
 			clearUI(ctx);
@@ -274,10 +237,10 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 				tui,
 				theme,
 				keybindings,
-				() => state ?? ensureState(ctx),
+				() => refreshSession.getState() ?? refreshSession.ensureState(ctx),
 				() => getConfig(),
 				() => {
-					void executeRuntimePlan("editor_thinking_cycle", ctx);
+					void refreshSession.execute("editor_thinking_cycle", ctx);
 				},
 				renderStyleContext ? { renderStyleContext } : undefined,
 			);
@@ -292,9 +255,9 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 					return;
 				}
 				const current = await ensureConfig();
-				ensureState(ctx);
+				refreshSession.ensureState(ctx);
 				const renderStyleContext = resolveRuntimeRenderStyleContext(current, { piTheme: readPiUiTheme(ctx.ui) });
-				const result = await adapters.showPane(current, ctx, state, renderStyleContext ? { renderStyleContext } : undefined);
+				const result = await adapters.showPane(current, ctx, refreshSession.getState(), renderStyleContext ? { renderStyleContext } : undefined);
 				if (result.action === "cancel") {
 					ctx.ui.notify("pi-glance configuration cancelled", "info");
 					return;
@@ -309,7 +272,7 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 				}
 
 				config = nextConfig;
-				await executeRuntimePlan("config_save_success", ctx, undefined, () => installInputSurface(ctx));
+				await refreshSession.execute("config_save_success", ctx, { beforeRender: () => installInputSurface(ctx) });
 				ctx.ui.notify("pi-glance configuration saved", "info");
 			},
 		},
@@ -318,7 +281,7 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 				throughputTracker.reset();
 				resetAssistantMessageDedupe();
 				config = adapters.loadConfigSync();
-				state = createInitialState(readStateInputs(ctx), config);
+				refreshSession.resetState(ctx);
 				installInputSurface(ctx);
 			},
 			sessionShutdown: async (_event, ctx) => {
@@ -327,44 +290,54 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 				clearUI(ctx);
 			},
 			modelSelect: async (_event, ctx) => {
-				await executeRuntimePlan("model_select", ctx);
+				await refreshSession.execute("model_select", ctx);
 			},
 			thinkingLevelSelect: async (_event, ctx) => {
-				await executeRuntimePlan("thinking_level_select", ctx);
+				await refreshSession.execute("thinking_level_select", ctx);
 			},
 			turnStart: async (_event, ctx) => {
-				await executeRuntimePlan("turn_start", ctx);
+				await refreshSession.execute("turn_start", ctx);
 			},
 			toolExecutionEnd: async (_event, ctx) => {
-				await executeRuntimePlan("tool_execution_end", ctx);
+				await refreshSession.execute("tool_execution_end", ctx);
 			},
 			sessionTree: async (_event, ctx) => {
-				await executeRuntimePlan("session_tree", ctx);
+				await refreshSession.execute("session_tree", ctx);
 			},
 			sessionCompact: async (_event, ctx) => {
-				await executeRuntimePlan("session_compact", ctx);
+				await refreshSession.execute("session_compact", ctx);
 			},
 			messageEnd: async (event, ctx) => {
-				if (event.message.role === "assistant") clearContextUnknownAfterKnownAssistantUsage(event.message);
-				await executeRuntimePlan("message_end", ctx, { messageRole: event.message.role }, () => {
-					applyAssistantMessageUsageDelta(event.message);
+				if (event.message.role === "assistant") refreshSession.clearContextUnknownAfterKnownAssistantUsage(event.message);
+				await refreshSession.execute("message_end", ctx, {
+					facts: { messageRole: event.message.role },
+					beforeRender: () => {
+						applyAssistantMessageUsageDelta(event.message);
+					},
 				});
 			},
 			turnEnd: async (event, ctx) => {
-				await executeRuntimePlan("turn_end", ctx, undefined, () => {
-					if (!state) return;
-					applyThroughputIntent(state, throughputTracker.checkpoint(event.turnIndex, event.message, nowMs));
+				await refreshSession.execute("turn_end", ctx, {
+					beforeRender: () => {
+						const state = refreshSession.getState();
+						if (!state) return;
+						applyThroughputIntent(state, throughputTracker.checkpoint(event.turnIndex, event.message, nowMs));
+					},
 				});
 			},
 			agentStart: (_event, _ctx) => {
+				const state = refreshSession.getState();
 				const intent = throughputTracker.start(nowMs());
 				if (state && applyThroughputIntent(state, intent)) renderNow();
 			},
 			agentEnd: async (event, ctx) => {
 				const intent = throughputTracker.finish(event.messages, nowMs);
-				await executeRuntimePlan("agent_end", ctx, undefined, () => {
-					if (!state) return;
-					applyThroughputIntent(state, intent);
+				await refreshSession.execute("agent_end", ctx, {
+					beforeRender: () => {
+						const state = refreshSession.getState();
+						if (!state) return;
+						applyThroughputIntent(state, intent);
+					},
 				});
 			},
 		},

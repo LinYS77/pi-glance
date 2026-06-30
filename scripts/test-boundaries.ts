@@ -16,6 +16,7 @@ const INDEX_MODULE = "index.ts";
 const PURE_CONFIG_OPTIONS_MODULE = "config-options.ts";
 const RUNTIME_POLICY_MODULE = "runtime-policy.ts";
 const RUNTIME_PLAN_EXECUTOR_MODULE = "runtime-plan-executor.ts";
+const RUNTIME_REFRESH_SESSION_MODULE = "runtime-refresh-session.ts";
 const RUNTIME_SNAPSHOT_MODULE = "runtime-snapshot.ts";
 const STATE_MODULE = "state.ts";
 const SURFACE_LAYOUT_MODULE = "surface-layout.ts";
@@ -216,7 +217,7 @@ function assertThemeAdapterSeamImports(files: SourceFile[]): void {
 	assert.ok(themeAdapter, "theme-adapter.ts pure style adapter seam should exist");
 
 	const allowedLocalSpecifiers = new Set(["./palette.js", "./themes.js", "./types.js"]);
-	const forbiddenLocalModulePattern = /(?:^|\/)(?:runtime|runtime-plan-executor|runtime-snapshot|state|config|config-options|settings-catalog|pane|pane-model|editor|renderer|status-line|surface-layout|input-surface-frame|footer)(?:\.js)?$/;
+	const forbiddenLocalModulePattern = /(?:^|\/)(?:runtime|runtime-plan-executor|runtime-refresh-session|runtime-snapshot|state|config|config-options|settings-catalog|pane|pane-model|editor|renderer|status-line|surface-layout|input-surface-frame|footer)(?:\.js)?$/;
 	const importPattern = /(?:import|export)\s+(?:type\s+)?(?:[^"'`]*?\s+from\s+)?["']([^"']+)["']/g;
 	for (const match of themeAdapter.text.matchAll(importPattern)) {
 		const specifier = match[1]!;
@@ -400,6 +401,7 @@ function assertRuntimePlanExecutorSeam(files: SourceFile[]): void {
 
 	const allowedSpecifiers = new Set(["@earendil-works/pi-coding-agent", "./runtime-policy.js", "./runtime-snapshot.js", "./state.js", "./types.js"]);
 	const forbiddenLocalSpecifiers = new Set([
+		"./runtime-refresh-session.js",
 		"./input-surface-frame.js",
 		"./surface-layout.js",
 		"./status-line.js",
@@ -443,6 +445,56 @@ function assertRuntimePlanExecutorSeam(files: SourceFile[]): void {
 	}
 }
 
+function assertRuntimeRefreshSessionSeam(files: SourceFile[]): void {
+	const session = files.find((candidate) => basename(candidate.path) === RUNTIME_REFRESH_SESSION_MODULE);
+	assert.ok(session, "runtime-refresh-session.ts state refresh session seam should exist");
+
+	const allowedSpecifiers = new Set(["@earendil-works/pi-coding-agent", "./runtime-plan-executor.js", "./runtime-policy.js", "./runtime-snapshot.js", "./state.js", "./types.js"]);
+	const forbiddenLocalSpecifiers = new Set([
+		"./input-surface-frame.js",
+		"./surface-layout.js",
+		"./status-line.js",
+		"./renderer.js",
+		"./editor.js",
+		"./pane.js",
+		"./footer.js",
+		"./segments.js",
+		"./config.js",
+		"./config-schema.js",
+		"./config-options.js",
+		"./settings-catalog.js",
+		"./render-style-context.js",
+		"./git.js",
+		"./theme-adapter.js",
+		"./themes.js",
+		"./theme-catalog.js",
+		"./palette.js",
+	]);
+	const importPattern = /(?:import|export)\s+(type\s+)?(?:[^"'`]*?\s+from\s+)?["']([^"']+)["']/g;
+	for (const match of session.text.matchAll(importPattern)) {
+		const isTypeOnly = match[1] === "type ";
+		const specifier = match[2]!;
+		if (specifier.startsWith("@earendil-works/pi-") && specifier !== "@earendil-works/pi-coding-agent") {
+			fail(`${session.path}: refresh session may only type-import public pi coding-agent types, not ${specifier}`);
+		}
+		if (specifier === "@earendil-works/pi-coding-agent" && !isTypeOnly) fail(`${session.path}: pi coding-agent import must be type-only`);
+		if (specifier === "./types.js" && !isTypeOnly) fail(`${session.path}: types import must be type-only`);
+		if (IO_NETWORK_PROCESS_IMPORTS.has(specifier)) fail(`${session.path}: refresh session must not import IO/network/process module ${specifier}`);
+		if (forbiddenLocalSpecifiers.has(specifier)) fail(`${session.path}: refresh session must not import UI/config/git/theme module ${specifier}`);
+		if (!allowedSpecifiers.has(specifier)) fail(`${session.path}: refresh session must not import ${specifier}`);
+	}
+	if (!session.text.includes("class RuntimeRefreshSession")) fail(`${session.path}: refresh session should expose RuntimeRefreshSession class`);
+	for (const member of ["getState", "ensureState", "execute", "clearContextUnknownAfterKnownAssistantUsage", "applyGitSnapshot"] as const) {
+		if (!session.text.includes(member)) fail(`${session.path}: refresh session should expose ${member}`);
+	}
+	if (!session.text.includes("unknownContextAfterLatestCompaction")) fail(`${session.path}: refresh session should own context-unknown state`);
+	if (!session.text.includes("applyRuntimeRefreshPlan")) fail(`${session.path}: refresh session should delegate plan application to runtime-plan-executor`);
+	if (!session.text.includes("setGitSnapshot")) fail(`${session.path}: refresh session should own git snapshot state application`);
+	if (/GitRefresher|readPiUiTheme|resolveRuntimeRenderStyleContext|ctx\.ui\.theme|ctx\.ui\.setTheme|getAllThemes|getTheme\s*\(|setTheme\s*\(/.test(session.text)) {
+		fail(`${session.path}: refresh session must not depend on git implementation, UI, or Pi theme provider APIs`);
+	}
+}
+
 function assertRuntimeSnapshotAdapterSeam(files: SourceFile[]): void {
 	const runtimeSnapshot = files.find((candidate) => basename(candidate.path) === RUNTIME_SNAPSHOT_MODULE);
 	assert.ok(runtimeSnapshot, "runtime-snapshot.ts state input adapter seam should exist");
@@ -469,6 +521,7 @@ function assertRuntimePolicyPureModule(files: SourceFile[]): void {
 	const forbiddenLocalModules = new Set([
 		"./runtime.js",
 		"./runtime-plan-executor.js",
+		"./runtime-refresh-session.js",
 		"./runtime-snapshot.js",
 		"./state.js",
 		"./editor.js",
@@ -494,9 +547,17 @@ function assertRuntimeStateSnapshotFrameBoundary(files: SourceFile[]): void {
 	const runtime = files.find((candidate) => basename(candidate.path) === "runtime.ts");
 	assert.ok(runtime, "runtime.ts should exist");
 	const runtimeImports = importSpecifiers(runtime);
-	if (!runtimeImports.includes("./runtime-plan-executor.js")) fail(`${runtime.path}: runtime should delegate plan snapshot execution to runtime-plan-executor`);
+	if (!runtimeImports.includes("./runtime-refresh-session.js")) fail(`${runtime.path}: runtime should delegate refresh state ownership to runtime-refresh-session`);
+	if (runtimeImports.includes("./runtime-plan-executor.js")) fail(`${runtime.path}: runtime should not import runtime-plan-executor directly after refresh session extraction`);
+	if (runtimeImports.includes("./runtime-snapshot.js")) {
+		const names = namedImportsFrom(runtime, "./runtime-snapshot.js");
+		assert.deepEqual(names, ["usageTotalsFromAssistantMessage", "StateMessageInputs"], `${runtime.path}: runtime may only keep runtime-snapshot import for assistant usage delta/dedupe adapter code`);
+	}
 	if (/plan\.snapshot|snapshot\s*===\s*["'](?:reliable|lifecycle|message|thinking|compact|none)["']/.test(runtime.text)) {
 		fail(`${runtime.path}: runtime must not contain snapshot-mode branching after plan executor extraction`);
+	}
+	if (/let\s+state\s*:|unknownContextAfterLatestCompaction|stateInputsFromContext|createInitialState|setGitSnapshot/.test(runtime.text)) {
+		fail(`${runtime.path}: runtime must not own refresh state core after RuntimeRefreshSession extraction`);
 	}
 	const forbiddenRuntimeFrameSpecifiers = new Set(["./input-surface-frame.js", "./surface-layout.js", "./status-line.js", "./renderer.js", "./pane.js", "./segments.js"]);
 	for (const specifier of runtimeImports) {
@@ -505,6 +566,7 @@ function assertRuntimeStateSnapshotFrameBoundary(files: SourceFile[]): void {
 
 	const forbiddenPureStateRenderSpecifiers = new Set([
 		"./runtime-plan-executor.js",
+		"./runtime-refresh-session.js",
 		"./input-surface-frame.js",
 		"./surface-layout.js",
 		"./status-line.js",
@@ -703,7 +765,7 @@ function assertConfigOptionsPureModule(files: SourceFile[]): void {
 	const configOptions = files.find((candidate) => basename(candidate.path) === PURE_CONFIG_OPTIONS_MODULE);
 	assert.ok(configOptions, "config-options.ts pure option source should exist");
 
-	const forbiddenLocalModules = new Set(["./config.js", "./settings-catalog.js", "./pane.js", "./editor.js", "./renderer.js", "./runtime-plan-executor.js", "./surface-layout.js", "./input-surface-frame.js", "./status-line.js"]);
+	const forbiddenLocalModules = new Set(["./config.js", "./settings-catalog.js", "./pane.js", "./editor.js", "./renderer.js", "./runtime-plan-executor.js", "./runtime-refresh-session.js", "./surface-layout.js", "./input-surface-frame.js", "./status-line.js"]);
 	const importPattern = /import\s+(type\s+)?(?:[^"'`]*?\s+from\s+)?["']([^"']+)["']/g;
 	for (const match of configOptions.text.matchAll(importPattern)) {
 		const isTypeOnly = match[1] === "type ";
@@ -742,6 +804,7 @@ assertRenderModulesHaveNoIo(sourceFiles);
 assertInputSurfaceFrameSeamImports(sourceFiles);
 assertProductionFrameCompositionSeam(sourceFiles);
 assertRuntimePlanExecutorSeam(sourceFiles);
+assertRuntimeRefreshSessionSeam(sourceFiles);
 assertRuntimeSnapshotAdapterSeam(sourceFiles);
 assertRuntimePolicyPureModule(sourceFiles);
 assertRuntimeStateSnapshotFrameBoundary(sourceFiles);
