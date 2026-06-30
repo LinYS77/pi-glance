@@ -1,29 +1,9 @@
 import { strict as assert } from "node:assert";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { defaultConfig } from "../config.js";
 import { applyRuntimeRefreshPlan, type RuntimePlanExecutionInput } from "../runtime-plan-executor.js";
 import { runtimePlanFor, type RuntimeRefreshPlan } from "../runtime-policy.js";
-import type { StateSessionEntry } from "../runtime-snapshot.js";
-import type { GitSnapshot, GlanceConfig, GlanceState, UsageTotals } from "../types.js";
-
-interface MutableModelInfo {
-	id?: string;
-	provider?: string;
-	contextWindow?: number;
-}
-
-interface MutableContextUsage {
-	tokens: number | null;
-	contextWindow: number;
-	percent: number | null;
-}
-
-interface ExecutorContextHarness {
-	ctx: ExtensionContext;
-	getEntryReads(): number;
-	getBranchReads(): number;
-	setCwd(cwd: string): void;
-}
+import type { GlanceConfig, GlanceState, UsageTotals } from "../types.js";
+import { cloneConfig, compaction, createRuntimeRefreshContext as createContext, gitSnapshot, message } from "./runtime-refresh-harness.js";
 
 interface ExecutorResult {
 	unknown: boolean;
@@ -35,33 +15,10 @@ function usage(input = 0, output = 0, cacheRead = 0, cacheWrite = 0, cost = 0): 
 	return { input, output, cacheRead, cacheWrite, cost };
 }
 
-function gitSnapshot(): GitSnapshot {
-	return {
-		repo: false,
-		branch: null,
-		detached: false,
-		sha: null,
-		upstream: null,
-		ahead: 0,
-		behind: 0,
-		staged: 0,
-		unstaged: 0,
-		untracked: 0,
-		conflicts: 0,
-		dirty: false,
-		status: "unknown",
-		updatedAt: 0,
-	};
-}
-
-function cloneConfig(config: GlanceConfig = defaultConfig()): GlanceConfig {
-	return JSON.parse(JSON.stringify(config)) as GlanceConfig;
-}
-
 function baseState(overrides: Partial<GlanceState> = {}): GlanceState {
 	return {
 		workspace: { name: "repo", path: "/repo" },
-		git: gitSnapshot(),
+		git: gitSnapshot({ repo: false, branch: null, updatedAt: 0 }),
 		providers: { availableCount: 1 },
 		model: { id: "initial-model", provider: "initial-provider", displayName: "initial-model", thinking: "off" },
 		context: { tokens: 10_000, window: 100_000, percent: 10 },
@@ -69,63 +26,6 @@ function baseState(overrides: Partial<GlanceState> = {}): GlanceState {
 		throughput: { lastTurn: null, currentRun: null },
 		version: 0,
 		...overrides,
-	};
-}
-
-function message(role: string, options: { usage?: Record<string, unknown>; stopReason?: string } = {}): StateSessionEntry {
-	return {
-		type: "message",
-		message: {
-			role,
-			usage: options.usage,
-			stopReason: options.stopReason,
-		},
-	};
-}
-
-function compaction(): StateSessionEntry {
-	return { type: "compaction" };
-}
-
-function createContext(options: { cwd?: string; model?: MutableModelInfo; contextUsage?: MutableContextUsage; availableProviders?: string[]; entries?: readonly StateSessionEntry[]; branch?: readonly StateSessionEntry[] } = {}): ExecutorContextHarness {
-	let entryReads = 0;
-	let branchReads = 0;
-	let cwd = options.cwd ?? "/repo";
-	const model = options.model ?? { id: "ctx-model", provider: "ctx-provider", contextWindow: 200_000 };
-	const contextUsage = options.contextUsage ?? { tokens: 20_000, contextWindow: model.contextWindow ?? 200_000, percent: 10 };
-	const availableProviders = options.availableProviders ?? [model.provider ?? "ctx-provider"];
-	const entries = options.entries ?? [];
-	const branch = options.branch ?? [];
-	const ctx = {
-		get cwd() {
-			return cwd;
-		},
-		get model() {
-			return model;
-		},
-		modelRegistry: {
-			getAvailable: () => availableProviders.map((provider, index) => ({ provider, id: `${provider}-model-${index}` })),
-		},
-		getContextUsage: () => contextUsage,
-		sessionManager: {
-			getCwd: () => cwd,
-			getEntries: () => {
-				entryReads++;
-				return entries;
-			},
-			getBranch: () => {
-				branchReads++;
-				return branch;
-			},
-		},
-	} as unknown as ExtensionContext;
-	return {
-		ctx,
-		getEntryReads: () => entryReads,
-		getBranchReads: () => branchReads,
-		setCwd: (nextCwd: string) => {
-			cwd = nextCwd;
-		},
 	};
 }
 
