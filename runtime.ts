@@ -3,11 +3,8 @@ import { GlanceEditor } from "./editor.js";
 import { GlanceFooter } from "./footer.js";
 import { GitRefresher } from "./git.js";
 import { readPiUiTheme, resolveRuntimeRenderStyleContext } from "./render-style-context.js";
-import { RuntimeRefreshSession } from "./runtime-refresh-session.js";
+import { RuntimeRefreshSession, type RuntimeAgentEndInput, type RuntimeMessageEndInput, type RuntimeTurnEndInput } from "./runtime-refresh-session.js";
 import type { GlanceRenderStyleContext } from "./theme-adapter.js";
-import { usageTotalsFromAssistantMessage, type StateMessageInputs } from "./runtime-snapshot.js";
-import { addUsageTotals, clearCurrentRunThroughput, setCurrentRunThroughput, setLastTurnThroughput } from "./state.js";
-import { ThroughputRunTracker, type ThroughputRunStateIntent } from "./throughput-run-tracker.js";
 import type { GitSnapshot, GlanceConfig, GlanceState } from "./types.js";
 
 export type GlancePaneResult = { action: "save"; config: GlanceConfig } | { action: "cancel" };
@@ -38,19 +35,11 @@ export interface GlanceRuntimeAdapters {
 }
 
 interface MessageEndLikeEvent {
-	message: StateMessageInputs & {
-		responseId?: unknown;
-	};
+	message: RuntimeMessageEndInput;
 }
 
-interface TurnEndLikeEvent {
-	turnIndex?: unknown;
-	message?: unknown;
-}
-
-interface AgentEndLikeEvent {
-	messages?: unknown;
-}
+type TurnEndLikeEvent = RuntimeTurnEndInput;
+type AgentEndLikeEvent = RuntimeAgentEndInput;
 
 interface RuntimeModeContext {
 	mode?: string;
@@ -84,31 +73,12 @@ function isTuiMode(ctx: ExtensionContext): boolean {
 	return (ctx as ExtensionContext & RuntimeModeContext).mode === "tui";
 }
 
-function applyThroughputIntent(state: GlanceState, intent: ThroughputRunStateIntent): boolean {
-	switch (intent.kind) {
-		case "none":
-			return false;
-		case "set-current-run":
-			return setCurrentRunThroughput(state, intent.currentRun);
-		case "clear-current-run":
-			return clearCurrentRunThroughput(state);
-		case "set-last-turn-and-clear-current-run": {
-			const lastTurnChanged = setLastTurnThroughput(state, intent.lastTurn);
-			const currentRunChanged = clearCurrentRunThroughput(state);
-			return lastTurnChanged || currentRunChanged;
-		}
-	}
-}
-
 export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRuntime {
 	let config: GlanceConfig | undefined;
 	let footer: GlanceFooter | undefined;
 	let gitRefresher: RuntimeGitRefresher | undefined;
 	let requestRender: (() => void) | undefined;
 	let uiGeneration = 0;
-	let appliedAssistantMessageObjects = new WeakSet<object>();
-	let appliedAssistantMessageResponseIds = new Set<string>();
-	const throughputTracker = new ThroughputRunTracker();
 	const nowMs = adapters.nowMs ?? Date.now;
 
 	async function ensureConfig(): Promise<GlanceConfig> {
@@ -141,6 +111,7 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 		getConfig,
 		ensureConfig,
 		getThinkingLevel: () => adapters.getThinkingLevel(),
+		nowMs: () => nowMs(),
 		requestRender: renderNow,
 		scheduleGitRefresh,
 	});
@@ -158,30 +129,6 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 
 	function scheduleGitRefresh(immediate = false): void {
 		gitRefresher?.schedule(immediate);
-	}
-
-	function resetAssistantMessageDedupe(): void {
-		appliedAssistantMessageObjects = new WeakSet<object>();
-		appliedAssistantMessageResponseIds = new Set<string>();
-	}
-
-	function usageTotalsAreZero(delta: ReturnType<typeof usageTotalsFromAssistantMessage>): boolean {
-		return delta.input === 0 && delta.output === 0 && delta.cacheRead === 0 && delta.cacheWrite === 0 && delta.cost === 0;
-	}
-
-	function applyAssistantMessageUsageDelta(message: StateMessageInputs & { responseId?: unknown }): boolean {
-		const state = refreshSession.getState();
-		if (!state || message.role !== "assistant") return false;
-		const delta = usageTotalsFromAssistantMessage(message);
-		if (usageTotalsAreZero(delta)) return false;
-		if (typeof message.responseId === "string" && message.responseId) {
-			if (appliedAssistantMessageResponseIds.has(message.responseId)) return false;
-			appliedAssistantMessageResponseIds.add(message.responseId);
-		} else if (typeof message === "object" && message !== null) {
-			if (appliedAssistantMessageObjects.has(message)) return false;
-			appliedAssistantMessageObjects.add(message);
-		}
-		return addUsageTotals(state, delta);
 	}
 
 	function clearFooter(): void {
@@ -278,15 +225,12 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 		},
 		events: {
 			sessionStart: (_event, ctx) => {
-				throughputTracker.reset();
-				resetAssistantMessageDedupe();
 				config = adapters.loadConfigSync();
-				refreshSession.resetState(ctx);
+				refreshSession.sessionStart(ctx);
 				installInputSurface(ctx);
 			},
 			sessionShutdown: async (_event, ctx) => {
-				throughputTracker.reset();
-				resetAssistantMessageDedupe();
+				refreshSession.sessionShutdown();
 				clearUI(ctx);
 			},
 			modelSelect: async (_event, ctx) => {
@@ -308,37 +252,16 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 				await refreshSession.execute("session_compact", ctx);
 			},
 			messageEnd: async (event, ctx) => {
-				if (event.message.role === "assistant") refreshSession.clearContextUnknownAfterKnownAssistantUsage(event.message);
-				await refreshSession.execute("message_end", ctx, {
-					facts: { messageRole: event.message.role },
-					beforeRender: () => {
-						applyAssistantMessageUsageDelta(event.message);
-					},
-				});
+				await refreshSession.messageEnd(event.message, ctx);
 			},
 			turnEnd: async (event, ctx) => {
-				await refreshSession.execute("turn_end", ctx, {
-					beforeRender: () => {
-						const state = refreshSession.getState();
-						if (!state) return;
-						applyThroughputIntent(state, throughputTracker.checkpoint(event.turnIndex, event.message, nowMs));
-					},
-				});
+				await refreshSession.turnEnd(event, ctx);
 			},
 			agentStart: (_event, _ctx) => {
-				const state = refreshSession.getState();
-				const intent = throughputTracker.start(nowMs());
-				if (state && applyThroughputIntent(state, intent)) renderNow();
+				refreshSession.agentStart();
 			},
 			agentEnd: async (event, ctx) => {
-				const intent = throughputTracker.finish(event.messages, nowMs);
-				await refreshSession.execute("agent_end", ctx, {
-					beforeRender: () => {
-						const state = refreshSession.getState();
-						if (!state) return;
-						applyThroughputIntent(state, intent);
-					},
-				});
+				await refreshSession.agentEnd(event, ctx);
 			},
 		},
 	};

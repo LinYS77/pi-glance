@@ -449,7 +449,7 @@ function assertRuntimeRefreshSessionSeam(files: SourceFile[]): void {
 	const session = files.find((candidate) => basename(candidate.path) === RUNTIME_REFRESH_SESSION_MODULE);
 	assert.ok(session, "runtime-refresh-session.ts state refresh session seam should exist");
 
-	const allowedSpecifiers = new Set(["@earendil-works/pi-coding-agent", "./runtime-plan-executor.js", "./runtime-policy.js", "./runtime-snapshot.js", "./state.js", "./types.js"]);
+	const allowedSpecifiers = new Set(["@earendil-works/pi-coding-agent", "./runtime-plan-executor.js", "./runtime-policy.js", "./runtime-snapshot.js", "./state.js", "./throughput-run-tracker.js", "./types.js"]);
 	const forbiddenLocalSpecifiers = new Set([
 		"./input-surface-frame.js",
 		"./surface-layout.js",
@@ -484,12 +484,14 @@ function assertRuntimeRefreshSessionSeam(files: SourceFile[]): void {
 		if (!allowedSpecifiers.has(specifier)) fail(`${session.path}: refresh session must not import ${specifier}`);
 	}
 	if (!session.text.includes("class RuntimeRefreshSession")) fail(`${session.path}: refresh session should expose RuntimeRefreshSession class`);
-	for (const member of ["getState", "ensureState", "execute", "clearContextUnknownAfterKnownAssistantUsage", "applyGitSnapshot"] as const) {
+	for (const member of ["getState", "ensureState", "execute", "messageEnd", "turnEnd", "agentStart", "agentEnd", "resetAccumulators", "sessionStart", "sessionShutdown", "clearContextUnknownAfterKnownAssistantUsage", "applyGitSnapshot"] as const) {
 		if (!session.text.includes(member)) fail(`${session.path}: refresh session should expose ${member}`);
 	}
 	if (!session.text.includes("unknownContextAfterLatestCompaction")) fail(`${session.path}: refresh session should own context-unknown state`);
 	if (!session.text.includes("applyRuntimeRefreshPlan")) fail(`${session.path}: refresh session should delegate plan application to runtime-plan-executor`);
 	if (!session.text.includes("setGitSnapshot")) fail(`${session.path}: refresh session should own git snapshot state application`);
+	if (!session.text.includes("ThroughputRunTracker")) fail(`${session.path}: refresh session should own throughput run tracking after Slice 2C`);
+	if (!session.text.includes("usageTotalsFromAssistantMessage") || !session.text.includes("addUsageTotals")) fail(`${session.path}: refresh session should own assistant usage delta accumulation after Slice 2C`);
 	if (/GitRefresher|readPiUiTheme|resolveRuntimeRenderStyleContext|ctx\.ui\.theme|ctx\.ui\.setTheme|getAllThemes|getTheme\s*\(|setTheme\s*\(/.test(session.text)) {
 		fail(`${session.path}: refresh session must not depend on git implementation, UI, or Pi theme provider APIs`);
 	}
@@ -549,14 +551,13 @@ function assertRuntimeStateSnapshotFrameBoundary(files: SourceFile[]): void {
 	const runtimeImports = importSpecifiers(runtime);
 	if (!runtimeImports.includes("./runtime-refresh-session.js")) fail(`${runtime.path}: runtime should delegate refresh state ownership to runtime-refresh-session`);
 	if (runtimeImports.includes("./runtime-plan-executor.js")) fail(`${runtime.path}: runtime should not import runtime-plan-executor directly after refresh session extraction`);
-	if (runtimeImports.includes("./runtime-snapshot.js")) {
-		const names = namedImportsFrom(runtime, "./runtime-snapshot.js");
-		assert.deepEqual(names, ["usageTotalsFromAssistantMessage", "StateMessageInputs"], `${runtime.path}: runtime may only keep runtime-snapshot import for assistant usage delta/dedupe adapter code`);
-	}
+	if (runtimeImports.includes("./runtime-snapshot.js")) fail(`${runtime.path}: runtime should not import runtime-snapshot directly after accumulator migration`);
+	if (runtimeImports.includes("./throughput-run-tracker.js")) fail(`${runtime.path}: runtime should not import throughput tracker directly after accumulator migration`);
+	if (runtimeImports.includes("./state.js")) fail(`${runtime.path}: runtime should not import state mutators directly after accumulator migration`);
 	if (/plan\.snapshot|snapshot\s*===\s*["'](?:reliable|lifecycle|message|thinking|compact|none)["']/.test(runtime.text)) {
 		fail(`${runtime.path}: runtime must not contain snapshot-mode branching after plan executor extraction`);
 	}
-	if (/let\s+state\s*:|unknownContextAfterLatestCompaction|stateInputsFromContext|createInitialState|setGitSnapshot/.test(runtime.text)) {
+	if (/let\s+state\s*:|unknownContextAfterLatestCompaction|stateInputsFromContext|createInitialState|setGitSnapshot|usageTotalsFromAssistantMessage|addUsageTotals|ThroughputRunTracker|setCurrentRunThroughput|setLastTurnThroughput|clearCurrentRunThroughput/.test(runtime.text)) {
 		fail(`${runtime.path}: runtime must not own refresh state core after RuntimeRefreshSession extraction`);
 	}
 	const forbiddenRuntimeFrameSpecifiers = new Set(["./input-surface-frame.js", "./surface-layout.js", "./status-line.js", "./renderer.js", "./pane.js", "./segments.js"]);
