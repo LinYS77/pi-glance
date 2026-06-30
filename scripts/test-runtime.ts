@@ -1,6 +1,9 @@
 import { strict as assert } from "node:assert";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { defaultConfig } from "../config.js";
+import { PALETTES, fg } from "../palette.js";
+import { renderInputSurface } from "../renderer.js";
+import type { GlanceRenderStyleContext } from "../theme-adapter.js";
 import {
 	assistantMessage,
 	createGitHarness,
@@ -49,6 +52,14 @@ function assertScanDelta(label: string, before: ScanCounts, test: TestContext, e
 	const after = scanCounts(test);
 	assertScanCounter(label, "entries", before, after, expected.entries);
 	assertScanCounter(label, "branch", before, after, expected.branch);
+}
+
+function assertAmbientPaneOptions(options: RuntimeHarness["showPaneOptions"][number], message: string): GlanceRenderStyleContext {
+	const renderStyleContext = options?.renderStyleContext;
+	assert.ok(renderStyleContext, `${message}: pane should receive a render style context`);
+	assert.equal(renderStyleContext.styles, undefined, `${message}: inactive Pi style provider should not inject Pi color styles`);
+	assert.equal(typeof renderStyleContext.getAmbientTone, "function", `${message}: pane render style context should provide lazy ambient tone`);
+	return renderStyleContext;
 }
 
 function createScanMatrixContext(): TestContext {
@@ -192,26 +203,46 @@ for (const matrixCase of [
 }
 
 {
-	const currentPiTheme = fakePiTheme();
+	const currentPiTheme = fakePiTheme("light");
 	const git = createGitHarness();
 	const test = createContext({ uiTheme: currentPiTheme });
 	const harness = createRuntimeHarness({ loadConfigSyncConfig: defaultConfig(), showPaneResults: [{ action: "cancel" }], git });
 
 	harness.runtime.events.sessionStart({}, test.ctx);
-	assert.equal(test.getThemeReads(), 1, "TUI install may read the current UI theme through the inactive provider seam");
+	assert.equal(test.getThemeReads(), 0, "TUI install should not eagerly read UI theme tone before render");
 	assert.equal(test.editorFactories.length, 1, "enabled TUI install should still register one editor factory with a current Pi theme present");
 	const editor = invokeEditorFactory(test, 0, () => undefined) as { focused: boolean; setText(text: string): void; render(width: number): string[] };
 	editor.focused = true;
-	editor.setText("inactive provider check");
-	assert.equal(
-		editor.render(100).join("\n").includes("<<pi-theme:"),
-		false,
-		"current Pi UI theme presence alone should not pass a renderStyleContext into GlanceEditor",
-	);
+	editor.setText("ambient provider check");
+	currentPiTheme.name = "dark";
+	const darkEditorFrame = editor.render(100).join("\n");
+	assert.ok(darkEditorFrame.includes(fg(PALETTES.dark.border, "╭")), "live editor should lazily resolve exact Pi UI theme name dark to the dark Glance palette");
+	assert.equal(darkEditorFrame.includes("<<pi-theme:"), false, "current Pi UI theme presence should not activate Pi token color styles in the editor");
+	currentPiTheme.name = "light";
+	const lightEditorFrame = editor.render(100).join("\n");
+	assert.ok(lightEditorFrame.includes(fg(PALETTES.light.border, "╭")), "live editor should re-read exact Pi UI theme name light on later renders");
+	currentPiTheme.name = "my-dark-theme";
+	const customEditorFrame = editor.render(100).join("\n");
+	assert.ok(customEditorFrame.includes(fg(PALETTES.light.border, "╭")), "custom Pi UI theme names should resolve as unknown and fall back to the light Glance palette");
+	test.setUiTheme(undefined);
+	const missingEditorFrame = editor.render(100).join("\n");
+	assert.ok(missingEditorFrame.includes(fg(PALETTES.light.border, "╭")), "missing Pi UI theme should resolve as unknown and fall back to the light Glance palette");
+	assert.ok(test.getThemeReads() >= 4, "editor render should lazily read UI theme tone through the ambient seam on each style resolution");
 
+	test.setUiTheme(currentPiTheme);
+	currentPiTheme.name = "dark";
 	await harness.runtime.commands.openPane("", test.ctx);
-	assert.equal(test.getThemeReads(), 2, "TUI /glance may also read the current UI theme through the inactive provider seam");
-	assert.equal(harness.showPaneOptions[0], undefined, "current Pi UI theme presence alone should not pass pane render style options");
+	const paneRenderStyleContext = assertAmbientPaneOptions(harness.showPaneOptions[0], "current Pi UI theme presence");
+	assert.equal(paneRenderStyleContext.getAmbientTone?.(), "dark", "pane preview context should lazily resolve the current Pi UI theme name to dark");
+	const previewState = harness.showPanePreviewStates[0];
+	assert.ok(previewState, "pane ambient tone test should capture preview state");
+	const panePreview = renderInputSurface(previewState, harness.showPaneInitials[0]!, 100, {
+		...paneRenderStyleContext,
+		contentLines: ["preview"],
+		focused: true,
+	}).join("\n");
+	assert.ok(panePreview.includes(fg(PALETTES.dark.border, "╭")), "/glance preview should receive lazy dark ambient tone through Glance palettes");
+	assert.equal(panePreview.includes("<<pi-theme:"), false, "/glance preview should not activate Pi token color styles");
 }
 
 {
@@ -677,7 +708,7 @@ for (const matrixCase of [
 	await harness.runtime.commands.openPane("", test.ctx);
 	assert.deepEqual(harness.showPaneInitials[1], initialConfig, "after failed save, the active config should still be the previous config");
 	assert.equal(harness.showPanePreviewStates[1]?.git.branch, "after-enabled-save-failure", "later pane opens after failed save should receive the current preview state");
-	assert.equal(harness.showPaneOptions[1], undefined, "inactive Pi style provider should keep pane options undefined after failed save");
+	assertAmbientPaneOptions(harness.showPaneOptions[1], "after failed save");
 }
 
 {
@@ -711,7 +742,7 @@ for (const matrixCase of [
 	assert.equal(hasNotification(test.notifications, "pi-glance configuration saved", "info"), true, "save success should notify saved");
 	assert.equal(harness.showPaneContexts[0], test.ctx, "showPane should receive the command context passed to /glance");
 	assert.equal(harness.showPanePreviewStates[0]?.workspace.path, "/repo", "showPane should receive the current runtime state for preview rendering");
-	assert.equal(harness.showPaneOptions[0], undefined, "inactive Pi style provider should keep pane options undefined by default");
+	assertAmbientPaneOptions(harness.showPaneOptions[0], "default pane open");
 	assert.deepEqual(test.surfaceCalls.slice(surfaceBaseline), ["setFooter:install", "setEditorComponent:install"], "save success should reinstall the enabled TUI input surface");
 	assert.ok(git.schedules.length > scheduleBaseline, "enabled->enabled save success should schedule git refreshes only after disk save succeeds");
 	assert.ok(test.getRenderRequests() > renderBaseline, "save success should request a render after reinstalling the surface");
@@ -719,7 +750,7 @@ for (const matrixCase of [
 
 	await harness.runtime.commands.openPane("", test.ctx);
 	assert.deepEqual(harness.showPaneInitials[1], nextConfig, "after successful save, later pane opens should receive the next active config");
-	assert.equal(harness.showPaneOptions[1], undefined, "later pane opens should also omit inactive style options");
+	assertAmbientPaneOptions(harness.showPaneOptions[1], "later pane open after save");
 }
 
 {
@@ -752,7 +783,7 @@ for (const matrixCase of [
 
 	await harness.runtime.commands.openPane("", test.ctx);
 	assert.deepEqual(harness.showPaneInitials[1], nextConfig, "after enabled->disabled save, later pane opens should receive disabled active config");
-	assert.equal(harness.showPaneOptions[1], undefined, "disabled active config should still omit inactive pane style options");
+	assertAmbientPaneOptions(harness.showPaneOptions[1], "disabled active config pane open");
 }
 
 {
@@ -783,7 +814,7 @@ for (const matrixCase of [
 
 	await harness.runtime.commands.openPane("", test.ctx);
 	assert.deepEqual(harness.showPaneInitials[1], nextConfig, "after disabled->enabled save, later pane opens should receive enabled active config");
-	assert.equal(harness.showPaneOptions[1], undefined, "enabled active config should still omit inactive pane style options");
+	assertAmbientPaneOptions(harness.showPaneOptions[1], "enabled active config pane open");
 }
 
 {
@@ -809,7 +840,7 @@ for (const matrixCase of [
 
 	await harness.runtime.commands.openPane("", test.ctx);
 	assert.deepEqual(harness.showPaneInitials[1], initialConfig, "after disabled-start failed save, later pane opens should receive the previous disabled config");
-	assert.equal(harness.showPaneOptions[1], undefined, "failed disabled-start save should keep inactive pane style options undefined");
+	assertAmbientPaneOptions(harness.showPaneOptions[1], "failed disabled-start save pane open");
 }
 
 for (const startingEnabled of [true, false] as const) {
@@ -834,7 +865,7 @@ for (const startingEnabled of [true, false] as const) {
 	assert.deepEqual(git.schedules.slice(scheduleBaseline), [], `${startingEnabled ? "enabled" : "disabled"} cancel should not schedule git refreshes`);
 	assert.equal(test.getRenderRequests(), renderBaseline, `${startingEnabled ? "enabled" : "disabled"} cancel should not request render`);
 	assert.equal(harness.showPanePreviewStates[0]?.workspace.path, "/repo", `${startingEnabled ? "enabled" : "disabled"} cancel pane should receive current preview state`);
-	assert.equal(harness.showPaneOptions[0], undefined, `${startingEnabled ? "enabled" : "disabled"} cancel pane should omit inactive style options`);
+	assertAmbientPaneOptions(harness.showPaneOptions[0], `${startingEnabled ? "enabled" : "disabled"} cancel pane`);
 
 	await harness.runtime.commands.openPane("", test.ctx);
 	assert.deepEqual(harness.showPaneInitials[1], initialConfig, `${startingEnabled ? "enabled" : "disabled"} cancel should preserve active config for later pane opens`);
@@ -1034,7 +1065,7 @@ for (const mode of ["rpc", "json", "print"] as const) {
 	await harness.runtime.commands.openPane("", test.ctx);
 	assert.equal(harness.showPaneInitials.length, 1, "TUI /glance should still open after provider-count snapshot setup");
 	assert.equal(harness.showPanePreviewStates[0]?.providers.availableCount, 2, "showPane preview state should include current unique provider count");
-	assert.equal(harness.showPaneOptions[0], undefined, "inactive Pi style provider should keep showPane options undefined by default");
+	assertAmbientPaneOptions(harness.showPaneOptions[0], "provider-count snapshot pane open");
 }
 
 console.log("✓ runtime seam checks passed");

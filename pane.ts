@@ -195,6 +195,7 @@ class GlanceConfigPane implements Component {
 			contentLines: ["Ask pi to improve the input surface..."],
 			focused: true,
 			...(this.options.renderStyleContext ?? {}),
+			...(this.model.themeBrowser ? { ambientTone: this.model.themeBrowser.slot } : {}),
 		};
 		const preview = this.previewState
 			? renderInputSurface(this.previewState, this.model.draft, layout.width, previewOptions)
@@ -285,7 +286,7 @@ class GlanceConfigPane implements Component {
 		if (!browser) return;
 
 		const selected = browser.themes[browser.highlightedThemeIndex] ?? browser.themes.find((theme) => theme.selected);
-		const title = `Theme · preview ${browser.previewLabel}`;
+		const title = `${browser.slotLabel} · preview ${browser.previewLabel}`;
 		const restore = browser.restoreTheme === browser.savedTheme ? `saved ${browser.savedLabel}` : `saved ${browser.savedLabel} · Esc returns ${browser.restoreLabel}`;
 		const position = `${browser.highlightedThemeIndex + 1}/${browser.themes.length}`;
 		lines.push(paneLine(layout, [spreadAnsi(colors.muted(title), colors.dim(position), layout.contentWidth)]));

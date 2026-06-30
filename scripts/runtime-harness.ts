@@ -56,6 +56,7 @@ export interface RuntimeTestContext {
 	setContextUsage(usage: RuntimeMutableContextUsage | undefined): void;
 	setSessionEntries(entries: StateSessionEntry[]): void;
 	setSessionBranch(branch: StateSessionEntry[]): void;
+	setUiTheme(theme: unknown): void;
 }
 
 export interface RuntimeGitHarness {
@@ -195,6 +196,7 @@ export function createRuntimeTestContext(options: RuntimeTestContextOptions = {}
 	let contextUsage: RuntimeMutableContextUsage | undefined = options.contextUsage ?? { tokens: 42, contextWindow: 200_000, percent: 0.021 };
 	let entries: StateSessionEntry[] = options.entries ?? [];
 	let branch: StateSessionEntry[] = options.branch ?? [];
+	let uiTheme = options.uiTheme;
 	const mode = options.mode ?? "tui";
 	const hasUI = options.hasUI ?? (mode === "tui" || mode === "rpc");
 	const invokeFooterFactory = options.invokeFooterFactory ?? true;
@@ -227,7 +229,7 @@ export function createRuntimeTestContext(options: RuntimeTestContextOptions = {}
 		ui: {
 			get theme() {
 				themeReads++;
-				return options.uiTheme;
+				return uiTheme;
 			},
 			notify: (message: string, type?: "info" | "warning" | "error") => notifications.push({ message, type }),
 			setFooter: (factory: unknown) => {
@@ -272,6 +274,9 @@ export function createRuntimeTestContext(options: RuntimeTestContextOptions = {}
 		},
 		setSessionBranch: (nextBranch: StateSessionEntry[]) => {
 			branch = nextBranch;
+		},
+		setUiTheme: (theme: unknown) => {
+			uiTheme = theme;
 		},
 	};
 }

@@ -6,7 +6,9 @@ import {
 } from "./config-options.js";
 import { getSegmentSettings, segmentLabel, type SegmentSettingDescriptor } from "./segment-registry.js";
 import { GLANCE_THEMES, GLANCE_THEME_IDS, themeLabel as glanceThemeLabel } from "./themes.js";
+import type { GlanceThemeSlot } from "./theme-selection.js";
 import type { EditorTopMarginRows, GlanceConfig, GlanceThemeName, SegmentId } from "./types.js";
+export type { GlanceThemeSlot } from "./theme-selection.js";
 
 export type SettingsCategoryId = "general" | SegmentId;
 type SettingsRowKind = "toggle" | "cycle" | "info";
@@ -25,6 +27,7 @@ export interface SettingsRow {
 	hint: string;
 	kind: SettingsRowKind;
 	opensSubview?: SettingsRowSubview;
+	themeSlot?: GlanceThemeSlot;
 	apply?: (config: GlanceConfig) => GlanceConfig;
 }
 
@@ -70,7 +73,14 @@ function toggleRow(id: string, label: string, value: boolean, hint: string, appl
 	return { id, label, value: onOff(value), hint, kind: "toggle", apply };
 }
 
-function cycleRow(id: string, label: string, value: string, hint: string, apply: (config: GlanceConfig) => GlanceConfig, options: Pick<SettingsRow, "opensSubview"> = {}): SettingsRow {
+function cycleRow(
+	id: string,
+	label: string,
+	value: string,
+	hint: string,
+	apply: (config: GlanceConfig) => GlanceConfig,
+	options: Pick<SettingsRow, "opensSubview" | "themeSlot"> = {},
+): SettingsRow {
 	return { id, label, value, hint, kind: "cycle", ...options, apply };
 }
 
@@ -82,16 +92,27 @@ export function getThemeCatalog(): readonly ThemeBrowserCatalogItem[] {
 	return GLANCE_THEMES;
 }
 
-export function getThemeCount(): number {
-	return GLANCE_THEME_IDS.length;
+export function getThemeCatalogForSlot(slot: GlanceThemeSlot): readonly ThemeBrowserCatalogItem[] {
+	return [
+		...GLANCE_THEMES.filter((theme) => theme.tone === slot),
+		...GLANCE_THEMES.filter((theme) => theme.tone !== slot),
+	];
 }
 
-export function getThemeIndex(theme: GlanceThemeName): number {
-	return Math.max(0, GLANCE_THEME_IDS.indexOf(theme));
+function themeIdsForSlot(slot: GlanceThemeSlot | undefined): readonly GlanceThemeName[] {
+	return slot ? getThemeCatalogForSlot(slot).map((theme) => theme.id) : GLANCE_THEME_IDS;
 }
 
-export function getThemeIdByIndex(index: number): GlanceThemeName | undefined {
-	return GLANCE_THEME_IDS[index];
+export function getThemeCount(slot?: GlanceThemeSlot): number {
+	return themeIdsForSlot(slot).length;
+}
+
+export function getThemeIndex(theme: GlanceThemeName, slot?: GlanceThemeSlot): number {
+	return Math.max(0, themeIdsForSlot(slot).indexOf(theme));
+}
+
+export function getThemeIdByIndex(index: number, slot?: GlanceThemeSlot): GlanceThemeName | undefined {
+	return themeIdsForSlot(slot)[index];
 }
 
 export function getThemeLabel(theme: GlanceThemeName): string {
@@ -146,15 +167,26 @@ export function getSettingsRows(config: GlanceConfig, categoryId: SettingsCatego
 					}),
 				),
 				cycleRow(
-					"general.theme",
-					"Theme",
+					"general.theme.light",
+					"Light theme",
 					getThemeLabel(config.theme.light),
-					"Switch the palette.",
+					"Palette used for light or unknown Pi theme tone.",
 					(draft) =>
 						withConfig(draft, (next) => {
-							next.theme.light = nextIn(next.theme.light, GLANCE_THEME_IDS);
+							next.theme.light = nextIn(next.theme.light, themeIdsForSlot("light"));
 						}),
-					{ opensSubview: "themeBrowser" },
+					{ opensSubview: "themeBrowser", themeSlot: "light" },
+				),
+				cycleRow(
+					"general.theme.dark",
+					"Dark theme",
+					getThemeLabel(config.theme.dark),
+					"Palette used for dark Pi theme tone.",
+					(draft) =>
+						withConfig(draft, (next) => {
+							next.theme.dark = nextIn(next.theme.dark, themeIdsForSlot("dark"));
+						}),
+					{ opensSubview: "themeBrowser", themeSlot: "dark" },
 				),
 				cycleRow("general.icons", "Icons", config.icons, "Plain text or Nerd Font icons with fallback.", (draft) =>
 					withConfig(draft, (next) => {

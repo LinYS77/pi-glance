@@ -1,4 +1,5 @@
 import { resolvePiThemeStyles, type GlanceRenderStyleContext, type PiThemeLike } from "./theme-adapter.js";
+import type { GlanceAmbientTone } from "./theme-selection.js";
 import type { GlanceConfig } from "./types.js";
 
 export interface PiThemeHost {
@@ -8,6 +9,7 @@ export interface PiThemeHost {
 export interface RuntimeRenderStyleContextOptions {
 	readonly piTheme?: PiThemeLike;
 	readonly enablePiThemeStyles?: boolean;
+	readonly getAmbientTone?: () => GlanceAmbientTone;
 }
 
 export function readPiUiTheme(host: PiThemeHost | undefined): PiThemeLike | undefined {
@@ -27,6 +29,10 @@ export function resolveRuntimeRenderStyleContext(
 	_config: GlanceConfig,
 	options: RuntimeRenderStyleContextOptions = {},
 ): GlanceRenderStyleContext | undefined {
-	if (!options.enablePiThemeStyles) return undefined;
-	return createPiRenderStyleContext(options.piTheme);
+	const piStyleContext = options.enablePiThemeStyles ? createPiRenderStyleContext(options.piTheme) : undefined;
+	if (!piStyleContext && !options.getAmbientTone) return undefined;
+	return {
+		...piStyleContext,
+		...(options.getAmbientTone ? { getAmbientTone: options.getAmbientTone } : {}),
+	};
 }

@@ -17,6 +17,7 @@ import {
 	getSettingsCategories,
 	getSettingsRows,
 	getThemeCatalog,
+	getThemeCatalogForSlot,
 	getThemeCount,
 	getThemeIdByIndex,
 	getThemeIndex,
@@ -24,6 +25,7 @@ import {
 	type SettingsRow,
 } from "../settings-catalog.js";
 import { GLANCE_THEMES, GLANCE_THEME_IDS } from "../themes.js";
+import type { GlanceThemeSlot } from "../theme-selection.js";
 import type { GlanceConfig, SegmentId } from "../types.js";
 
 function clone<T>(value: T): T {
@@ -49,8 +51,8 @@ function applyRow(config: GlanceConfig, row: SettingsRow): GlanceConfig {
 	return next;
 }
 
-function rowSummary(row: SettingsRow): Pick<SettingsRow, "id" | "label" | "value" | "hint" | "kind" | "opensSubview"> {
-	const summary: Pick<SettingsRow, "id" | "label" | "value" | "hint" | "kind" | "opensSubview"> = {
+function rowSummary(row: SettingsRow): Pick<SettingsRow, "id" | "label" | "value" | "hint" | "kind" | "opensSubview" | "themeSlot"> {
+	const summary: Pick<SettingsRow, "id" | "label" | "value" | "hint" | "kind" | "opensSubview" | "themeSlot"> = {
 		id: row.id,
 		label: row.label,
 		value: row.value,
@@ -58,10 +60,11 @@ function rowSummary(row: SettingsRow): Pick<SettingsRow, "id" | "label" | "value
 		kind: row.kind,
 	};
 	if (row.opensSubview) summary.opensSubview = row.opensSubview;
+	if (row.themeSlot) summary.themeSlot = row.themeSlot;
 	return summary;
 }
 
-function assertRows(config: GlanceConfig, categoryId: SettingsCategoryId, expected: Array<Pick<SettingsRow, "id" | "label" | "value" | "hint" | "kind" | "opensSubview">>): SettingsRow[] {
+function assertRows(config: GlanceConfig, categoryId: SettingsCategoryId, expected: Array<Pick<SettingsRow, "id" | "label" | "value" | "hint" | "kind" | "opensSubview" | "themeSlot">>): SettingsRow[] {
 	const rows = getSettingsRows(config, categoryId);
 	assert.deepEqual(rows.map(rowSummary), expected, `${categoryId} rows should preserve pane copy/order/value/kind`);
 	return rows;
@@ -72,6 +75,24 @@ function assertEditableRowsArePure(config: GlanceConfig, categoryId: SettingsCat
 		if (!row.apply) continue;
 		applyRow(config, row);
 	}
+}
+
+function assertSlotCatalog(slot: GlanceThemeSlot): void {
+	const ordered = getThemeCatalogForSlot(slot);
+	assert.equal(ordered.length, GLANCE_THEMES.length, `${slot} slot catalog should include all themes`);
+	assert.deepEqual(new Set(ordered.map((theme) => theme.id)), new Set(GLANCE_THEME_IDS), `${slot} slot catalog should include each theme exactly once`);
+	const firstOtherTone = ordered.findIndex((theme) => theme.tone !== slot);
+	assert.ok(firstOtherTone > 0, `${slot} slot catalog should start with preferred-tone themes`);
+	assert.deepEqual(
+		ordered.slice(0, firstOtherTone).map((theme) => theme.id),
+		GLANCE_THEMES.filter((theme) => theme.tone === slot).map((theme) => theme.id),
+		`${slot} slot catalog should preserve relative order among preferred-tone themes`,
+	);
+	assert.deepEqual(
+		ordered.slice(firstOtherTone).map((theme) => theme.id),
+		GLANCE_THEMES.filter((theme) => theme.tone !== slot).map((theme) => theme.id),
+		`${slot} slot catalog should preserve relative order among remaining themes`,
+	);
 }
 
 function rowById(rows: SettingsRow[], id: string): SettingsRow {
@@ -105,6 +126,10 @@ const themeCatalog = getThemeCatalog();
 assert.equal(themeCatalog.length, 22, "theme catalog helper should expose the curated 22-theme collection");
 assert.deepEqual(themeCatalog, GLANCE_THEMES, "theme catalog helper should return shared GLANCE_THEMES metadata exactly");
 assert.equal(getThemeCount(), 22, "theme count helper should reflect the curated theme count");
+assertSlotCatalog("light");
+assertSlotCatalog("dark");
+assert.equal(getThemeCatalogForSlot("light")[0]?.id, "light", "light slot catalog should start with the Light theme");
+assert.equal(getThemeCatalogForSlot("dark")[0]?.id, "dark", "dark slot catalog should start with the Dark theme");
 for (const item of themeCatalog) {
 	assert.equal("palette" in item, false, `${item.id} catalog item should not expose palette data`);
 }
@@ -165,12 +190,22 @@ const generalRows = assertRows(config, "general", [
 		kind: "toggle",
 	},
 	{
-		id: "general.theme",
-		label: "Theme",
+		id: "general.theme.light",
+		label: "Light theme",
 		value: "Light",
-		hint: "Switch the palette.",
+		hint: "Palette used for light or unknown Pi theme tone.",
 		kind: "cycle",
 		opensSubview: "themeBrowser",
+		themeSlot: "light",
+	},
+	{
+		id: "general.theme.dark",
+		label: "Dark theme",
+		value: "Dark",
+		hint: "Palette used for dark Pi theme tone.",
+		kind: "cycle",
+		opensSubview: "themeBrowser",
+		themeSlot: "dark",
 	},
 	{
 		id: "general.icons",
@@ -361,12 +396,25 @@ const throughputRows = assertRows(config, "throughput", [
 ]);
 
 assert.equal(rowById(generalRows, "general.enabled").apply!(config).enabled, false, "general enabled should toggle off");
-assert.equal(rowById(generalRows, "general.theme").opensSubview, "themeBrowser", "theme row should declare the theme browser subview as its activation target");
-assert.equal(rowById(generalRows, "general.theme").apply!(config).theme.light, GLANCE_THEMES[1]!.id, "theme row apply should preserve existing draft cycle behavior for model-owned callers");
+assert.equal(rowById(generalRows, "general.theme.light").opensSubview, "themeBrowser", "light theme row should declare the theme browser subview as its activation target");
+assert.equal(rowById(generalRows, "general.theme.light").themeSlot, "light", "light theme row should declare its edited slot");
+assert.equal(rowById(generalRows, "general.theme.dark").opensSubview, "themeBrowser", "dark theme row should declare the theme browser subview as its activation target");
+assert.equal(rowById(generalRows, "general.theme.dark").themeSlot, "dark", "dark theme row should declare its edited slot");
+const lightThemeApplied = rowById(generalRows, "general.theme.light").apply!(config);
+assert.equal(lightThemeApplied.theme.light, getThemeCatalogForSlot("light")[1]!.id, "light theme row apply should cycle within light-preferred catalog order");
+assert.equal(lightThemeApplied.theme.dark, config.theme.dark, "light theme row apply should preserve the dark slot");
+const darkThemeApplied = rowById(generalRows, "general.theme.dark").apply!(config);
+assert.equal(darkThemeApplied.theme.dark, getThemeCatalogForSlot("dark")[1]!.id, "dark theme row apply should cycle within dark-preferred catalog order");
+assert.equal(darkThemeApplied.theme.light, config.theme.light, "dark theme row apply should preserve the light slot");
 assert.equal(
-	getSettingsRows({ ...config, theme: { ...config.theme, light: "catppuccin-mocha" } }, "general").find((row) => row.id === "general.theme")?.value,
+	getSettingsRows({ ...config, theme: { light: "catppuccin-mocha", dark: "tokyo-night" } }, "general").find((row) => row.id === "general.theme.light")?.value,
 	"Catppuccin Mocha",
-	"theme row should display friendly theme label",
+	"light theme row should display friendly theme label",
+);
+assert.equal(
+	getSettingsRows({ ...config, theme: { light: "catppuccin-mocha", dark: "tokyo-night" } }, "general").find((row) => row.id === "general.theme.dark")?.value,
+	"Tokyo Night",
+	"dark theme row should display friendly theme label",
 );
 assert.equal(rowById(generalRows, "general.icons").apply!(config).icons, "nerd", "icons should cycle plain -> nerd");
 assert.equal(rowById(generalRows, "general.minInputRows").apply!(config).editor.minContentRows, 4, "min input rows should cycle 3 -> 4");

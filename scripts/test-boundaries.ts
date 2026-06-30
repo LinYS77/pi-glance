@@ -292,7 +292,7 @@ function assertRenderStyleContextSeam(files: SourceFile[]): void {
 	const renderStyleContext = files.find((candidate) => basename(candidate.path) === RENDER_STYLE_CONTEXT_MODULE);
 	assert.ok(renderStyleContext, "render-style-context.ts inactive runtime style provider seam should exist");
 
-	const allowedSpecifiers = new Set(["./theme-adapter.js", "./types.js"]);
+	const allowedSpecifiers = new Set(["./theme-adapter.js", "./theme-selection.js", "./types.js"]);
 	const importPattern = /(?:import|export)\s+(type\s+)?(?:[^"'`]*?\s+from\s+)?["']([^"']+)["']/g;
 	for (const match of renderStyleContext.text.matchAll(importPattern)) {
 		const specifier = match[2]!;
@@ -302,8 +302,44 @@ function assertRenderStyleContextSeam(files: SourceFile[]): void {
 	}
 	if (!renderStyleContext.text.includes("createPiRenderStyleContext")) fail(`${renderStyleContext.path}: provider seam should expose Pi theme to GlanceRenderStyleContext conversion`);
 	if (!renderStyleContext.text.includes("resolveRuntimeRenderStyleContext")) fail(`${renderStyleContext.path}: provider seam should expose inactive runtime context resolver`);
+	if (!renderStyleContext.text.includes("getAmbientTone")) fail(`${renderStyleContext.path}: runtime context resolver should merge ambient tone providers with future style overrides`);
 	if (!renderStyleContext.text.includes("enablePiThemeStyles")) fail(`${renderStyleContext.path}: runtime Pi style activation should require an explicit future enable flag`);
 	if (/getAllThemes|getTheme\s*\(|setTheme\s*\(/.test(renderStyleContext.text)) fail(`${renderStyleContext.path}: provider seam must not enumerate, load, or set Pi themes`);
+}
+
+function assertThemePairGuardrails(files: SourceFile[]): void {
+	const productionFiles = files.filter((candidate) => !candidate.path.startsWith("scripts/"));
+	const forbiddenProductPatterns: Array<[RegExp, string]> = [
+		[/\bthemeMode\b/, "themeMode"],
+		[/\bFOLLOW_PI_THEME_ID\b/, "FOLLOW_PI_THEME_ID"],
+		[/\btheme\s*:\s*["']pi["']/, 'theme: "pi"'],
+		[/\btheme\s*:\s*["']auto["']/, 'theme: "auto"'],
+		[/ctx\.ui\.setTheme\s*\(/, "ctx.ui.setTheme()"],
+		[/getAllThemes\s*\(/, "getAllThemes()"],
+		[/setTheme\s*\(/, "setTheme()"],
+	];
+	for (const file of productionFiles) {
+		for (const [pattern, label] of forbiddenProductPatterns) {
+			if (pattern.test(file.text)) fail(`${file.path}: light/dark theme pairs must not introduce ${label}`);
+		}
+	}
+
+	const themeTone = files.find((candidate) => basename(candidate.path) === THEME_TONE_MODULE);
+	assert.ok(themeTone, "theme-tone.ts public ambient tone reader seam should exist");
+	if (!themeTone.text.includes("const name = host?.theme?.name;")) fail(`${themeTone.path}: ambient tone reader should inspect only the public structural theme name`);
+	if (!themeTone.text.includes('if (name === "light" || name === "dark") return name;')) fail(`${themeTone.path}: ambient tone reader should use exact light/dark name matching`);
+	if (/toLowerCase|toUpperCase|includes\s*\(|startsWith\s*\(|endsWith\s*\(|getColorMode\s*\(/.test(themeTone.text)) {
+		fail(`${themeTone.path}: ambient tone reader must not infer tone from fuzzy names or color-mode helpers`);
+	}
+
+	const renderStyleContext = files.find((candidate) => basename(candidate.path) === RENDER_STYLE_CONTEXT_MODULE);
+	assert.ok(renderStyleContext, "render-style-context.ts inactive runtime style provider seam should exist");
+	if (/enablePiThemeStyles\s*[:=]\s*true|enablePiThemeStyles\s*\?\?\s*true/.test(renderStyleContext.text)) {
+		fail(`${renderStyleContext.path}: Pi theme styles must remain inactive by default`);
+	}
+	if (!/options\.enablePiThemeStyles\s*\?\s*createPiRenderStyleContext\(options\.piTheme\)\s*:\s*undefined/.test(renderStyleContext.text)) {
+		fail(`${renderStyleContext.path}: active Pi theme color styles must remain behind the explicit future enable flag`);
+	}
 }
 
 function assertPiThemeRuntimeProviderBoundary(files: SourceFile[]): void {
@@ -312,10 +348,11 @@ function assertPiThemeRuntimeProviderBoundary(files: SourceFile[]): void {
 	if (!runtime.text.includes("./render-style-context.js")) fail(`${runtime.path}: runtime should import the inactive render style provider seam`);
 	if (!runtime.text.includes("resolveRuntimeRenderStyleContext(activeConfig")) fail(`${runtime.path}: runtime should prepare render style context through the inactive provider seam for editor install`);
 	if (!runtime.text.includes("resolveRuntimeRenderStyleContext(current")) fail(`${runtime.path}: runtime should prepare render style context through the inactive provider seam for pane preview`);
-	if (!runtime.text.includes("readPiUiTheme(ctx.ui)")) fail(`${runtime.path}: runtime should read the public current UI theme only through the provider seam helper`);
+	if (!runtime.text.includes("./theme-tone.js")) fail(`${runtime.path}: runtime should import the public ambient tone reader seam`);
+	if (!runtime.text.includes("getAmbientTone: () => readPiAmbientTone(ctx.ui)")) fail(`${runtime.path}: runtime should provide lazy ambient tone through the theme-tone seam`);
 	if (/enablePiThemeStyles/.test(runtime.text)) fail(`${runtime.path}: runtime must not activate Pi theme styles without a future explicit product decision`);
-	if (/resolvePiThemeStyles|PiThemeLike|PiThemeColorToken|ctx\.ui\.theme|ctx\.ui\.setTheme|getAllThemes|getTheme\s*\(|setTheme\s*\(/.test(runtime.text)) {
-		fail(`${runtime.path}: runtime must not directly use Pi theme adapters or enumerate/set Pi themes`);
+	if (/createPiRenderStyleContext|resolvePiThemeStyles|PiThemeLike|PiThemeColorToken|readPiUiTheme|ctx\.ui\.theme|ctx\.ui\.setTheme|getAllThemes|getTheme\s*\(|setTheme\s*\(/.test(runtime.text)) {
+		fail(`${runtime.path}: runtime must not directly use Pi theme adapters, inactive Pi color reader, or enumerate/set Pi themes`);
 	}
 
 	for (const file of files) {
@@ -887,6 +924,7 @@ assertThemeSelectionSeamImports(sourceFiles);
 assertThemeToneSeamImports(sourceFiles);
 assertPiThemeResolverAdapterOnly(sourceFiles);
 assertRenderStyleContextSeam(sourceFiles);
+assertThemePairGuardrails(sourceFiles);
 assertPiThemeRuntimeProviderBoundary(sourceFiles);
 assertPanePreviewStyleContextBoundary(sourceFiles);
 assertRenderModulesHaveNoIo(sourceFiles);

@@ -2,9 +2,10 @@ import type { ExtensionCommandContext, ExtensionContext } from "@earendil-works/
 import { GlanceEditor } from "./editor.js";
 import { GlanceFooter } from "./footer.js";
 import { GitRefresher } from "./git.js";
-import { readPiUiTheme, resolveRuntimeRenderStyleContext } from "./render-style-context.js";
+import { resolveRuntimeRenderStyleContext } from "./render-style-context.js";
 import { RuntimeRefreshSession, type RuntimeAgentEndInput, type RuntimeMessageEndInput, type RuntimeTurnEndInput } from "./runtime-refresh-session.js";
 import type { GlanceRenderStyleContext } from "./theme-adapter.js";
+import { readPiAmbientTone } from "./theme-tone.js";
 import type { GitSnapshot, GlanceConfig, GlanceState } from "./types.js";
 
 export type GlancePaneResult = { action: "save"; config: GlanceConfig } | { action: "cancel" };
@@ -165,7 +166,9 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 			return;
 		}
 
-		const renderStyleContext = resolveRuntimeRenderStyleContext(activeConfig, { piTheme: readPiUiTheme(ctx.ui) });
+		const renderStyleContext = resolveRuntimeRenderStyleContext(activeConfig, {
+			getAmbientTone: () => readPiAmbientTone(ctx.ui),
+		});
 		const generation = invalidateUiOwnership();
 
 		ensureGitRefresher().schedule(true);
@@ -203,7 +206,9 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 				}
 				const current = await ensureConfig();
 				refreshSession.ensureState(ctx);
-				const renderStyleContext = resolveRuntimeRenderStyleContext(current, { piTheme: readPiUiTheme(ctx.ui) });
+				const renderStyleContext = resolveRuntimeRenderStyleContext(current, {
+					getAmbientTone: () => readPiAmbientTone(ctx.ui),
+				});
 				const result = await adapters.showPane(current, ctx, refreshSession.getState(), renderStyleContext ? { renderStyleContext } : undefined);
 				if (result.action === "cancel") {
 					ctx.ui.notify("pi-glance configuration cancelled", "info");

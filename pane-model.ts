@@ -2,11 +2,12 @@ import { cloneConfig, defaultConfig, moveSegment } from "./config.js";
 import {
 	getSettingsCategories,
 	getSettingsRows,
-	getThemeCatalog,
+	getThemeCatalogForSlot,
 	getThemeCount,
 	getThemeIdByIndex,
 	getThemeIndex,
 	getThemeLabel,
+	type GlanceThemeSlot,
 	type SettingsCategory,
 	type SettingsCategoryId,
 	type SettingsRow,
@@ -30,6 +31,7 @@ export type PaneIntent =
 export type PaneCompletion = { action: "save"; config: GlanceConfig } | { action: "cancel" };
 
 export interface ThemeBrowserState {
+	slot: GlanceThemeSlot;
 	highlightedThemeIndex: number;
 	restoreTheme: GlanceThemeName;
 	returnFocus: PaneFocus;
@@ -96,6 +98,8 @@ export interface ThemeBrowserThemeViewModel {
 }
 
 export interface ThemeBrowserViewModel {
+	slot: GlanceThemeSlot;
+	slotLabel: string;
 	highlightedThemeIndex: number;
 	savedTheme: GlanceThemeName;
 	savedLabel: string;
@@ -145,12 +149,16 @@ function result(model: PaneModelState, requestRender: boolean, completion?: Pane
 	return completion ? { model, requestRender, completion } : { model, requestRender };
 }
 
-function configLightTheme(config: GlanceConfig): GlanceThemeName {
-	return config.theme.light;
+function themeSlotLabel(slot: GlanceThemeSlot): string {
+	return slot === "light" ? "Light" : "Dark";
 }
 
-function withConfigLightTheme(config: GlanceConfig, theme: GlanceThemeName): GlanceConfig {
-	return { ...config, theme: { ...config.theme, light: theme } };
+function configTheme(config: GlanceConfig, slot: GlanceThemeSlot): GlanceThemeName {
+	return config.theme[slot];
+}
+
+function withConfigTheme(config: GlanceConfig, slot: GlanceThemeSlot, theme: GlanceThemeName): GlanceConfig {
+	return { ...config, theme: { ...config.theme, [slot]: theme } };
 }
 
 function themeBrowserHelpShortcuts(): HelpShortcut[] {
@@ -216,12 +224,14 @@ function closeThemeBrowser(model: PaneModelState, draft: GlanceConfig, status: s
 }
 
 function acceptThemeBrowser(model: PaneModelState): PaneModelState {
-	return closeThemeBrowser(model, model.draft, `Theme → ${getThemeLabel(configLightTheme(model.draft))}. Press S to save.`);
+	if (!model.themeBrowser) return model;
+	const slot = model.themeBrowser.slot;
+	return closeThemeBrowser(model, model.draft, `${themeSlotLabel(slot)} theme → ${getThemeLabel(configTheme(model.draft, slot))}. Press S to save.`);
 }
 
 function restoreThemeBrowser(model: PaneModelState): PaneModelState {
 	if (!model.themeBrowser) return model;
-	return closeThemeBrowser(model, withConfigLightTheme(model.draft, model.themeBrowser.restoreTheme), "Theme preview discarded.");
+	return closeThemeBrowser(model, withConfigTheme(model.draft, model.themeBrowser.slot, model.themeBrowser.restoreTheme), "Theme preview discarded.");
 }
 
 function moveThemeBrowserHighlight(model: PaneModelState, direction: PaneMoveDirection): PaneModelState {
@@ -229,12 +239,13 @@ function moveThemeBrowserHighlight(model: PaneModelState, direction: PaneMoveDir
 	if (direction === "left") return restoreThemeBrowser(model);
 	if (direction === "right") return model;
 
-	const count = getThemeCount();
+	const slot = model.themeBrowser.slot;
+	const count = getThemeCount(slot);
 	const step = direction === "up" ? -1 : 1;
 	const highlightedThemeIndex = (model.themeBrowser.highlightedThemeIndex + step + count) % count;
-	const theme = getThemeIdByIndex(highlightedThemeIndex) ?? configLightTheme(model.draft);
+	const theme = getThemeIdByIndex(highlightedThemeIndex, slot) ?? configTheme(model.draft, slot);
 	return withModel(model, {
-		draft: withConfigLightTheme(model.draft, theme),
+		draft: withConfigTheme(model.draft, slot, theme),
 		themeBrowser: {
 			...model.themeBrowser,
 			highlightedThemeIndex,
@@ -318,13 +329,15 @@ function selectedRow(model: PaneModelState): SettingsRow | undefined {
 	return rowsFor(model, category.id)[model.settingIndex];
 }
 
-function openThemeBrowser(model: PaneModelState): PaneModelState {
-	const highlightedThemeIndex = getThemeIndex(configLightTheme(model.draft));
+function openThemeBrowser(model: PaneModelState, row: SettingsRow): PaneModelState {
+	const slot = row.themeSlot ?? "light";
+	const highlightedThemeIndex = getThemeIndex(configTheme(model.draft, slot), slot);
 	return withModel(model, {
 		subview: "themeBrowser",
 		themeBrowser: {
+			slot,
 			highlightedThemeIndex,
-			restoreTheme: configLightTheme(model.draft),
+			restoreTheme: configTheme(model.draft, slot),
 			returnFocus: model.focus,
 			returnCategoryIndex: model.categoryIndex,
 			returnSettingIndex: model.settingIndex,
@@ -339,7 +352,7 @@ function activateCurrent(model: PaneModelState): PaneModelState {
 	const row = selectedRow(model);
 	if (!row) return model;
 
-	if (row.opensSubview === "themeBrowser") return openThemeBrowser(model);
+	if (row.opensSubview === "themeBrowser") return openThemeBrowser(model, row);
 
 	if (!row.apply) {
 		return withModel(model, { status: row.hint ?? `${row.label} is informational.` });
@@ -391,9 +404,12 @@ export function paneIsDirty(model: PaneModelState): boolean {
 
 function createThemeBrowserViewModel(model: PaneModelState): ThemeBrowserViewModel | undefined {
 	if (model.subview !== "themeBrowser" || !model.themeBrowser) return undefined;
-	const savedTheme = configLightTheme(model.initial);
-	const previewTheme = configLightTheme(model.draft);
+	const slot = model.themeBrowser.slot;
+	const savedTheme = configTheme(model.initial, slot);
+	const previewTheme = configTheme(model.draft, slot);
 	return {
+		slot,
+		slotLabel: `${themeSlotLabel(slot)} theme`,
 		highlightedThemeIndex: model.themeBrowser.highlightedThemeIndex,
 		savedTheme,
 		savedLabel: getThemeLabel(savedTheme),
@@ -401,7 +417,7 @@ function createThemeBrowserViewModel(model: PaneModelState): ThemeBrowserViewMod
 		restoreLabel: getThemeLabel(model.themeBrowser.restoreTheme),
 		previewTheme,
 		previewLabel: getThemeLabel(previewTheme),
-		themes: getThemeCatalog().map((theme, index) => ({
+		themes: getThemeCatalogForSlot(slot).map((theme, index) => ({
 			id: theme.id,
 			label: theme.label,
 			group: theme.group,

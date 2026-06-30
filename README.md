@@ -74,7 +74,7 @@ That's the only command — opens a calm settings pane with a real input-surface
 
 ## Notes
 
-- To switch themes, open `/glance` → **General** → `Theme`, press Enter, preview palettes in the browser, then press Enter to accept or Esc/Left to return. Built-ins: Light, Dark, Catppuccin Latte/Mocha/Frappé/Macchiato, Nord, Tokyo Night, Gruvbox Light/Dark, Solarized Light/Dark, Rosé Pine/Dawn, One Light/Dark, Kanagawa Wave/Lotus, Everforest Light/Dark, and High Contrast Light/Dark.
+- To switch themes, open `/glance` → **General** → `Light theme` or `Dark theme`, press Enter, preview palettes in the browser, then press Enter to accept or Esc/Left to return. Both rows can choose from all 22 built-in Glance palettes: the Light theme browser lists light-toned palettes first and the Dark theme browser lists dark-toned palettes first, but neither browser filters the catalog. Built-ins: Light, Dark, Catppuccin Latte/Mocha/Frappé/Macchiato, Nord, Tokyo Night, Gruvbox Light/Dark, Solarized Light/Dark, Rosé Pine/Dawn, One Light/Dark, Kanagawa Wave/Lotus, Everforest Light/Dark, and High Contrast Light/Dark.
 - Icons default to `plain` so pi-glance works with normal terminal fonts.
 - Editor top spacing is configurable: open `/glance` → **General** → `Top spacing` and choose `none`, `1 row`, or `2 rows`.
 - `nerd` icons are opt-in: open `/glance` → **General** → `Icons` and choose `nerd` for richer symbols.
@@ -82,6 +82,29 @@ That's the only command — opens a calm settings pane with a real input-surface
 - pi-glance does not auto-detect, install, or bundle terminal fonts.
 - Reply speed is enabled by default and appears between cost and context. It shows output tokens per wall time: `?` means no trusted measurement yet, `~42 tok/s` is a provisional current-run checkpoint from completed turns, and `42 tok/s` is the finalized agent-end measurement.
 - Configure `/glance` → **Reply speed** → `Precision`: `auto`, `1 digit`, or `0 digits`. Wall time includes tools, waiting, network, and thinking, so it is not a benchmark. Reply speed uses no notifications, no timers/tickers, no token estimation from text/deltas, and adds no command, footer, dashboard, history, or average view.
+
+## Themes and config
+
+pi-glance uses its own curated 22 built-in Glance palettes. It is not a Pi theme manager: it does not enumerate, switch, or install Pi UI themes, and it does not render with Pi theme token colors.
+
+The supported config model is `theme: { light: GlanceThemeName, dark: GlanceThemeName }`. New installs default to:
+
+```json
+{
+  "theme": {
+    "light": "light",
+    "dark": "dark"
+  }
+}
+```
+
+When pi-glance loads an older config, migration is conservative: an old string such as `{ "theme": "x" }` is preserved as `{ "theme": { "light": "x", "dark": "x" } }` when `x` is one of the built-in Glance theme names.
+
+At render time, pi-glance reads only Pi's public UI theme name to choose a slot:
+
+- exact `light` selects `theme.light`
+- exact `dark` selects `theme.dark`
+- unknown or custom Pi theme names fall back to `theme.light`
 
 ## Segment details
 
