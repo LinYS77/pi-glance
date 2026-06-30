@@ -1,331 +1,27 @@
 import { strict as assert } from "node:assert";
-import type { ExtensionCommandContext, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { defaultConfig } from "../config.js";
-import { createGlanceRuntime, type CreateGitRefresherOptions, type GlancePaneResult, type GlanceRuntimeAdapters, type RuntimeGitRefresher, type RuntimeShowPaneOptions } from "../runtime.js";
-import type { StateSessionEntry } from "../runtime-snapshot.js";
-import type { GitSnapshot, GlanceConfig, GlanceState } from "../types.js";
+import {
+	assistantMessage,
+	createGitHarness,
+	createRuntimeHarness,
+	createRuntimeTestContext as createContext,
+	disabledConfig,
+	fakePiTheme,
+	hasNotification,
+	invokeEditorFactory,
+	invokeFooterFactory,
+	isPromiseLike,
+	nextEnabledConfig,
+	runtimeGitSnapshot as gitSnapshot,
+	sessionMessage,
+	type RuntimeHarness,
+	type RuntimeHarnessOptions,
+	type RuntimeTestContext,
+} from "./runtime-harness.js";
 
-interface Notification {
-	message: string;
-	type: "info" | "warning" | "error" | undefined;
-}
-
-type CapturedFooterFactory = (tui: { requestRender(): void }, theme: unknown) => unknown;
-type CapturedEditorFactory = (tui: { terminal: { rows: number }; requestRender(): void }, theme: unknown, keybindings: unknown) => unknown;
-
-interface MutableModelInfo {
-	id?: string;
-	provider?: string;
-	contextWindow?: number;
-}
-
-interface MutableContextUsage {
-	tokens: number | null;
-	contextWindow: number;
-	percent: number | null;
-}
-
-interface TestContext {
-	ctx: ExtensionCommandContext;
-	surfaceCalls: string[];
-	notifications: Notification[];
-	footerFactories: CapturedFooterFactory[];
-	editorFactories: CapturedEditorFactory[];
-	getRenderRequests(): number;
-	getThemeReads(): number;
-	getEntryReads(): number;
-	getBranchReads(): number;
-	setCwd(cwd: string): void;
-	setAvailableProviders(providers: string[]): void;
-	setModel(model: MutableModelInfo | undefined): void;
-	setContextUsage(usage: MutableContextUsage | undefined): void;
-	setSessionEntries(entries: StateSessionEntry[]): void;
-	setSessionBranch(branch: StateSessionEntry[]): void;
-}
-
-interface GitRefresherHarness {
-	create: (options: CreateGitRefresherOptions) => RuntimeGitRefresher;
-	created: number;
-	schedules: Array<boolean | undefined>;
-	disposeCount: number;
-	options?: CreateGitRefresherOptions;
-}
-
-interface RuntimeHarnessOptions {
-	loadConfigSyncConfig?: GlanceConfig;
-	loadConfigConfig?: GlanceConfig;
-	showPaneResults?: GlancePaneResult[];
-	onSaveConfig?: (config: GlanceConfig) => void | Promise<void>;
-	saveConfigError?: Error;
-	git?: GitRefresherHarness;
-	getThinkingLevel?: () => string;
-}
-
-interface RuntimeHarness {
-	runtime: ReturnType<typeof createGlanceRuntime>;
-	showPaneInitials: GlanceConfig[];
-	showPaneContexts: ExtensionCommandContext[];
-	showPanePreviewStates: Array<GlanceState | undefined>;
-	showPaneOptions: Array<RuntimeShowPaneOptions | undefined>;
-	savedConfigs: GlanceConfig[];
-	getLoadConfigCalls(): number;
-}
-
-function cloneConfig(config: GlanceConfig): GlanceConfig {
-	return JSON.parse(JSON.stringify(config)) as GlanceConfig;
-}
-
-function disabledConfig(config = defaultConfig()): GlanceConfig {
-	const next = cloneConfig(config);
-	next.enabled = false;
-	return next;
-}
-
-function nextEnabledConfig(config = defaultConfig()): GlanceConfig {
-	const next = cloneConfig(config);
-	next.enabled = true;
-	next.git.pollIntervalMs = config.git.pollIntervalMs + 1234;
-	next.display.adaptive = !config.display.adaptive;
-	return next;
-}
-
-function gitSnapshot(branch = "main"): GitSnapshot {
-	return {
-		repo: true,
-		branch,
-		detached: false,
-		sha: "abcdef1",
-		upstream: null,
-		ahead: 0,
-		behind: 0,
-		staged: 0,
-		unstaged: 1,
-		untracked: 0,
-		conflicts: 0,
-		dirty: true,
-		status: "dirty",
-		updatedAt: 1000,
-	};
-}
-
-function assistantMessage(options: { responseId?: string; usage?: Record<string, unknown>; stopReason?: string; timestamp?: number } = {}) {
-	return {
-		role: "assistant",
-		responseId: options.responseId,
-		usage: options.usage,
-		stopReason: options.stopReason ?? "stop",
-		timestamp: options.timestamp ?? 1000,
-	};
-}
-
-function sessionMessage(role: string, options: { usage?: Record<string, unknown>; stopReason?: string; responseId?: string } = {}): StateSessionEntry {
-	return {
-		type: "message",
-		message: {
-			role,
-			usage: options.usage,
-			stopReason: options.stopReason,
-			responseId: options.responseId,
-		} as StateSessionEntry["message"] & { responseId?: string },
-	};
-}
-
-function fakePiTheme(name = "runtime-current-pi-theme") {
-	return {
-		name,
-		getColorMode: () => "test-mode",
-		fg: (_color: string, text: string) => `<<pi-theme:${text}>>`,
-	};
-}
-
-function hasNotification(notifications: Notification[], message: string, type: Notification["type"]): boolean {
-	return notifications.some((notification) => notification.message === message && notification.type === type);
-}
-
-function isPromiseLike(value: unknown): value is PromiseLike<unknown> {
-	return typeof value === "object" && value !== null && typeof (value as { then?: unknown }).then === "function";
-}
-
-function createGitHarness(): GitRefresherHarness {
-	const harness: GitRefresherHarness = {
-		created: 0,
-		schedules: [],
-		disposeCount: 0,
-		create: (options) => {
-			harness.created++;
-			harness.options = options;
-			return {
-				schedule: (immediate?: boolean) => harness.schedules.push(immediate),
-				dispose: () => {
-					harness.disposeCount++;
-				},
-			};
-		},
-	};
-	return harness;
-}
-
-function createContext(options: { cwd?: string; mode?: "tui" | "rpc" | "json" | "print"; hasUI?: boolean; availableProviders?: string[]; model?: MutableModelInfo; contextUsage?: MutableContextUsage; entries?: StateSessionEntry[]; branch?: StateSessionEntry[]; invokeFooterFactory?: boolean; uiTheme?: unknown } = {}): TestContext {
-	const surfaceCalls: string[] = [];
-	const notifications: Notification[] = [];
-	const footerFactories: CapturedFooterFactory[] = [];
-	const editorFactories: CapturedEditorFactory[] = [];
-	let renderRequests = 0;
-	let themeReads = 0;
-	let entryReads = 0;
-	let branchReads = 0;
-	let cwd = options.cwd ?? "/repo";
-	let availableProviders = options.availableProviders ?? ["test-provider"];
-	let model: MutableModelInfo | undefined = options.model ?? { id: "test-model", provider: "test-provider", contextWindow: 200_000 };
-	let contextUsage: MutableContextUsage | undefined = options.contextUsage ?? { tokens: 42, contextWindow: 200_000, percent: 0.021 };
-	let entries: StateSessionEntry[] = options.entries ?? [];
-	let branch: StateSessionEntry[] = options.branch ?? [];
-	const mode = options.mode ?? "tui";
-	const hasUI = options.hasUI ?? (mode === "tui" || mode === "rpc");
-	const invokeFooterFactory = options.invokeFooterFactory ?? true;
-	const fakeTui = { requestRender: () => renderRequests++ };
-	const fakeTheme = {};
-
-	const ctx = {
-		mode,
-		hasUI,
-		get cwd() {
-			return cwd;
-		},
-		get model() {
-			return model;
-		},
-		modelRegistry: {
-			getAvailable: () => availableProviders.map((provider) => ({ provider, id: `${provider}-model` })),
-		},
-		sessionManager: {
-			getCwd: () => cwd,
-			getEntries: () => {
-				entryReads++;
-				return entries;
-			},
-			getBranch: () => {
-				branchReads++;
-				return branch;
-			},
-		},
-		ui: {
-			get theme() {
-				themeReads++;
-				return options.uiTheme;
-			},
-			notify: (message: string, type?: "info" | "warning" | "error") => notifications.push({ message, type }),
-			setFooter: (factory: unknown) => {
-				surfaceCalls.push(factory ? "setFooter:install" : "setFooter:clear");
-				if (factory) {
-					footerFactories.push(factory as CapturedFooterFactory);
-					if (invokeFooterFactory) (factory as CapturedFooterFactory)(fakeTui, fakeTheme);
-				}
-			},
-			setEditorComponent: (factory: unknown) => {
-				surfaceCalls.push(factory ? "setEditorComponent:install" : "setEditorComponent:clear");
-				if (factory) editorFactories.push(factory as CapturedEditorFactory);
-			},
-		},
-		getContextUsage: () => contextUsage,
-	} as unknown as ExtensionCommandContext;
-
-	return {
-		ctx,
-		surfaceCalls,
-		notifications,
-		footerFactories,
-		editorFactories,
-		getRenderRequests: () => renderRequests,
-		getThemeReads: () => themeReads,
-		getEntryReads: () => entryReads,
-		getBranchReads: () => branchReads,
-		setCwd: (nextCwd: string) => {
-			cwd = nextCwd;
-		},
-		setAvailableProviders: (providers: string[]) => {
-			availableProviders = providers;
-		},
-		setModel: (nextModel: MutableModelInfo | undefined) => {
-			model = nextModel;
-		},
-		setContextUsage: (usage: MutableContextUsage | undefined) => {
-			contextUsage = usage;
-		},
-		setSessionEntries: (nextEntries: StateSessionEntry[]) => {
-			entries = nextEntries;
-		},
-		setSessionBranch: (nextBranch: StateSessionEntry[]) => {
-			branch = nextBranch;
-		},
-	};
-}
-
-function invokeFooterFactory(test: TestContext, index: number, requestRender: () => void): unknown {
-	const factory = test.footerFactories[index];
-	assert.ok(factory, `expected footer factory ${index}`);
-	return factory({ requestRender }, {});
-}
-
-function invokeEditorFactory(test: TestContext, index: number, requestRender: () => void, keybindings: { matches(data: string, action: string): boolean } = { matches: () => false }): unknown {
-	const factory = test.editorFactories[index];
-	assert.ok(factory, `expected editor factory ${index}`);
-	const editorTheme = {
-		borderColor: (text: string) => text,
-		selectList: {
-			selectedPrefix: (text: string) => text,
-			selectedText: (text: string) => text,
-			description: (text: string) => text,
-			scrollInfo: (text: string) => text,
-			noMatch: (text: string) => text,
-		},
-	};
-	return factory({ terminal: { rows: 40 }, requestRender }, editorTheme, keybindings);
-}
-
-function createRuntimeHarness(options: RuntimeHarnessOptions = {}): RuntimeHarness {
-	const showPaneInitials: GlanceConfig[] = [];
-	const showPaneContexts: ExtensionCommandContext[] = [];
-	const showPanePreviewStates: Array<GlanceState | undefined> = [];
-	const showPaneOptions: Array<RuntimeShowPaneOptions | undefined> = [];
-	const savedConfigs: GlanceConfig[] = [];
-	let loadConfigCalls = 0;
-	const loadConfigSyncConfig = options.loadConfigSyncConfig ?? defaultConfig();
-	const loadConfigConfig = options.loadConfigConfig ?? loadConfigSyncConfig;
-	const showPaneResults = [...(options.showPaneResults ?? [])];
-	const adapters: GlanceRuntimeAdapters = {
-		getThinkingLevel: options.getThinkingLevel ?? (() => "off"),
-		loadConfigSync: () => loadConfigSyncConfig,
-		loadConfig: async () => {
-			loadConfigCalls++;
-			return loadConfigConfig;
-		},
-		saveConfig: async (config) => {
-			await options.onSaveConfig?.(config);
-			if (options.saveConfigError) throw options.saveConfigError;
-			savedConfigs.push(config);
-		},
-		showPane: async (initial, ctx, previewState, paneOptions) => {
-			showPaneInitials.push(cloneConfig(initial));
-			showPaneContexts.push(ctx);
-			showPanePreviewStates.push(previewState);
-			showPaneOptions.push(paneOptions);
-			const result = showPaneResults.shift();
-			assert.ok(result, "expected queued showPane result");
-			return result;
-		},
-		createGitRefresher: options.git?.create,
-	};
-	return {
-		runtime: createGlanceRuntime(adapters),
-		showPaneInitials,
-		showPaneContexts,
-		showPanePreviewStates,
-		showPaneOptions,
-		savedConfigs,
-		getLoadConfigCalls: () => loadConfigCalls,
-	};
-}
+type TestContext = RuntimeTestContext;
+type RuntimeShowPaneResults = RuntimeHarnessOptions["showPaneResults"];
 
 type ScanExpectation = "same" | "increased";
 
@@ -364,7 +60,7 @@ function createScanMatrixContext(): TestContext {
 
 interface RuntimeScanMatrixCase {
 	name: string;
-	showPaneResults?: GlancePaneResult[];
+	showPaneResults?: RuntimeShowPaneResults;
 	prepare?: (harness: RuntimeHarness, test: TestContext) => void | Promise<void>;
 	invoke: (harness: RuntimeHarness, test: TestContext) => void | Promise<void>;
 }
@@ -785,7 +481,7 @@ for (const matrixCase of [
 	});
 	const harness = createRuntimeHarness({
 		loadConfigSyncConfig: defaultConfig(),
-		showPaneResults: Array.from({ length: 7 }, () => ({ action: "cancel" }) as GlancePaneResult),
+		showPaneResults: Array.from({ length: 7 }, () => ({ action: "cancel" as const })),
 		git,
 	});
 
