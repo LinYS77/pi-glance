@@ -24,6 +24,8 @@ const SURFACE_LAYOUT_MODULE = "surface-layout.ts";
 const SETTINGS_CATALOG_MODULE = "settings-catalog.ts";
 const PANE_MODEL_MODULE = "pane-model.ts";
 const THEME_ADAPTER_MODULE = "theme-adapter.ts";
+const THEME_SELECTION_MODULE = "theme-selection.ts";
+const THEME_TONE_MODULE = "theme-tone.ts";
 const RENDER_STYLE_CONTEXT_MODULE = "render-style-context.ts";
 const GUARD_SCRIPT = join("scripts", "test-boundaries.ts");
 const LEGACY_NAMESPACE = ["@mariozechner", ""].join("/");
@@ -217,7 +219,7 @@ function assertThemeAdapterSeamImports(files: SourceFile[]): void {
 	const themeAdapter = files.find((candidate) => basename(candidate.path) === THEME_ADAPTER_MODULE);
 	assert.ok(themeAdapter, "theme-adapter.ts pure style adapter seam should exist");
 
-	const allowedLocalSpecifiers = new Set(["./palette.js", "./themes.js", "./types.js"]);
+	const allowedLocalSpecifiers = new Set(["./palette.js", "./theme-selection.js", "./themes.js", "./types.js"]);
 	const forbiddenLocalModulePattern = /(?:^|\/)(?:runtime|runtime-plan-executor|runtime-refresh-session|runtime-snapshot|state|config|config-options|settings-catalog|pane|pane-model|editor|renderer|status-line|surface-layout|input-surface-frame|footer)(?:\.js)?$/;
 	const importPattern = /(?:import|export)\s+(?:type\s+)?(?:[^"'`]*?\s+from\s+)?["']([^"']+)["']/g;
 	for (const match of themeAdapter.text.matchAll(importPattern)) {
@@ -229,9 +231,51 @@ function assertThemeAdapterSeamImports(files: SourceFile[]): void {
 		if (!specifier.startsWith(".")) fail(`${themeAdapter.path}: theme adapter must not import external module ${specifier}`);
 	}
 	if (!themeAdapter.text.includes("interface GlanceRenderStyleContext")) fail(`${themeAdapter.path}: theme adapter should expose a shared render style context seam`);
+	if (!themeAdapter.text.includes("ambientTone") || !themeAdapter.text.includes("getAmbientTone")) fail(`${themeAdapter.path}: render style context should expose ambient tone inputs`);
+	if (!themeAdapter.text.includes("selectGlanceTheme")) fail(`${themeAdapter.path}: render style resolver should select from the configured theme pair`);
 	if (!themeAdapter.text.includes("resolveGlanceRenderStyles")) fail(`${themeAdapter.path}: theme adapter should expose a shared render style resolver`);
 	if (!themeAdapter.text.includes("interface PiThemeLike")) fail(`${themeAdapter.path}: theme adapter should expose a structural Pi theme-like style source skeleton`);
 	if (!themeAdapter.text.includes("resolvePiThemeStyles")) fail(`${themeAdapter.path}: theme adapter should expose an adapter-only Pi theme style resolver`);
+}
+
+function assertThemeSelectionSeamImports(files: SourceFile[]): void {
+	const themeSelection = files.find((candidate) => basename(candidate.path) === THEME_SELECTION_MODULE);
+	assert.ok(themeSelection, "theme-selection.ts pure theme selection seam should exist");
+
+	const importPattern = /(?:import|export)\s+(type\s+)?(?:[^"'`]*?\s+from\s+)?["']([^"']+)["']/g;
+	for (const match of themeSelection.text.matchAll(importPattern)) {
+		const isTypeOnly = match[1] === "type ";
+		const specifier = match[2]!;
+		if (specifier.startsWith("@earendil-works/pi-")) fail(`${themeSelection.path}: theme selection seam must not import pi package ${specifier}`);
+		if (IO_NETWORK_PROCESS_IMPORTS.has(specifier)) fail(`${themeSelection.path}: theme selection seam must not import IO/network/process module ${specifier}`);
+		if (specifier !== "./types.js") fail(`${themeSelection.path}: theme selection seam must only import shared types, not ${specifier}`);
+		if (!isTypeOnly) fail(`${themeSelection.path}: theme selection seam must import shared types type-only`);
+	}
+	if (!themeSelection.text.includes("GlanceAmbientTone")) fail(`${themeSelection.path}: theme selection seam should expose ambient tone type`);
+	if (!themeSelection.text.includes("selectGlanceTheme")) fail(`${themeSelection.path}: theme selection seam should expose selectGlanceTheme`);
+	if (/readPiUiTheme|resolveRuntimeRenderStyleContext|resolvePiThemeStyles|PiThemeLike|PiThemeColorToken|ctx\.ui\.theme|ctx\.ui\.setTheme|getAllThemes|getTheme\s*\(|setTheme\s*\(/.test(themeSelection.text)) {
+		fail(`${themeSelection.path}: theme selection seam must not depend on Pi theme provider/product APIs`);
+	}
+}
+
+function assertThemeToneSeamImports(files: SourceFile[]): void {
+	const themeTone = files.find((candidate) => basename(candidate.path) === THEME_TONE_MODULE);
+	assert.ok(themeTone, "theme-tone.ts public ambient tone reader seam should exist");
+
+	const importPattern = /(?:import|export)\s+(type\s+)?(?:[^"'`]*?\s+from\s+)?["']([^"']+)["']/g;
+	for (const match of themeTone.text.matchAll(importPattern)) {
+		const isTypeOnly = match[1] === "type ";
+		const specifier = match[2]!;
+		if (specifier.startsWith("@earendil-works/pi-")) fail(`${themeTone.path}: ambient tone reader seam must not import pi package ${specifier}`);
+		if (IO_NETWORK_PROCESS_IMPORTS.has(specifier)) fail(`${themeTone.path}: ambient tone reader seam must not import IO/network/process module ${specifier}`);
+		if (specifier !== "./theme-selection.js") fail(`${themeTone.path}: ambient tone reader seam may only import shared selection types, not ${specifier}`);
+		if (!isTypeOnly) fail(`${themeTone.path}: ambient tone reader seam must import shared selection types type-only`);
+	}
+	if (!themeTone.text.includes("interface PiThemeToneHost")) fail(`${themeTone.path}: ambient tone reader seam should expose structural PiThemeToneHost`);
+	if (!themeTone.text.includes("readPiAmbientTone")) fail(`${themeTone.path}: ambient tone reader seam should expose readPiAmbientTone`);
+	if (/ctx\.ui\.setTheme|getAllThemes|getTheme\s*\(|setTheme\s*\(|resolvePiThemeStyles|PiThemeLike|PiThemeColorToken|getColorMode\s*\(|\bfg\s*\(|\bbg\s*\(|sourcePath|PALETTES/.test(themeTone.text)) {
+		fail(`${themeTone.path}: ambient tone reader seam must only inspect public theme.name and stay out of Pi/theme-color internals`);
+	}
 }
 
 function assertPiThemeResolverAdapterOnly(files: SourceFile[]): void {
@@ -625,7 +669,8 @@ function assertStatusLineSeamImports(files: SourceFile[]): void {
 		if (forbiddenLocalSpecifiers.has(specifier)) fail(`${statusLine.path}: status-line must not import UI/runtime/state/config module ${specifier}`);
 		if (!allowedSpecifiers.has(specifier)) fail(`${statusLine.path}: status-line must not import ${specifier}`);
 	}
-	if (!statusLine.text.includes("resolveGlanceRenderStyles(config.theme")) fail(`${statusLine.path}: status-line styling should resolve styles through the shared adapter context`);
+	if (!statusLine.text.includes("resolveGlanceRenderStyles(config.theme, styleContext)")) fail(`${statusLine.path}: status-line styling should resolve config.theme pair through the shared adapter context`);
+	if (/selectGlanceTheme\(config\.theme,\s*["']light["']\)/.test(statusLine.text)) fail(`${statusLine.path}: status-line must not hardcode the light theme slot bridge`);
 	if (/\bPALETTES\b|(^|[^.\w$])fg\s*\(/.test(statusLine.text)) fail(`${statusLine.path}: status-line must not style through direct palette/fg access after adapter wiring`);
 }
 
@@ -657,7 +702,8 @@ function assertRendererSeamImports(files: SourceFile[]): void {
 		if (forbiddenLocalSpecifiers.has(specifier)) fail(`${renderer.path}: renderer must not import UI/runtime/state/config/palette module ${specifier}`);
 		if (!allowedSpecifiers.has(specifier)) fail(`${renderer.path}: renderer must not import ${specifier}`);
 	}
-	if (!renderer.text.includes("resolveGlanceRenderStyles(config.theme")) fail(`${renderer.path}: renderer styling should resolve styles through the shared adapter context`);
+	if (!renderer.text.includes("resolveGlanceRenderStyles(config.theme, options)")) fail(`${renderer.path}: renderer styling should resolve config.theme pair through the shared adapter context`);
+	if (/selectGlanceTheme\(config\.theme,\s*["']light["']\)/.test(renderer.text)) fail(`${renderer.path}: renderer must not hardcode the light theme slot bridge`);
 	if (!renderer.text.includes("renderInputSurfaceFrame")) fail(`${renderer.path}: renderer preview path should delegate frame assembly to input-surface-frame`);
 	assertNoLowLevelFrameCompositionTokens(renderer, "renderer preview path");
 	if (/\brenderGlanceLine\b/.test(renderer.text)) fail(`${renderer.path}: renderer must not call status-line directly after frame seam migration`);
@@ -690,7 +736,8 @@ function assertEditorSeamImports(files: SourceFile[]): void {
 		if (forbiddenLocalSpecifiers.has(specifier)) fail(`${editor.path}: editor must not import UI/runtime/state/config/palette module ${specifier}`);
 		if (!allowedSpecifiers.has(specifier)) fail(`${editor.path}: editor must not import ${specifier}`);
 	}
-	if (!editor.text.includes("resolveGlanceRenderStyles(config.theme")) fail(`${editor.path}: editor styling should resolve styles through the shared adapter context`);
+	if (!editor.text.includes("resolveGlanceRenderStyles(config.theme, this.glanceOptions?.renderStyleContext)")) fail(`${editor.path}: editor styling should resolve config.theme pair through the shared adapter context`);
+	if (/selectGlanceTheme\(config\.theme,\s*["']light["']\)/.test(editor.text)) fail(`${editor.path}: editor must not hardcode the light theme slot bridge`);
 	if (!editor.text.includes("measureInputSurfaceFrame") || !editor.text.includes("renderInputSurfaceFrame")) fail(`${editor.path}: editor live frame path should delegate frame metrics/assembly to input-surface-frame`);
 	if (!/renderGlanceLine\([\s\S]*?\{ styles \}/.test(editor.text)) fail(`${editor.path}: editor cached status callback should pass its render-pass styles into status-line rendering`);
 	if (!editor.text.includes("cachedStatusStyleKey") || !editor.text.includes("styles.cacheKey")) fail(`${editor.path}: editor status cache should include style cacheKey awareness`);
@@ -836,6 +883,8 @@ assertSurfaceLayoutSeamImports(sourceFiles);
 assertSettingsCatalogSeamImports(sourceFiles);
 assertPaneModelSeamImports(sourceFiles);
 assertThemeAdapterSeamImports(sourceFiles);
+assertThemeSelectionSeamImports(sourceFiles);
+assertThemeToneSeamImports(sourceFiles);
 assertPiThemeResolverAdapterOnly(sourceFiles);
 assertRenderStyleContextSeam(sourceFiles);
 assertPiThemeRuntimeProviderBoundary(sourceFiles);

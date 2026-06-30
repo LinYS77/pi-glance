@@ -42,7 +42,7 @@ for (const theme of ["light", "dark", "high-contrast-light"] as const) {
 	for (const width of [32, 56, 120]) {
 		for (const showPromptIndicator of [true, false]) {
 			const config = defaultConfig();
-			config.theme = theme;
+			config.theme = { light: theme, dark: theme };
 			config.editor.topMarginRows = width === 32 ? 0 : 1;
 			config.editor.minContentRows = 2;
 			onlySegments(config, ["context", "model"]);
@@ -73,7 +73,7 @@ for (const theme of ["light", "dark", "high-contrast-light"] as const) {
 	config.editor.minContentRows = 3;
 	onlySegments(config, ["model"]);
 	const state = richState();
-	const styles = resolveBuiltInGlanceStyles(config.theme);
+	const styles = resolveBuiltInGlanceStyles(config.theme.light);
 	assert.deepEqual(
 		renderInputSurfaceFrame({ state, config, width: 56, styles, body: { kind: "preview" } }),
 		renderInputSurface(state, config, 56, { styles }),
@@ -87,7 +87,7 @@ for (const theme of ["light", "dark", "high-contrast-light"] as const) {
 	config.editor.minContentRows = 4;
 	onlySegments(config, ["model"]);
 	const state = richState();
-	const styles = resolveBuiltInGlanceStyles(config.theme);
+	const styles = resolveBuiltInGlanceStyles(config.theme.light);
 	let capturedBudget = -1;
 	let capturedStyles: unknown;
 	const rawBody = "already-rendered \x1b[35mRAW\x1b[0m body";
@@ -126,7 +126,7 @@ for (const theme of ["light", "dark", "high-contrast-light"] as const) {
 	config.editor.minContentRows = 2;
 	onlySegments(config, ["model"]);
 	const state = richState();
-	const styles = resolveBuiltInGlanceStyles(config.theme);
+	const styles = resolveBuiltInGlanceStyles(config.theme.light);
 	const statusWithControls = "\x1b[31mHOT\tNOW\x1b[0m";
 	const focused = renderInputSurfaceFrame({
 		state,

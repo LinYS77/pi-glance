@@ -2,6 +2,11 @@ import type { GlanceThemeName } from "./themes.js";
 
 export type { GlanceThemeName } from "./themes.js";
 
+export interface GlanceThemePair {
+	light: GlanceThemeName;
+	dark: GlanceThemeName;
+}
+
 export type SegmentId = "git" | "model" | "context" | "tokens" | "cost" | "throughput";
 export type IconMode = "nerd" | "plain";
 export type WidthMode = "full" | "compact" | "minimal";
@@ -60,9 +65,9 @@ interface ThroughputConfig {
 }
 
 export interface GlanceConfig {
-	version: 5;
+	version: 6;
 	enabled: boolean;
-	theme: GlanceThemeName;
+	theme: GlanceThemePair;
 	icons: IconMode;
 	editor: EditorConfig;
 	display: DisplayConfig;

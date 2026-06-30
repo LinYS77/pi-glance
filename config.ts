@@ -22,6 +22,7 @@ import type {
 	EditorTopMarginRows,
 	GitShaMode,
 	GlanceConfig,
+	GlanceThemePair,
 	IconMode,
 	ModelThinkingMode,
 	SegmentConfig,
@@ -33,7 +34,7 @@ import type {
 
 const CONFIG_PATH = join(getAgentDir(), "pi-glance", "config.json");
 // CONFIG_VERSION is the on-disk config schema version, not the npm package version.
-const CONFIG_VERSION = 5 as const;
+const CONFIG_VERSION = 6 as const;
 
 const ICON_MODES = new Set<IconMode>(ICON_MODE_VALUES);
 const PROVIDER_MODES = new Set<GlanceConfig["display"]["showProvider"]>(PROVIDER_DISPLAY_MODE_VALUES);
@@ -49,7 +50,7 @@ export function defaultConfig(): GlanceConfig {
 	return {
 		version: CONFIG_VERSION,
 		enabled: true,
-		theme: "light",
+		theme: { light: "light", dark: "dark" },
 		icons: "plain",
 		editor: {
 			minContentRows: 3,
@@ -93,6 +94,7 @@ export function defaultConfig(): GlanceConfig {
 export function cloneConfig(config: GlanceConfig): GlanceConfig {
 	return {
 		...config,
+		theme: { ...config.theme },
 		editor: { ...config.editor },
 		display: { ...config.display },
 		segments: config.segments.map((s) => ({ ...s })),
@@ -111,6 +113,19 @@ function parseBool(value: unknown, fallback: boolean): boolean {
 
 function parseStringEnum<T extends string>(value: unknown, allowed: ReadonlySet<T>, fallback: T): T {
 	return typeof value === "string" && allowed.has(value as T) ? (value as T) : fallback;
+}
+
+function parseThemePair(value: unknown, fallback: GlanceThemePair): GlanceThemePair {
+	if (typeof value === "string" && GLANCE_THEME_ID_SET.has(value as GlanceThemePair["light"])) {
+		const theme = value as GlanceThemePair["light"];
+		return { light: theme, dark: theme };
+	}
+	if (!value || typeof value !== "object" || Array.isArray(value)) return { ...fallback };
+	const record = value as Record<string, unknown>;
+	return {
+		light: parseStringEnum(record.light, GLANCE_THEME_ID_SET, fallback.light),
+		dark: parseStringEnum(record.dark, GLANCE_THEME_ID_SET, fallback.dark),
+	};
 }
 
 function parseIntInRange(value: unknown, fallback: number, min: number, max: number): number {
@@ -188,7 +203,7 @@ export function normalizeConfig(raw: unknown): GlanceConfig {
 	return {
 		version: CONFIG_VERSION,
 		enabled: parseBool(record.enabled, defaults.enabled),
-		theme: parseStringEnum(record.theme, GLANCE_THEME_ID_SET, defaults.theme),
+		theme: parseThemePair(record.theme, defaults.theme),
 		icons: parseStringEnum(record.icons, ICON_MODES, defaults.icons),
 		editor: {
 			minContentRows: parseIntInRange(editor.minContentRows, defaults.editor.minContentRows, 2, 4),

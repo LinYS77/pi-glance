@@ -19,9 +19,9 @@ function precisionOf(config: unknown): ThroughputPrecision | undefined {
 
 const defaults = defaultConfig();
 
-assert.equal(defaults.version, 5, "Reply speed UX v2 adds throughput.precision, so CONFIG_VERSION should be 5");
-assert.equal(normalizeConfig({ version: 0 }).version, 5, "old raw versions should normalize to schema version 5");
-assert.equal(normalizeConfig({ version: 999 }).version, 5, "future raw versions should normalize to current schema version 5");
+assert.equal(defaults.version, 6, "light/dark theme pair migration bumps CONFIG_VERSION to 6");
+assert.equal(normalizeConfig({ version: 0 }).version, 6, "old raw versions should normalize to schema version 6");
+assert.equal(normalizeConfig({ version: 999 }).version, 6, "future raw versions should normalize to current schema version 6");
 assert.equal(defaults.throughput.precision, THROUGHPUT_PRECISION_DESCRIPTOR.defaultValue, "defaultConfig should use descriptor throughput precision default");
 assert.deepEqual((defaults as unknown as { throughput?: unknown }).throughput, { precision: THROUGHPUT_PRECISION_DESCRIPTOR.defaultValue }, "defaultConfig should include throughput.precision=auto");
 
@@ -118,7 +118,7 @@ assertSegments(
 	],
 	"schema v4 configs should preserve an explicitly enabled throughput segment and append other missing defaults after user order",
 );
-assert.equal(precisionOf(v4Config), 1, "schema v4 configs should migrate to v5 while preserving valid throughput precision if present");
+assert.equal(precisionOf(v4Config), 1, "schema v4 configs should migrate to v6 while preserving valid throughput precision if present");
 
 assertSegments(
 	normalizeConfig({
@@ -128,12 +128,12 @@ assertSegments(
 		],
 	}).segments,
 	segmentSummary(defaults),
-	"legacy/ambiguous segment lists without git should fall back to curated v5 defaults including enabled throughput",
+	"legacy/ambiguous segment lists without git should fall back to curated v6 defaults including enabled throughput",
 );
 
 const encoded = configToText(normalizeConfig({ throughput: { precision: 0 } }));
-assert.equal(JSON.parse(encoded).version, 5, "configToText should serialize schema version 5");
+assert.equal(JSON.parse(encoded).version, 6, "configToText should serialize schema version 6");
 assert.deepEqual(JSON.parse(encoded).throughput, { precision: 0 }, "configToText should serialize throughput precision");
-assert.deepEqual(configFromText(encoded), normalizeConfig({ throughput: { precision: 0 } }), "schema v5 config text should round-trip through configFromText/configToText");
+assert.deepEqual(configFromText(encoded), normalizeConfig({ throughput: { precision: 0 } }), "schema v6 config text should round-trip through configFromText/configToText");
 
 console.log("✓ throughput config checks passed");

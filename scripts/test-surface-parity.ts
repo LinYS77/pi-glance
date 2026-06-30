@@ -167,6 +167,14 @@ function previewBottom(state: GlanceState, config: GlanceConfig, width: number):
 	return previewFrame(state, config, width, ["Ask pi to improve the input surface..."], true).at(-1) ?? "";
 }
 
+function themeName(config: GlanceConfig): GlanceThemeName {
+	return config.theme.light;
+}
+
+function useTheme(config: GlanceConfig, theme: GlanceThemeName): void {
+	config.theme = { light: theme, dark: theme };
+}
+
 interface LegacySurfaceOptions {
 	contentLines?: string[];
 	focused?: boolean;
@@ -174,19 +182,19 @@ interface LegacySurfaceOptions {
 }
 
 function legacyBorder(config: GlanceConfig, text: string): string {
-	return fg(PALETTES[config.theme].border, text);
+	return fg(PALETTES[themeName(config)].border, text);
 }
 
 function legacyText(config: GlanceConfig, text: string): string {
-	return fg(PALETTES[config.theme].text, text);
+	return fg(PALETTES[themeName(config)].text, text);
 }
 
 function legacyTitle(config: GlanceConfig, text: string): string {
-	return fg(PALETTES[config.theme].title, text);
+	return fg(PALETTES[themeName(config)].title, text);
 }
 
 function legacyDim(config: GlanceConfig, text: string): string {
-	return fg(PALETTES[config.theme].dim, text);
+	return fg(PALETTES[themeName(config)].dim, text);
 }
 
 function legacyEditorBorder(config: GlanceConfig, focused: boolean, text: string): string {
@@ -284,7 +292,7 @@ for (const themeId of RENDERER_STYLE_PARITY_THEMES) {
 	for (const width of [32, 56, 120] as const) {
 		for (const focused of [true, false] as const) {
 			const config = defaultConfig();
-			config.theme = themeId;
+			useTheme(config, themeId);
 			config.editor.topMarginRows = width === 32 ? 0 : 1;
 			config.editor.minContentRows = 2;
 			onlySegments(config, ["context", "model"]);
@@ -304,12 +312,12 @@ for (const themeId of RENDERER_STYLE_PARITY_THEMES) {
 
 {
 	const lightConfig = defaultConfig();
-	lightConfig.theme = "light";
+	useTheme(lightConfig, "light");
 	lightConfig.editor.topMarginRows = 0;
 	lightConfig.editor.minContentRows = 2;
 	onlySegments(lightConfig, ["model"]);
 	const darkConfig = defaultConfig();
-	darkConfig.theme = "dark";
+	useTheme(darkConfig, "dark");
 	darkConfig.editor.topMarginRows = lightConfig.editor.topMarginRows;
 	darkConfig.editor.minContentRows = lightConfig.editor.minContentRows;
 	onlySegments(darkConfig, ["model"]);
@@ -323,11 +331,11 @@ for (const themeId of RENDERER_STYLE_PARITY_THEMES) {
 
 {
 	const config = defaultConfig();
-	config.theme = "dark";
+	useTheme(config, "dark");
 	config.editor.topMarginRows = 0;
 	config.editor.minContentRows = 2;
 	onlySegments(config, []);
-	const palette = PALETTES[config.theme];
+	const palette = PALETTES[themeName(config)];
 	const frame = renderInputSurface(dirtyState(), config, 56, {
 		contentLines: ["short", "Ask pi to improve the input surface with a long prompt that must be clipped"],
 		focused: true,
@@ -338,6 +346,23 @@ for (const themeId of RENDERER_STYLE_PARITY_THEMES) {
 	assert.ok(rendered.includes(fg(palette.dim, "› ")), "renderer adapter should preserve legacy focused-prefix dim styling bytes");
 	assert.ok(rendered.includes(fg(palette.text, "short")), "renderer adapter should preserve legacy content text styling bytes");
 	assert.ok(rendered.includes(fg(palette.dim, "…")), "renderer adapter should preserve legacy dim ellipsis bytes");
+}
+
+{
+	const config = defaultConfig();
+	config.theme = { light: "one-light", dark: "tokyo-night" };
+	config.editor.topMarginRows = 0;
+	config.editor.minContentRows = 2;
+	onlySegments(config, ["model"]);
+	const contentLines = ["short"];
+	const lightRendered = renderInputSurface(dirtyState(), config, 80, { contentLines, focused: true, ambientTone: "light" }).join("\n");
+	const darkRendered = renderInputSurface(dirtyState(), config, 80, { contentLines, focused: true, ambientTone: "dark" }).join("\n");
+	const unknownRendered = renderInputSurface(dirtyState(), config, 80, { contentLines, focused: true, ambientTone: "unknown" }).join("\n");
+	const defaultRendered = renderInputSurface(dirtyState(), config, 80, { contentLines, focused: true }).join("\n");
+	assert.ok(lightRendered.includes(fg(PALETTES["one-light"].border, "╭")), "renderer should use the light slot palette for ambient light");
+	assert.ok(darkRendered.includes(fg(PALETTES["tokyo-night"].border, "╭")), "renderer should use the dark slot palette for ambient dark");
+	assert.ok(unknownRendered.includes(fg(PALETTES["one-light"].border, "╭")), "renderer should use the light slot palette for ambient unknown");
+	assert.ok(defaultRendered.includes(fg(PALETTES["one-light"].border, "╭")), "renderer should default missing ambient tone to the light slot palette");
 }
 
 const EDITOR_STYLE_PARITY_THEMES = ["light", "dark", "high-contrast-light"] as const satisfies readonly GlanceThemeName[];
@@ -351,7 +376,7 @@ for (const themeId of EDITOR_STYLE_PARITY_THEMES) {
 	for (const width of [56, 120] as const) {
 		for (const focused of [true, false] as const) {
 			const config = defaultConfig();
-			config.theme = themeId;
+			useTheme(config, themeId);
 			config.editor.topMarginRows = 0;
 			config.editor.minContentRows = 2;
 			onlySegments(config, ["model"]);
@@ -385,14 +410,14 @@ for (const themeId of EDITOR_STYLE_PARITY_THEMES) {
 {
 	const state = editorStyleState;
 	const config = defaultConfig();
-	config.theme = "light";
+	useTheme(config, "light");
 	config.editor.topMarginRows = 0;
 	onlySegments(config, ["model"]);
 	const editor = makeLiveEditor(state, config, true);
 	editor.setText("cache check");
 	const lightTop = rawTopBorder(editor.render(120));
 	assert.ok(lightTop.includes(fg(PALETTES.light.segments.model.fg, "ai GPT 5.5")), "initial live status should use light model bytes");
-	config.theme = "dark";
+	useTheme(config, "dark");
 	const darkTop = rawTopBorder(editor.render(120));
 	assert.ok(darkTop.includes(fg(PALETTES.dark.segments.model.fg, "ai GPT 5.5")), "live status cache should invalidate when style cacheKey changes on the same config object");
 	assert.equal(darkTop.includes(fg(PALETTES.light.segments.model.fg, "ai GPT 5.5")), false, "live status cache should not reuse stale light ANSI after theme/cacheKey change");
@@ -401,7 +426,33 @@ for (const themeId of EDITOR_STYLE_PARITY_THEMES) {
 {
 	const state = editorStyleState;
 	const config = defaultConfig();
-	config.theme = "light";
+	config.theme = { light: "light", dark: "dark" };
+	config.editor.topMarginRows = 0;
+	onlySegments(config, ["model"]);
+	let ambientTone: "light" | "dark" = "light";
+	const editor = new GlanceEditor(
+		{ terminal: { rows: 40 }, requestRender: () => undefined } as unknown as TUI,
+		theme,
+		keybindings,
+		() => state,
+		() => config,
+		undefined,
+		{ renderStyleContext: { getAmbientTone: () => ambientTone } },
+	);
+	editor.focused = true;
+	editor.setText("cache check");
+	const lightTop = rawTopBorder(editor.render(120));
+	assert.ok(lightTop.includes(fg(PALETTES.light.segments.model.fg, "ai GPT 5.5")), "live editor should evaluate getAmbientTone during render for light status bytes");
+	ambientTone = "dark";
+	const darkTop = rawTopBorder(editor.render(120));
+	assert.ok(darkTop.includes(fg(PALETTES.dark.segments.model.fg, "ai GPT 5.5")), "live editor should re-evaluate getAmbientTone on later renders and invalidate cache by style cacheKey");
+	assert.equal(darkTop.includes(fg(PALETTES.light.segments.model.fg, "ai GPT 5.5")), false, "live editor should not reuse stale light status bytes after ambient tone changes");
+}
+
+{
+	const state = editorStyleState;
+	const config = defaultConfig();
+	useTheme(config, "light");
 	config.editor.topMarginRows = 0;
 	onlySegments(config, ["model"]);
 	const firstContext = createPiRenderStyleContext(ansiPiTheme("editor-pi-a", 31));

@@ -11,7 +11,7 @@ import {
 	TOKENS_DISPLAY_MODE_VALUES,
 	WORKSPACE_LABEL_MODE_VALUES,
 } from "../config-options.js";
-import { configFromText, configToText, defaultConfig, normalizeConfig } from "../config.js";
+import { cloneConfig, configFromText, configToText, defaultConfig, normalizeConfig } from "../config.js";
 import { THROUGHPUT_PRECISION_DESCRIPTOR } from "../config-schema.js";
 import { GLANCE_THEME_IDS } from "../themes.js";
 import type { GlanceConfig, SegmentConfig } from "../types.js";
@@ -32,13 +32,53 @@ for (const raw of [undefined, null, false, true, 0, 1, "", "{}", []]) {
 }
 
 assert.equal(defaults.editor.topMarginRows, 1, "default editor top margin rows should preserve the one-row breathing room");
-assert.equal(normalizeConfig({ version: 0 }).version, 5, "old raw version should normalize to current schema version");
-assert.equal(normalizeConfig({ version: 999 }).version, 5, "future raw version should normalize to current schema version");
+assert.equal(defaults.version, 6, "light/dark theme pair migration should bump CONFIG_VERSION to 6");
+assert.equal(normalizeConfig({ version: 0 }).version, 6, "old raw version should normalize to current schema version");
+assert.equal(normalizeConfig({ version: 999 }).version, 6, "future raw version should normalize to current schema version");
+assert.deepEqual(defaults.theme, { light: "light", dark: "dark" }, "default theme pair should use light for light tone and dark for dark tone");
 assert.equal(defaults.throughput.precision, THROUGHPUT_PRECISION_DESCRIPTOR.defaultValue, "default config throughput precision should come from descriptor default");
 assert.deepEqual((defaults as unknown as { throughput?: unknown }).throughput, { precision: THROUGHPUT_PRECISION_DESCRIPTOR.defaultValue }, "default config should include throughput.precision=auto");
 
 for (const theme of GLANCE_THEME_IDS) {
-	assert.equal(normalizeConfig({ theme }).theme, theme, `${theme} should normalize as a valid theme`);
+	assert.deepEqual(normalizeConfig({ theme }).theme, { light: theme, dark: theme }, `${theme} string theme should migrate to a same/same pair`);
+}
+
+assert.deepEqual(
+	normalizeConfig({ theme: { light: "catppuccin-latte", dark: "tokyo-night" } }).theme,
+	{ light: "catppuccin-latte", dark: "tokyo-night" },
+	"object theme pair should preserve independent valid light/dark slots",
+);
+assert.deepEqual(
+	normalizeConfig({ theme: { light: "one-light" } }).theme,
+	{ light: "one-light", dark: "dark" },
+	"object theme pair should fall back only the missing dark slot",
+);
+assert.deepEqual(
+	normalizeConfig({ theme: { dark: "nord" } }).theme,
+	{ light: "light", dark: "nord" },
+	"object theme pair should fall back only the missing light slot",
+);
+assert.deepEqual(
+	normalizeConfig({ theme: { light: "dracula", dark: "catppuccin-mocha" } }).theme,
+	{ light: "light", dark: "catppuccin-mocha" },
+	"object theme pair should independently fall back an invalid light slot",
+);
+assert.deepEqual(
+	normalizeConfig({ theme: { light: "solarized-light", dark: "dracula" } }).theme,
+	{ light: "solarized-light", dark: "dark" },
+	"object theme pair should independently fall back an invalid dark slot",
+);
+assert.deepEqual(normalizeConfig({ theme: "dracula" }).theme, defaults.theme, "invalid old string theme should fall back to the default pair");
+assert.deepEqual(normalizeConfig({ theme: null }).theme, defaults.theme, "non-object theme should fall back to the default pair");
+assert.deepEqual(normalizeConfig({}).theme, defaults.theme, "missing theme should fall back to the default pair");
+
+{
+	const source = normalizeConfig({ theme: { light: "one-light", dark: "tokyo-night" } });
+	const cloned = cloneConfig(source);
+	assert.deepEqual(cloned, source, "cloneConfig should preserve the theme pair");
+	assert.notEqual(cloned.theme, source.theme, "cloneConfig should deep-clone the theme pair object");
+	cloned.theme.light = "dark";
+	assert.equal(source.theme.light, "one-light", "mutating cloned theme pair should not mutate the source config");
 }
 
 for (const icons of ICON_MODE_VALUES) {
@@ -133,9 +173,9 @@ const userConfig = normalizeConfig({
 assert.deepEqual(
 	userConfig,
 	{
-		version: 5,
+		version: 6,
 		enabled: false,
-		theme: "tokyo-night",
+		theme: { light: "tokyo-night", dark: "tokyo-night" },
 		icons: "nerd",
 		editor: {
 			minContentRows: 4,
@@ -188,24 +228,23 @@ assert.deepEqual(
 );
 
 assert.equal(normalizeConfig({ icons: "nerd" }).icons, "nerd", "saved icons: nerd should remain nerd");
-assert.equal(normalizeConfig({ enabled: false, theme: "dark" }).enabled, false, "missing nested groups should not reset known top-level booleans");
-assert.equal(normalizeConfig({ enabled: false, theme: "dark" }).theme, "dark", "missing nested groups should not reset known top-level enums");
-assert.deepEqual(normalizeConfig({ enabled: false, theme: "dark" }).editor, defaults.editor, "missing editor group should fill defaults");
-assert.deepEqual(normalizeConfig({ enabled: false, theme: "dark" }).display, defaults.display, "missing display group should fill defaults");
-assert.deepEqual(normalizeConfig({ enabled: false, theme: "dark" }).model, defaults.model, "missing model group should fill defaults");
-assert.deepEqual(normalizeConfig({ enabled: false, theme: "dark" }).git, defaults.git, "missing git group should fill defaults");
-assert.deepEqual(normalizeConfig({ enabled: false, theme: "dark" }).context, defaults.context, "missing context group should fill defaults");
-assert.deepEqual(normalizeConfig({ enabled: false, theme: "dark" }).cost, defaults.cost, "missing cost group should fill defaults");
-assert.deepEqual(normalizeConfig({ enabled: false, theme: "dark" }).tokens, defaults.tokens, "missing tokens group should fill defaults");
-assert.deepEqual((normalizeConfig({ enabled: false, theme: "dark" }) as unknown as { throughput: unknown }).throughput, { precision: "auto" }, "missing throughput group should fill defaults");
+const sparseConfig = normalizeConfig({ enabled: false, theme: "dark" });
+assert.equal(sparseConfig.enabled, false, "missing nested groups should not reset known top-level booleans");
+assert.deepEqual(sparseConfig.theme, { light: "dark", dark: "dark" }, "missing nested groups should migrate known top-level old theme strings");
+assert.deepEqual(sparseConfig.editor, defaults.editor, "missing editor group should fill defaults");
+assert.deepEqual(sparseConfig.display, defaults.display, "missing display group should fill defaults");
+assert.deepEqual(sparseConfig.model, defaults.model, "missing model group should fill defaults");
+assert.deepEqual(sparseConfig.git, defaults.git, "missing git group should fill defaults");
+assert.deepEqual(sparseConfig.context, defaults.context, "missing context group should fill defaults");
+assert.deepEqual(sparseConfig.cost, defaults.cost, "missing cost group should fill defaults");
+assert.deepEqual(sparseConfig.tokens, defaults.tokens, "missing tokens group should fill defaults");
+assert.deepEqual((sparseConfig as unknown as { throughput: unknown }).throughput, { precision: "auto" }, "missing throughput group should fill defaults");
 
-assert.equal(normalizeConfig({ theme: "catppuccin-macchiato" }).theme, "catppuccin-macchiato", "curated Catppuccin Macchiato theme should normalize as valid");
-assert.equal(normalizeConfig({ theme: "high-contrast-light" }).theme, "high-contrast-light", "new counterpart High Contrast Light theme should normalize as valid");
-assert.equal(normalizeConfig({ theme: "one-light" }).theme, "one-light", "new counterpart One Light theme should normalize as valid");
-assert.equal(normalizeConfig({ theme: "kanagawa-lotus" }).theme, "kanagawa-lotus", "new counterpart Kanagawa Lotus theme should normalize as valid");
-assert.equal(normalizeConfig({ theme: "everforest-light" }).theme, "everforest-light", "new counterpart Everforest Light theme should normalize as valid");
-assert.equal(normalizeConfig({ theme: "dracula" }).theme, defaults.theme, "unknown theme should fall back to default theme");
-assert.equal(normalizeConfig({ theme: null }).theme, defaults.theme, "non-string theme should fall back to default theme");
+assert.deepEqual(normalizeConfig({ theme: "catppuccin-macchiato" }).theme, { light: "catppuccin-macchiato", dark: "catppuccin-macchiato" }, "curated Catppuccin Macchiato theme should normalize as valid old string migration");
+assert.deepEqual(normalizeConfig({ theme: "high-contrast-light" }).theme, { light: "high-contrast-light", dark: "high-contrast-light" }, "new counterpart High Contrast Light theme should normalize as valid old string migration");
+assert.deepEqual(normalizeConfig({ theme: "one-light" }).theme, { light: "one-light", dark: "one-light" }, "new counterpart One Light theme should normalize as valid old string migration");
+assert.deepEqual(normalizeConfig({ theme: "kanagawa-lotus" }).theme, { light: "kanagawa-lotus", dark: "kanagawa-lotus" }, "new counterpart Kanagawa Lotus theme should normalize as valid old string migration");
+assert.deepEqual(normalizeConfig({ theme: "everforest-light" }).theme, { light: "everforest-light", dark: "everforest-light" }, "new counterpart Everforest Light theme should normalize as valid old string migration");
 assert.equal(normalizeConfig({ icons: "emoji" }).icons, defaults.icons, "unknown icon mode should fall back to default icons");
 assert.equal(normalizeConfig({ icons: null }).icons, defaults.icons, "non-string icon mode should fall back to default icons");
 assert.equal(normalizeConfig({ display: { showProvider: "sometimes" } }).display.showProvider, defaults.display.showProvider, "unknown provider mode should fall back to default");

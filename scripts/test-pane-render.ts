@@ -307,7 +307,7 @@ press(activeBrowserSavePane.component, "\x1b[B");
 press(activeBrowserSavePane.component, "s");
 const activeBrowserSaveResult = activeBrowserSavePane.done();
 assert.deepEqual((activeBrowserSaveResult as { action?: string; config?: GlanceConfig }).action, "save", "S should save directly from an active theme browser preview");
-assert.equal((activeBrowserSaveResult as { config: GlanceConfig }).config.theme, "dark", "active browser save should include the previewed draft theme");
+assert.equal((activeBrowserSaveResult as { config: GlanceConfig }).config.theme.light, "dark", "active browser save should include the previewed draft theme");
 
 const activeBrowserCancelPane = await makePane();
 press(activeBrowserCancelPane.component, "\x1b[C");
@@ -355,7 +355,7 @@ assertThemeRow(acceptedThemeText, "Dark");
 press(themePane.component, "s");
 const themeSaveResult = themePane.done();
 assert.deepEqual((themeSaveResult as { action?: string; config?: GlanceConfig }).action, "save", "S should save accepted browser theme through existing path");
-assert.equal((themeSaveResult as { config: GlanceConfig }).config.theme, "dark", "saved browser config should include the accepted theme");
+assert.equal((themeSaveResult as { config: GlanceConfig }).config.theme.light, "dark", "saved browser config should include the accepted theme");
 
 const restoreBrowserPane = await makePane();
 press(restoreBrowserPane.component, "\x1b[C");

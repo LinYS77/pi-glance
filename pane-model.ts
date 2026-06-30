@@ -145,6 +145,14 @@ function result(model: PaneModelState, requestRender: boolean, completion?: Pane
 	return completion ? { model, requestRender, completion } : { model, requestRender };
 }
 
+function configLightTheme(config: GlanceConfig): GlanceThemeName {
+	return config.theme.light;
+}
+
+function withConfigLightTheme(config: GlanceConfig, theme: GlanceThemeName): GlanceConfig {
+	return { ...config, theme: { ...config.theme, light: theme } };
+}
+
 function themeBrowserHelpShortcuts(): HelpShortcut[] {
 	return [
 		{ key: "↑↓", label: "preview" },
@@ -208,12 +216,12 @@ function closeThemeBrowser(model: PaneModelState, draft: GlanceConfig, status: s
 }
 
 function acceptThemeBrowser(model: PaneModelState): PaneModelState {
-	return closeThemeBrowser(model, model.draft, `Theme → ${getThemeLabel(model.draft.theme)}. Press S to save.`);
+	return closeThemeBrowser(model, model.draft, `Theme → ${getThemeLabel(configLightTheme(model.draft))}. Press S to save.`);
 }
 
 function restoreThemeBrowser(model: PaneModelState): PaneModelState {
 	if (!model.themeBrowser) return model;
-	return closeThemeBrowser(model, { ...model.draft, theme: model.themeBrowser.restoreTheme }, "Theme preview discarded.");
+	return closeThemeBrowser(model, withConfigLightTheme(model.draft, model.themeBrowser.restoreTheme), "Theme preview discarded.");
 }
 
 function moveThemeBrowserHighlight(model: PaneModelState, direction: PaneMoveDirection): PaneModelState {
@@ -224,9 +232,9 @@ function moveThemeBrowserHighlight(model: PaneModelState, direction: PaneMoveDir
 	const count = getThemeCount();
 	const step = direction === "up" ? -1 : 1;
 	const highlightedThemeIndex = (model.themeBrowser.highlightedThemeIndex + step + count) % count;
-	const theme = getThemeIdByIndex(highlightedThemeIndex) ?? model.draft.theme;
+	const theme = getThemeIdByIndex(highlightedThemeIndex) ?? configLightTheme(model.draft);
 	return withModel(model, {
-		draft: { ...model.draft, theme },
+		draft: withConfigLightTheme(model.draft, theme),
 		themeBrowser: {
 			...model.themeBrowser,
 			highlightedThemeIndex,
@@ -311,12 +319,12 @@ function selectedRow(model: PaneModelState): SettingsRow | undefined {
 }
 
 function openThemeBrowser(model: PaneModelState): PaneModelState {
-	const highlightedThemeIndex = getThemeIndex(model.draft.theme);
+	const highlightedThemeIndex = getThemeIndex(configLightTheme(model.draft));
 	return withModel(model, {
 		subview: "themeBrowser",
 		themeBrowser: {
 			highlightedThemeIndex,
-			restoreTheme: model.draft.theme,
+			restoreTheme: configLightTheme(model.draft),
 			returnFocus: model.focus,
 			returnCategoryIndex: model.categoryIndex,
 			returnSettingIndex: model.settingIndex,
@@ -383,14 +391,16 @@ export function paneIsDirty(model: PaneModelState): boolean {
 
 function createThemeBrowserViewModel(model: PaneModelState): ThemeBrowserViewModel | undefined {
 	if (model.subview !== "themeBrowser" || !model.themeBrowser) return undefined;
+	const savedTheme = configLightTheme(model.initial);
+	const previewTheme = configLightTheme(model.draft);
 	return {
 		highlightedThemeIndex: model.themeBrowser.highlightedThemeIndex,
-		savedTheme: model.initial.theme,
-		savedLabel: getThemeLabel(model.initial.theme),
+		savedTheme,
+		savedLabel: getThemeLabel(savedTheme),
 		restoreTheme: model.themeBrowser.restoreTheme,
 		restoreLabel: getThemeLabel(model.themeBrowser.restoreTheme),
-		previewTheme: model.draft.theme,
-		previewLabel: getThemeLabel(model.draft.theme),
+		previewTheme,
+		previewLabel: getThemeLabel(previewTheme),
 		themes: getThemeCatalog().map((theme, index) => ({
 			id: theme.id,
 			label: theme.label,
@@ -402,9 +412,9 @@ function createThemeBrowserViewModel(model: PaneModelState): ThemeBrowserViewMod
 			description: theme.description,
 			detailDescription: theme.detailDescription,
 			selected: index === model.themeBrowser?.highlightedThemeIndex,
-			previewed: theme.id === model.draft.theme,
+			previewed: theme.id === previewTheme,
 			restored: theme.id === model.themeBrowser?.restoreTheme,
-			saved: theme.id === model.initial.theme,
+			saved: theme.id === savedTheme,
 		})),
 	};
 }

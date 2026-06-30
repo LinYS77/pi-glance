@@ -148,11 +148,11 @@ export function getSettingsRows(config: GlanceConfig, categoryId: SettingsCatego
 				cycleRow(
 					"general.theme",
 					"Theme",
-					getThemeLabel(config.theme),
+					getThemeLabel(config.theme.light),
 					"Switch the palette.",
 					(draft) =>
 						withConfig(draft, (next) => {
-							next.theme = nextIn(next.theme, GLANCE_THEME_IDS);
+							next.theme.light = nextIn(next.theme.light, GLANCE_THEME_IDS);
 						}),
 					{ opensSubview: "themeBrowser" },
 				),

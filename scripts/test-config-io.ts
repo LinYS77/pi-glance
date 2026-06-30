@@ -47,7 +47,7 @@ async function main(): Promise<void> {
 
 		const nextConfig = normalizeConfig({
 			enabled: false,
-			theme: "dark",
+			theme: { light: "one-light", dark: "tokyo-night" },
 			icons: "nerd",
 			display: { adaptive: false, workspaceLabel: "path", showProvider: "always" },
 			git: { shaMode: "always", pollIntervalMs: 30000 },
@@ -56,6 +56,7 @@ async function main(): Promise<void> {
 		await saveConfig(nextConfig);
 		const savedText = await readFile(configPath, "utf8");
 		assert.equal(savedText, configToText(nextConfig), "saveConfig should write configToText output exactly");
+		assert.deepEqual(JSON.parse(savedText).theme, { light: "one-light", dark: "tokyo-night" }, "saveConfig should serialize the v6 theme pair shape");
 		assert.deepEqual(configFromText(savedText), normalizeConfig(nextConfig), "configFromText should round-trip saveConfig output");
 		assert.deepEqual(loadConfigSync(), normalizeConfig(nextConfig), "loadConfigSync should round-trip saved config");
 		assert.deepEqual(await loadConfig(), normalizeConfig(nextConfig), "async loadConfig should round-trip saved config");

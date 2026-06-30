@@ -6,7 +6,7 @@ import { PALETTES, fg } from "../palette.js";
 import { resolveBuiltInGlanceStyles, type GlanceRenderStyleContext } from "../theme-adapter.js";
 import { GLANCE_THEME_IDS } from "../themes.js";
 import { testState } from "./helpers.js";
-import type { GlanceConfig, GlanceState, SegmentId } from "../types.js";
+import type { GlanceConfig, GlanceState, GlanceThemeName, SegmentId } from "../types.js";
 
 type RenderGlanceLine = (state: GlanceState, config: GlanceConfig, width: number, providerCount?: number, styleContext?: GlanceRenderStyleContext) => string;
 
@@ -27,6 +27,10 @@ function configWithSegments(ids: SegmentId[], mutate?: (config: GlanceConfig) =>
 	config.segments = ids.map((id) => ({ id, enabled: true }));
 	mutate?.(config);
 	return config;
+}
+
+function useTheme(config: GlanceConfig, theme: GlanceThemeName): void {
+	config.theme = { light: theme, dark: theme };
 }
 
 function plainLine(
@@ -94,7 +98,7 @@ for (const themeId of GLANCE_THEME_IDS) {
 	const palette = PALETTES[themeId];
 	for (const { id, state, text } of singleSegmentParityCases) {
 		const config = configWithSegments([id], (next) => {
-			next.theme = themeId;
+			useTheme(next, themeId);
 		});
 		assert.equal(
 			renderGlanceLine(state, config, 120, state.providers.availableCount),
@@ -106,13 +110,57 @@ for (const themeId of GLANCE_THEME_IDS) {
 
 {
 	const config = configWithSegments(["model"], (next) => {
-		next.theme = "light";
+		useTheme(next, "light");
 	});
 	const darkStyles = resolveBuiltInGlanceStyles("dark");
 	assert.equal(
 		renderGlanceLine(modelState(1), config, 120, 1, { styles: darkStyles }),
 		`${fg(PALETTES.dark.segments.model.fg, "ai GPT 5.5")}${RESET}`,
 		"status-line should honor an injected shared style context instead of resolving config.theme independently",
+	);
+}
+
+{
+	const config = configWithSegments(["model"], (next) => {
+		next.theme = { light: "one-light", dark: "tokyo-night" };
+	});
+	assert.equal(
+		renderGlanceLine(modelState(1), config, 120, 1, { ambientTone: "light" }),
+		`${fg(PALETTES["one-light"].segments.model.fg, "ai GPT 5.5")}${RESET}`,
+		"status-line should resolve a theme pair through the light slot for ambient light",
+	);
+	assert.equal(
+		renderGlanceLine(modelState(1), config, 120, 1, { ambientTone: "dark" }),
+		`${fg(PALETTES["tokyo-night"].segments.model.fg, "ai GPT 5.5")}${RESET}`,
+		"status-line should resolve a theme pair through the dark slot for ambient dark",
+	);
+	assert.equal(
+		renderGlanceLine(modelState(1), config, 120, 1, { ambientTone: "unknown" }),
+		`${fg(PALETTES["one-light"].segments.model.fg, "ai GPT 5.5")}${RESET}`,
+		"status-line should resolve a theme pair through the light slot for ambient unknown",
+	);
+	assert.equal(
+		renderGlanceLine(modelState(1), config, 120, 1),
+		`${fg(PALETTES["one-light"].segments.model.fg, "ai GPT 5.5")}${RESET}`,
+		"status-line should default missing ambient tone to the light slot",
+	);
+	let ambientTone: "light" | "dark" = "light";
+	assert.equal(
+		renderGlanceLine(modelState(1), config, 120, 1, { getAmbientTone: () => ambientTone }),
+		`${fg(PALETTES["one-light"].segments.model.fg, "ai GPT 5.5")}${RESET}`,
+		"status-line should call getAmbientTone lazily for light output",
+	);
+	ambientTone = "dark";
+	assert.equal(
+		renderGlanceLine(modelState(1), config, 120, 1, { getAmbientTone: () => ambientTone }),
+		`${fg(PALETTES["tokyo-night"].segments.model.fg, "ai GPT 5.5")}${RESET}`,
+		"status-line should call getAmbientTone lazily for dark output",
+	);
+	const overrideStyles = resolveBuiltInGlanceStyles("dark");
+	assert.equal(
+		renderGlanceLine(modelState(1), config, 120, 1, { styles: overrideStyles, ambientTone: "light" }),
+		`${fg(PALETTES.dark.segments.model.fg, "ai GPT 5.5")}${RESET}`,
+		"status-line explicit styles override should win over ambient tone selection",
 	);
 }
 
@@ -124,7 +172,7 @@ for (const themeId of ["light", "dark", "high-contrast-light"] as const) {
 		120,
 		1,
 		(config) => {
-			config.theme = themeId;
+			useTheme(config, themeId);
 			config.context.display = "percent";
 		},
 	);
@@ -139,7 +187,7 @@ for (const themeId of ["light", "dark"] as const) {
 	const palette = PALETTES[themeId];
 	const state = modelState(2);
 	const config = configWithSegments(["model"], (next) => {
-		next.theme = themeId;
+		useTheme(next, themeId);
 		next.display.showProvider = "always";
 	});
 	const width = 12;

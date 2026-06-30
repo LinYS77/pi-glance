@@ -362,9 +362,9 @@ const throughputRows = assertRows(config, "throughput", [
 
 assert.equal(rowById(generalRows, "general.enabled").apply!(config).enabled, false, "general enabled should toggle off");
 assert.equal(rowById(generalRows, "general.theme").opensSubview, "themeBrowser", "theme row should declare the theme browser subview as its activation target");
-assert.equal(rowById(generalRows, "general.theme").apply!(config).theme, GLANCE_THEMES[1]!.id, "theme row apply should preserve existing draft cycle behavior for model-owned callers");
+assert.equal(rowById(generalRows, "general.theme").apply!(config).theme.light, GLANCE_THEMES[1]!.id, "theme row apply should preserve existing draft cycle behavior for model-owned callers");
 assert.equal(
-	getSettingsRows({ ...config, theme: "catppuccin-mocha" }, "general").find((row) => row.id === "general.theme")?.value,
+	getSettingsRows({ ...config, theme: { ...config.theme, light: "catppuccin-mocha" } }, "general").find((row) => row.id === "general.theme")?.value,
 	"Catppuccin Mocha",
 	"theme row should display friendly theme label",
 );
