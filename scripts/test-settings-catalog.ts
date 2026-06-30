@@ -229,13 +229,6 @@ const generalRows = assertRows(config, "general", [
 		kind: "cycle",
 	},
 	{
-		id: "general.adaptiveWidth",
-		label: "Adaptive width",
-		value: "on",
-		hint: "Hide later segments first when space is tight.",
-		kind: "toggle",
-	},
-	{
 		id: "general.workspaceLabel",
 		label: "Workspace label",
 		value: "name",
@@ -419,7 +412,7 @@ assert.equal(
 assert.equal(rowById(generalRows, "general.icons").apply!(config).icons, "nerd", "icons should cycle plain -> nerd");
 assert.equal(rowById(generalRows, "general.minInputRows").apply!(config).editor.minContentRows, 4, "min input rows should cycle 3 -> 4");
 assert.equal(rowById(generalRows, "general.topMarginRows").apply!(config).editor.topMarginRows, 2, "top spacing should cycle 1 row -> 2 rows");
-assert.equal(rowById(generalRows, "general.adaptiveWidth").apply!(config).display.adaptive, false, "adaptive width should toggle off");
+assert.equal(generalRows.some((row) => row.id === "general.adaptiveWidth"), false, "adaptive width should be always-on and absent from /glance");
 assert.equal(rowById(generalRows, "general.workspaceLabel").apply!(config).display.workspaceLabel, "smart", "workspace label should cycle name -> smart");
 
 assert.equal(rowById(gitRows, "git.enabled").apply!(config).segments.find((segment) => segment.id === "git")?.enabled, false, "git enabled should toggle off");

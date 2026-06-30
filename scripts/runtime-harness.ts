@@ -101,7 +101,6 @@ export function nextEnabledConfig(config = defaultConfig()): GlanceConfig {
 	const next = cloneConfig(config);
 	next.enabled = true;
 	next.git.pollIntervalMs = config.git.pollIntervalMs + 1234;
-	next.display.adaptive = !config.display.adaptive;
 	return next;
 }
 

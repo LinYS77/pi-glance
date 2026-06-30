@@ -203,11 +203,6 @@ export function getSettingsRows(config: GlanceConfig, categoryId: SettingsCatego
 						next.editor.topMarginRows = nextNumber(next.editor.topMarginRows, EDITOR_TOP_MARGIN_ROW_VALUES);
 					}),
 				),
-				toggleRow("general.adaptiveWidth", "Adaptive width", config.display.adaptive, "Hide later segments first when space is tight.", (draft) =>
-					withConfig(draft, (next) => {
-						next.display.adaptive = !next.display.adaptive;
-					}),
-				),
 				cycleRow("general.workspaceLabel", "Workspace label", config.display.workspaceLabel, "Show name, smart ~/ path, or safe path.", (draft) =>
 					withConfig(draft, (next) => {
 						next.display.workspaceLabel = nextIn(next.display.workspaceLabel, WORKSPACE_LABEL_MODE_VALUES);

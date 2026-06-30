@@ -56,7 +56,8 @@ async function main(): Promise<void> {
 		await saveConfig(nextConfig);
 		const savedText = await readFile(configPath, "utf8");
 		assert.equal(savedText, configToText(nextConfig), "saveConfig should write configToText output exactly");
-		assert.deepEqual(JSON.parse(savedText).theme, { light: "one-light", dark: "tokyo-night" }, "saveConfig should serialize the v6 theme pair shape");
+		assert.deepEqual(JSON.parse(savedText).theme, { light: "one-light", dark: "tokyo-night" }, "saveConfig should serialize the current theme pair shape");
+		assert.equal("adaptive" in JSON.parse(savedText).display, false, "saveConfig should drop the legacy adaptive width setting because fitting is always on");
 		assert.deepEqual(configFromText(savedText), normalizeConfig(nextConfig), "configFromText should round-trip saveConfig output");
 		assert.deepEqual(loadConfigSync(), normalizeConfig(nextConfig), "loadConfigSync should round-trip saved config");
 		assert.deepEqual(await loadConfig(), normalizeConfig(nextConfig), "async loadConfig should round-trip saved config");

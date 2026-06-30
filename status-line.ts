@@ -37,7 +37,7 @@ function renderEnabledSegments(
 	providerCount = 1,
 	styleContext: GlanceRenderStyleContext = {},
 ): { styles: ResolvedGlanceStyles; segments: SegmentRenderResult[] } {
-	const widthMode = config.display.adaptive ? widthModeFor(width) : "full";
+	const widthMode = widthModeFor(width);
 	const styles = resolveGlanceRenderStyles(config.theme, styleContext);
 	const icons = ICONS[config.icons];
 	const ctx: SegmentRenderContext = {

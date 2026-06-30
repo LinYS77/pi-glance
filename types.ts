@@ -27,7 +27,6 @@ export interface SegmentConfig {
 }
 
 interface DisplayConfig {
-	adaptive: boolean;
 	showProvider: "auto" | "always" | "never";
 	workspaceLabel: WorkspaceLabelMode;
 }
@@ -65,7 +64,7 @@ interface ThroughputConfig {
 }
 
 export interface GlanceConfig {
-	version: 6;
+	version: 7;
 	enabled: boolean;
 	theme: GlanceThemePair;
 	icons: IconMode;

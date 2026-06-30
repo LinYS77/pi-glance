@@ -32,9 +32,9 @@ for (const raw of [undefined, null, false, true, 0, 1, "", "{}", []]) {
 }
 
 assert.equal(defaults.editor.topMarginRows, 1, "default editor top margin rows should preserve the one-row breathing room");
-assert.equal(defaults.version, 6, "light/dark theme pair migration should bump CONFIG_VERSION to 6");
-assert.equal(normalizeConfig({ version: 0 }).version, 6, "old raw version should normalize to current schema version");
-assert.equal(normalizeConfig({ version: 999 }).version, 6, "future raw version should normalize to current schema version");
+assert.equal(defaults.version, 7, "removing the adaptive-width config switch should bump CONFIG_VERSION to 7");
+assert.equal(normalizeConfig({ version: 0 }).version, 7, "old raw version should normalize to current schema version");
+assert.equal(normalizeConfig({ version: 999 }).version, 7, "future raw version should normalize to current schema version");
 assert.deepEqual(defaults.theme, { light: "light", dark: "dark" }, "default theme pair should use light for light tone and dark for dark tone");
 assert.equal(defaults.throughput.precision, THROUGHPUT_PRECISION_DESCRIPTOR.defaultValue, "default config throughput precision should come from descriptor default");
 assert.deepEqual((defaults as unknown as { throughput?: unknown }).throughput, { precision: THROUGHPUT_PRECISION_DESCRIPTOR.defaultValue }, "default config should include throughput.precision=auto");
@@ -173,7 +173,7 @@ const userConfig = normalizeConfig({
 assert.deepEqual(
 	userConfig,
 	{
-		version: 6,
+		version: 7,
 		enabled: false,
 		theme: { light: "tokyo-night", dark: "tokyo-night" },
 		icons: "nerd",
@@ -182,7 +182,6 @@ assert.deepEqual(
 			topMarginRows: 2,
 		},
 		display: {
-			adaptive: false,
 			showProvider: "always",
 			workspaceLabel: "path",
 		},
@@ -233,6 +232,7 @@ assert.equal(sparseConfig.enabled, false, "missing nested groups should not rese
 assert.deepEqual(sparseConfig.theme, { light: "dark", dark: "dark" }, "missing nested groups should migrate known top-level old theme strings");
 assert.deepEqual(sparseConfig.editor, defaults.editor, "missing editor group should fill defaults");
 assert.deepEqual(sparseConfig.display, defaults.display, "missing display group should fill defaults");
+assert.deepEqual(normalizeConfig({ display: { adaptive: false } }).display, defaults.display, "legacy adaptive width setting should be ignored because fitting is always on");
 assert.deepEqual(sparseConfig.model, defaults.model, "missing model group should fill defaults");
 assert.deepEqual(sparseConfig.git, defaults.git, "missing git group should fill defaults");
 assert.deepEqual(sparseConfig.context, defaults.context, "missing context group should fill defaults");

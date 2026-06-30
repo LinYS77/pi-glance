@@ -34,7 +34,7 @@ import type {
 
 const CONFIG_PATH = join(getAgentDir(), "pi-glance", "config.json");
 // CONFIG_VERSION is the on-disk config schema version, not the npm package version.
-const CONFIG_VERSION = 6 as const;
+const CONFIG_VERSION = 7 as const;
 
 const ICON_MODES = new Set<IconMode>(ICON_MODE_VALUES);
 const PROVIDER_MODES = new Set<GlanceConfig["display"]["showProvider"]>(PROVIDER_DISPLAY_MODE_VALUES);
@@ -57,7 +57,6 @@ export function defaultConfig(): GlanceConfig {
 			topMarginRows: 1,
 		},
 		display: {
-			adaptive: true,
 			showProvider: "auto",
 			workspaceLabel: "name",
 		},
@@ -210,7 +209,6 @@ export function normalizeConfig(raw: unknown): GlanceConfig {
 			topMarginRows: parseIntInRange(editor.topMarginRows, defaults.editor.topMarginRows, 0, 2) as EditorTopMarginRows,
 		},
 		display: {
-			adaptive: parseBool(display.adaptive, defaults.display.adaptive),
 			showProvider: parseStringEnum(display.showProvider, PROVIDER_MODES, defaults.display.showProvider),
 			workspaceLabel: parseStringEnum(display.workspaceLabel, WORKSPACE_LABEL_MODES, defaults.display.workspaceLabel),
 		},
