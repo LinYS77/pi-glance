@@ -3,10 +3,11 @@ import { GlanceEditor } from "./editor.js";
 import { GlanceFooter } from "./footer.js";
 import { GitRefresher } from "./git.js";
 import { readPiUiTheme, resolveRuntimeRenderStyleContext } from "./render-style-context.js";
-import { runtimePlanFor, type RuntimeEventFacts, type RuntimeEventKind, type RuntimeRefreshPlan } from "./runtime-policy.js";
+import { applyRuntimeRefreshPlan } from "./runtime-plan-executor.js";
+import { runtimePlanFor, type RuntimeEventFacts, type RuntimeEventKind } from "./runtime-policy.js";
 import type { GlanceRenderStyleContext } from "./theme-adapter.js";
-import { assistantMessageHasKnownContextUsage, compactInputsFromContext, lifecycleInputsFromContext, stateInputsFromContext, thinkingInputsFromContext, usageTotalsFromAssistantMessage, type StateInputs, type StateMessageInputs } from "./runtime-snapshot.js";
-import { addUsageTotals, clearContextUsage, clearCurrentRunThroughput, createInitialState, refreshContextUsage, refreshModel, refreshWorkspace, setCurrentRunThroughput, setGitSnapshot, setLastTurnThroughput, setProviderCount, setUsageTotals } from "./state.js";
+import { assistantMessageHasKnownContextUsage, stateInputsFromContext, usageTotalsFromAssistantMessage, type StateInputs, type StateMessageInputs } from "./runtime-snapshot.js";
+import { addUsageTotals, clearCurrentRunThroughput, createInitialState, setCurrentRunThroughput, setGitSnapshot, setLastTurnThroughput } from "./state.js";
 import { ThroughputRunTracker, type ThroughputRunStateIntent } from "./throughput-run-tracker.js";
 import type { GitSnapshot, GlanceConfig, GlanceState } from "./types.js";
 
@@ -123,12 +124,8 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 		return config;
 	}
 
-	function markContextUnknownAfterCompaction(): void {
-		unknownContextAfterLatestCompaction = true;
-	}
-
-	function syncContextUnknownFromFullScan(inputs: Pick<StateInputs, "unknownContextAfterLatestCompaction">): void {
-		unknownContextAfterLatestCompaction = inputs.unknownContextAfterLatestCompaction;
+	function setUnknownContextAfterLatestCompaction(value: boolean): void {
+		unknownContextAfterLatestCompaction = value;
 	}
 
 	function clearContextUnknownAfterKnownAssistantUsage(message: StateMessageInputs): void {
@@ -137,9 +134,9 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 		}
 	}
 
-	function readStateInputs(ctx: ExtensionContext) {
+	function readStateInputs(ctx: ExtensionContext): StateInputs {
 		const inputs = stateInputsFromContext(ctx, adapters.getThinkingLevel());
-		syncContextUnknownFromFullScan(inputs);
+		setUnknownContextAfterLatestCompaction(inputs.unknownContextAfterLatestCompaction);
 		return inputs;
 	}
 
@@ -204,55 +201,22 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 		return addUsageTotals(state, delta);
 	}
 
-	function applySnapshotPlan(ctx: ExtensionContext, plan: RuntimeRefreshPlan): void {
-		if (!state || plan.snapshot === "none") return;
-		if (plan.snapshot === "thinking") {
-			const inputs = thinkingInputsFromContext(ctx, adapters.getThinkingLevel());
-			setProviderCount(state, inputs.availableProviderCount);
-			if (plan.refreshModel) refreshModel(state, inputs, getConfig());
-			return;
-		}
-		if (plan.snapshot === "lifecycle" || plan.snapshot === "message") {
-			const inputs = lifecycleInputsFromContext(ctx, adapters.getThinkingLevel());
-			const workspaceChanged = plan.refreshWorkspace ? refreshWorkspace(state, inputs) : false;
-			setProviderCount(state, inputs.availableProviderCount);
-			if (plan.refreshModel) refreshModel(state, inputs, getConfig());
-			if (plan.context === "refresh") refreshContextUsage(state, { ...inputs, unknownContextAfterLatestCompaction });
-			else if (plan.context === "clear") clearContextUsage(state, inputs);
-			if (plan.git === "immediate") scheduleGitRefresh(true);
-			else if (plan.git === "onWorkspaceChange" && workspaceChanged) scheduleGitRefresh(true);
-			return;
-		}
-		if (plan.snapshot === "compact") {
-			markContextUnknownAfterCompaction();
-			const inputs = compactInputsFromContext(ctx, adapters.getThinkingLevel());
-			const workspaceChanged = plan.refreshWorkspace ? refreshWorkspace(state, inputs) : false;
-			setProviderCount(state, inputs.availableProviderCount);
-			if (plan.refreshModel) refreshModel(state, inputs, getConfig());
-			if (plan.refreshUsageTotals) setUsageTotals(state, inputs.usage);
-			if (plan.context === "refresh") refreshContextUsage(state, { ...inputs, unknownContextAfterLatestCompaction });
-			else if (plan.context === "clear") clearContextUsage(state, inputs);
-			if (plan.git === "immediate") scheduleGitRefresh(true);
-			else if (plan.git === "onWorkspaceChange" && workspaceChanged) scheduleGitRefresh(true);
-			return;
-		}
-
-		const inputs = readStateInputs(ctx);
-		const workspaceChanged = plan.refreshWorkspace ? refreshWorkspace(state, inputs) : false;
-		setProviderCount(state, inputs.availableProviderCount);
-		if (plan.refreshModel) refreshModel(state, inputs, getConfig());
-		if (plan.refreshUsageTotals) setUsageTotals(state, inputs.usage);
-		if (plan.context === "refresh") refreshContextUsage(state, inputs);
-		else if (plan.context === "clear") clearContextUsage(state, inputs);
-		if (plan.git === "immediate") scheduleGitRefresh(true);
-		else if (plan.git === "onWorkspaceChange" && workspaceChanged) scheduleGitRefresh(true);
-	}
-
 	async function executeRuntimePlan(kind: RuntimeEventKind, ctx: ExtensionContext, facts?: RuntimeEventFacts, beforeRender?: () => void): Promise<void> {
 		const plan = runtimePlanFor(kind, facts);
 		if (plan.ensureConfig) await ensureConfig();
 		if (plan.ensureState) ensureState(ctx);
-		applySnapshotPlan(ctx, plan);
+		if (state) {
+			applyRuntimeRefreshPlan({
+				state,
+				config: getConfig(),
+				ctx,
+				plan,
+				getThinkingLevel: () => adapters.getThinkingLevel(),
+				unknownContextAfterLatestCompaction,
+				setUnknownContextAfterLatestCompaction,
+				scheduleGitRefresh,
+			});
+		}
 		beforeRender?.();
 		if (plan.render) renderNow();
 	}

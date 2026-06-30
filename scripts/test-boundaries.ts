@@ -15,6 +15,7 @@ const RENDER_MODULES = new Set(["editor.ts", "renderer.ts", "pane.ts", "segments
 const INDEX_MODULE = "index.ts";
 const PURE_CONFIG_OPTIONS_MODULE = "config-options.ts";
 const RUNTIME_POLICY_MODULE = "runtime-policy.ts";
+const RUNTIME_PLAN_EXECUTOR_MODULE = "runtime-plan-executor.ts";
 const RUNTIME_SNAPSHOT_MODULE = "runtime-snapshot.ts";
 const STATE_MODULE = "state.ts";
 const SURFACE_LAYOUT_MODULE = "surface-layout.ts";
@@ -215,7 +216,7 @@ function assertThemeAdapterSeamImports(files: SourceFile[]): void {
 	assert.ok(themeAdapter, "theme-adapter.ts pure style adapter seam should exist");
 
 	const allowedLocalSpecifiers = new Set(["./palette.js", "./themes.js", "./types.js"]);
-	const forbiddenLocalModulePattern = /(?:^|\/)(?:runtime|runtime-snapshot|state|config|config-options|settings-catalog|pane|pane-model|editor|renderer|status-line|surface-layout|input-surface-frame|footer)(?:\.js)?$/;
+	const forbiddenLocalModulePattern = /(?:^|\/)(?:runtime|runtime-plan-executor|runtime-snapshot|state|config|config-options|settings-catalog|pane|pane-model|editor|renderer|status-line|surface-layout|input-surface-frame|footer)(?:\.js)?$/;
 	const importPattern = /(?:import|export)\s+(?:type\s+)?(?:[^"'`]*?\s+from\s+)?["']([^"']+)["']/g;
 	for (const match of themeAdapter.text.matchAll(importPattern)) {
 		const specifier = match[1]!;
@@ -393,6 +394,55 @@ function assertProductionFrameCompositionSeam(files: SourceFile[]): void {
 	}
 }
 
+function assertRuntimePlanExecutorSeam(files: SourceFile[]): void {
+	const executor = files.find((candidate) => basename(candidate.path) === RUNTIME_PLAN_EXECUTOR_MODULE);
+	assert.ok(executor, "runtime-plan-executor.ts plan execution seam should exist");
+
+	const allowedSpecifiers = new Set(["@earendil-works/pi-coding-agent", "./runtime-policy.js", "./runtime-snapshot.js", "./state.js", "./types.js"]);
+	const forbiddenLocalSpecifiers = new Set([
+		"./input-surface-frame.js",
+		"./surface-layout.js",
+		"./status-line.js",
+		"./renderer.js",
+		"./editor.js",
+		"./pane.js",
+		"./footer.js",
+		"./segments.js",
+		"./config.js",
+		"./config-schema.js",
+		"./config-options.js",
+		"./settings-catalog.js",
+		"./render-style-context.js",
+		"./git.js",
+		"./theme-adapter.js",
+		"./themes.js",
+		"./theme-catalog.js",
+		"./palette.js",
+	]);
+	const importPattern = /(?:import|export)\s+(type\s+)?(?:[^"'`]*?\s+from\s+)?["']([^"']+)["']/g;
+	for (const match of executor.text.matchAll(importPattern)) {
+		const isTypeOnly = match[1] === "type ";
+		const specifier = match[2]!;
+		if (specifier.startsWith("@earendil-works/pi-") && specifier !== "@earendil-works/pi-coding-agent") {
+			fail(`${executor.path}: plan executor may only type-import public pi coding-agent types, not ${specifier}`);
+		}
+		if (specifier === "@earendil-works/pi-coding-agent" && !isTypeOnly) fail(`${executor.path}: pi coding-agent import must be type-only`);
+		if (specifier === "./runtime-policy.js" && !isTypeOnly) fail(`${executor.path}: runtime-policy import should stay type-only; runtime.ts chooses plans`);
+		if (specifier === "./types.js" && !isTypeOnly) fail(`${executor.path}: types import must be type-only`);
+		if (IO_NETWORK_PROCESS_IMPORTS.has(specifier)) fail(`${executor.path}: plan executor must not import IO/network/process module ${specifier}`);
+		if (forbiddenLocalSpecifiers.has(specifier)) fail(`${executor.path}: plan executor must not import UI/config/git/theme module ${specifier}`);
+		if (!allowedSpecifiers.has(specifier)) fail(`${executor.path}: plan executor must not import ${specifier}`);
+	}
+	if (!executor.text.includes("interface RuntimePlanExecutionInput")) fail(`${executor.path}: plan executor should expose an explicit input interface`);
+	if (!executor.text.includes("applyRuntimeRefreshPlan")) fail(`${executor.path}: plan executor should expose applyRuntimeRefreshPlan`);
+	for (const mode of ["reliable", "lifecycle", "message", "thinking", "compact", "none"] as const) {
+		if (!executor.text.includes(`\"${mode}\"`)) fail(`${executor.path}: plan executor should handle ${mode} snapshot mode`);
+	}
+	if (/GitRefresher|readPiUiTheme|resolveRuntimeRenderStyleContext|ctx\.ui\.theme|ctx\.ui\.setTheme|getAllThemes|getTheme\s*\(|setTheme\s*\(/.test(executor.text)) {
+		fail(`${executor.path}: plan executor must not depend on git implementation, UI, or Pi theme provider APIs`);
+	}
+}
+
 function assertRuntimeSnapshotAdapterSeam(files: SourceFile[]): void {
 	const runtimeSnapshot = files.find((candidate) => basename(candidate.path) === RUNTIME_SNAPSHOT_MODULE);
 	assert.ok(runtimeSnapshot, "runtime-snapshot.ts state input adapter seam should exist");
@@ -418,6 +468,7 @@ function assertRuntimePolicyPureModule(files: SourceFile[]): void {
 
 	const forbiddenLocalModules = new Set([
 		"./runtime.js",
+		"./runtime-plan-executor.js",
 		"./runtime-snapshot.js",
 		"./state.js",
 		"./editor.js",
@@ -442,12 +493,18 @@ function assertRuntimePolicyPureModule(files: SourceFile[]): void {
 function assertRuntimeStateSnapshotFrameBoundary(files: SourceFile[]): void {
 	const runtime = files.find((candidate) => basename(candidate.path) === "runtime.ts");
 	assert.ok(runtime, "runtime.ts should exist");
+	const runtimeImports = importSpecifiers(runtime);
+	if (!runtimeImports.includes("./runtime-plan-executor.js")) fail(`${runtime.path}: runtime should delegate plan snapshot execution to runtime-plan-executor`);
+	if (/plan\.snapshot|snapshot\s*===\s*["'](?:reliable|lifecycle|message|thinking|compact|none)["']/.test(runtime.text)) {
+		fail(`${runtime.path}: runtime must not contain snapshot-mode branching after plan executor extraction`);
+	}
 	const forbiddenRuntimeFrameSpecifiers = new Set(["./input-surface-frame.js", "./surface-layout.js", "./status-line.js", "./renderer.js", "./pane.js", "./segments.js"]);
-	for (const specifier of importSpecifiers(runtime)) {
+	for (const specifier of runtimeImports) {
 		if (forbiddenRuntimeFrameSpecifiers.has(specifier)) fail(`${runtime.path}: runtime must not import frame composition/render modules directly (${specifier})`);
 	}
 
 	const forbiddenPureStateRenderSpecifiers = new Set([
+		"./runtime-plan-executor.js",
 		"./input-surface-frame.js",
 		"./surface-layout.js",
 		"./status-line.js",
@@ -646,7 +703,7 @@ function assertConfigOptionsPureModule(files: SourceFile[]): void {
 	const configOptions = files.find((candidate) => basename(candidate.path) === PURE_CONFIG_OPTIONS_MODULE);
 	assert.ok(configOptions, "config-options.ts pure option source should exist");
 
-	const forbiddenLocalModules = new Set(["./config.js", "./settings-catalog.js", "./pane.js", "./editor.js", "./renderer.js", "./surface-layout.js", "./input-surface-frame.js", "./status-line.js"]);
+	const forbiddenLocalModules = new Set(["./config.js", "./settings-catalog.js", "./pane.js", "./editor.js", "./renderer.js", "./runtime-plan-executor.js", "./surface-layout.js", "./input-surface-frame.js", "./status-line.js"]);
 	const importPattern = /import\s+(type\s+)?(?:[^"'`]*?\s+from\s+)?["']([^"']+)["']/g;
 	for (const match of configOptions.text.matchAll(importPattern)) {
 		const isTypeOnly = match[1] === "type ";
@@ -684,6 +741,7 @@ assertPanePreviewStyleContextBoundary(sourceFiles);
 assertRenderModulesHaveNoIo(sourceFiles);
 assertInputSurfaceFrameSeamImports(sourceFiles);
 assertProductionFrameCompositionSeam(sourceFiles);
+assertRuntimePlanExecutorSeam(sourceFiles);
 assertRuntimeSnapshotAdapterSeam(sourceFiles);
 assertRuntimePolicyPureModule(sourceFiles);
 assertRuntimeStateSnapshotFrameBoundary(sourceFiles);
