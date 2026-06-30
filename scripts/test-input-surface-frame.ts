@@ -5,45 +5,8 @@ import { measureInputSurfaceFrame, renderInputSurfaceFrame } from "../input-surf
 import { renderInputSurface } from "../renderer.js";
 import { renderSurfaceTopMargin, surfaceMetrics, SURFACE_AUTOCOMPLETE_INDENT, SURFACE_CONTENT_PADDING_X } from "../surface-layout.js";
 import { resolveBuiltInGlanceStyles } from "../theme-adapter.js";
-import { testState } from "./helpers.js";
-import type { GlanceConfig, GlanceState, SegmentId } from "../types.js";
-
-const ANSI_PATTERN = /\x1b(?:\][^\x07]*(?:\x07|\x1b\\)|_[^\x07]*(?:\x07|\x1b\\)|\[[0-?]*[ -/]*[@-~])/g;
-
-function stripAnsi(text: string): string {
-	return text.replace(ANSI_PATTERN, "");
-}
-
-function onlySegments(config: GlanceConfig, ids: SegmentId[]): void {
-	const enabled = new Set(ids);
-	config.segments = config.segments.map((segment) => ({ ...segment, enabled: enabled.has(segment.id) }));
-}
-
-function richState(): GlanceState {
-	return testState({
-		workspace: { name: "07_pi-glance", path: "/Users/winnie/00_project/07_pi-glance" },
-		git: {
-			repo: true,
-			branch: "main",
-			detached: false,
-			sha: "a1b2c3d",
-			upstream: "origin/main",
-			ahead: 2,
-			behind: 1,
-			staged: 1,
-			unstaged: 1,
-			untracked: 0,
-			conflicts: 0,
-			dirty: true,
-			status: "dirty",
-			updatedAt: 0,
-		},
-		providers: { availableCount: 2 },
-		model: { id: "claude-sonnet-4-20250514", provider: "anthropic", displayName: "Sonnet 4", thinking: "high" },
-		context: { tokens: 46_800, window: 200_000, percent: 23.4 },
-		usage: { input: 12_400, output: 3_100, cacheRead: 800, cacheWrite: 0, cost: 0.042 },
-	});
-}
+import { onlySegments, richInputSurfaceState as richState, stripAnsi } from "./surface-test-harness.js";
+import type { GlanceConfig } from "../types.js";
 
 function minRows(config: GlanceConfig): number {
 	return Math.max(2, Math.min(4, config.editor.minContentRows));
