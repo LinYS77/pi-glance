@@ -33,7 +33,6 @@ function tokenCacheParts(ctx: SegmentRenderContext): string[] {
 		const hitRate = Math.round((usage.cacheRead / promptTokens) * 100);
 		parts.push(`CH${hitRate}%`);
 	}
-	if (usage.cacheWrite) parts.push(`W${formatTokens(usage.cacheWrite)}`);
 	return parts;
 }
 
