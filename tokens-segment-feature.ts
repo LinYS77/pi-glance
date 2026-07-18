@@ -19,7 +19,7 @@ function tokensDisplayLabel(mode: GlanceConfig["tokens"]["display"]): string {
 
 function shouldShowTokenCache(ctx: SegmentRenderContext): boolean {
 	if (ctx.config.tokens.cache === "hide") return false;
-	if (ctx.config.tokens.cache === "show") return true;
+	if (ctx.config.tokens.cache === "show" || ctx.config.tokens.cache === "rate") return true;
 	return ctx.widthMode === "full";
 }
 
@@ -27,11 +27,17 @@ function tokenCacheParts(ctx: SegmentRenderContext): string[] {
 	if (!shouldShowTokenCache(ctx)) return [];
 	const usage = ctx.state.usage;
 	const parts: string[] = [];
-	// Cache hit rate (consistent with Pi's default CH calculation)
-	const promptTokens = usage.input + usage.cacheRead + usage.cacheWrite;
-	if (promptTokens > 0 && usage.cacheRead > 0) {
-		const hitRate = Math.round((usage.cacheRead / promptTokens) * 100);
-		parts.push(`CH${hitRate}%`);
+	if (ctx.config.tokens.cache === "rate") {
+		// Cache hit rate mode: show only CH{percent}% (consistent with Pi's default CH calculation)
+		const promptTokens = usage.input + usage.cacheRead + usage.cacheWrite;
+		if (promptTokens > 0 && usage.cacheRead > 0) {
+			const hitRate = Math.round((usage.cacheRead / promptTokens) * 100);
+			parts.push(`CH${hitRate}%`);
+		}
+	} else {
+		// Default mode: show cache read and cache write tokens
+		if (usage.cacheRead) parts.push(`R${formatTokens(usage.cacheRead)}`);
+		if (usage.cacheWrite) parts.push(`W${formatTokens(usage.cacheWrite)}`);
 	}
 	return parts;
 }
@@ -74,7 +80,7 @@ export const tokensSegmentFeature = {
 		{
 			id: "tokens.cache",
 			label: "Cache",
-			hint: "Show or hide cache details.",
+			hint: "Show, hide, or display cache hit rate.",
 			kind: "cycle",
 			value: (config: GlanceConfig) => config.tokens.cache,
 			mutate: (config: GlanceConfig) => {
