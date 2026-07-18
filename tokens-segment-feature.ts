@@ -27,7 +27,12 @@ function tokenCacheParts(ctx: SegmentRenderContext): string[] {
 	if (!shouldShowTokenCache(ctx)) return [];
 	const usage = ctx.state.usage;
 	const parts: string[] = [];
-	if (usage.cacheRead) parts.push(`R${formatTokens(usage.cacheRead)}`);
+	// Cache hit rate (consistent with Pi's default CH calculation)
+	const promptTokens = usage.input + usage.cacheRead + usage.cacheWrite;
+	if (promptTokens > 0 && usage.cacheRead > 0) {
+		const hitRate = Math.round((usage.cacheRead / promptTokens) * 100);
+		parts.push(`CH${hitRate}%`);
+	}
 	if (usage.cacheWrite) parts.push(`W${formatTokens(usage.cacheWrite)}`);
 	return parts;
 }
