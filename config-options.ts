@@ -21,6 +21,6 @@ export const GIT_SHA_MODE_VALUES: ReadonlyArray<GitShaMode> = ["off", "detached"
 export const CONTEXT_DISPLAY_MODE_VALUES: ReadonlyArray<ContextDisplayMode> = ["percent+tokens", "percent", "tokens"];
 export const CONTEXT_UNKNOWN_MODE_VALUES: ReadonlyArray<ContextUnknownMode> = ["show", "hide"];
 export const TOKENS_DISPLAY_MODE_VALUES: ReadonlyArray<TokensDisplayMode> = ["input-output", "total"];
-export const TOKENS_CACHE_MODE_VALUES: ReadonlyArray<TokensCacheMode> = ["auto", "show", "hide"];
+export const TOKENS_CACHE_MODE_VALUES: ReadonlyArray<TokensCacheMode> = ["auto", "show", "hide", "rate"];
 export const MODEL_THINKING_MODE_VALUES: ReadonlyArray<ModelThinkingMode> = ["auto", "always", "never"];
 export const THROUGHPUT_PRECISION_VALUES: ReadonlyArray<ThroughputPrecision> = THROUGHPUT_PRECISION_DESCRIPTOR.values;
