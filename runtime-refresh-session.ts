@@ -8,6 +8,11 @@ import type { GitSnapshot, GlanceConfig, GlanceState } from "./types.js";
 
 export type RuntimeMessageEndInput = StateMessageInputs & { responseId?: unknown };
 
+export interface RuntimeMessageUpdateInput {
+	message?: unknown;
+	assistantMessageEvent?: unknown;
+}
+
 export interface RuntimeTurnEndInput {
 	turnIndex?: unknown;
 	message?: unknown;
@@ -139,32 +144,33 @@ export class RuntimeRefreshSession {
 		if (plan.render) this.host.requestRender();
 	}
 
+	messageUpdate(event: RuntimeMessageUpdateInput): void {
+		this.throughputTracker.messageUpdate(event.message, event.assistantMessageEvent, () => this.host.nowMs());
+	}
+
 	async messageEnd(message: RuntimeMessageEndInput, ctx: ExtensionContext): Promise<void> {
 		if (message.role === "assistant") this.clearContextUnknownAfterKnownAssistantUsage(message);
+		const throughputIntent = this.throughputTracker.messageEnd(message);
 		await this.execute("message_end", ctx, {
 			facts: { messageRole: message.role },
 			beforeRender: () => {
 				this.applyAssistantMessageUsageDelta(message);
+				if (this.state) applyThroughputIntent(this.state, throughputIntent);
 			},
 		});
 	}
 
-	async turnEnd(event: RuntimeTurnEndInput, ctx: ExtensionContext): Promise<void> {
-		await this.execute("turn_end", ctx, {
-			beforeRender: () => {
-				if (!this.state) return;
-				applyThroughputIntent(this.state, this.throughputTracker.checkpoint(event.turnIndex, event.message, () => this.host.nowMs()));
-			},
-		});
+	async turnEnd(_event: RuntimeTurnEndInput, ctx: ExtensionContext): Promise<void> {
+		await this.execute("turn_end", ctx);
 	}
 
 	agentStart(): void {
-		const intent = this.throughputTracker.start(this.host.nowMs());
+		const intent = this.throughputTracker.start();
 		if (this.state && applyThroughputIntent(this.state, intent)) this.host.requestRender();
 	}
 
 	async agentEnd(event: RuntimeAgentEndInput, ctx: ExtensionContext): Promise<void> {
-		const intent = this.throughputTracker.finish(event.messages, () => this.host.nowMs());
+		const intent = this.throughputTracker.finish(event.messages);
 		await this.execute("agent_end", ctx, {
 			beforeRender: () => {
 				if (!this.state) return;

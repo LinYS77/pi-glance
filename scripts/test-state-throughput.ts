@@ -52,7 +52,7 @@ const clearCurrentRunThroughput = stateModule.clearCurrentRunThroughput as Throu
 
 assert.equal(typeof setLastTurnThroughput, "function", "state.ts should export setLastTurnThroughput(state, turn)");
 assert.equal(typeof clearLastTurnThroughput, "function", "state.ts should export clearLastTurnThroughput(state)");
-assert.equal(typeof setCurrentRunThroughput, "function", "state.ts should export setCurrentRunThroughput(state, turn) for provisional Reply speed");
+assert.equal(typeof setCurrentRunThroughput, "function", "state.ts should export setCurrentRunThroughput(state, turn) for provisional Model speed");
 assert.equal(typeof clearCurrentRunThroughput, "function", "state.ts should export clearCurrentRunThroughput(state)");
 
 const finalSample: TurnThroughputFixture = {

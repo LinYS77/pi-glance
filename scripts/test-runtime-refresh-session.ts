@@ -259,20 +259,24 @@ function createSessionHarness(initialConfig: GlanceConfig = cloneConfig()): Sess
 	const branchBaseline = ctx.getBranchReads();
 	harness.session.agentStart();
 	assert.equal(harness.getRenderCount(), 0, "agentStart with no visible throughput change should not render");
+	harness.setNowMs(1000);
+	harness.session.messageUpdate({ message: eventMessage("assistant", { usage: { output: 10, totalTokens: 10 } }), assistantMessageEvent: { type: "text_delta" } });
 	harness.setNowMs(1500);
+	harness.session.messageUpdate({ message: eventMessage("assistant", { usage: { output: 10, totalTokens: 10 } }), assistantMessageEvent: { type: "text_delta" } });
 	harness.setOnRender(() => {
-		assert.ok(state.throughput.currentRun, "turnEnd should set current-run throughput before render");
+		assert.ok(state.throughput.currentRun, "messageEnd should set current-run model speed before render");
 	});
-	await harness.session.turnEnd({ turnIndex: 1, message: eventMessage("assistant", { usage: { output: 10, totalTokens: 10 } }) }, ctx.ctx);
+	await harness.session.messageEnd(eventMessage("assistant", { usage: { output: 10, totalTokens: 10 } }), ctx.ctx);
 	harness.setOnRender(undefined);
-	assert.ok(state.throughput.currentRun, "turnEnd should leave current-run throughput visible after render");
-	assert.equal(ctx.getEntryReads(), entryBaseline, "turnEnd should not scan entries after baseline");
-	assert.equal(ctx.getBranchReads(), branchBaseline, "turnEnd should not scan branch after baseline");
+	assert.ok(state.throughput.currentRun, "completed message stream should leave current-run model speed visible");
+	assert.equal(state.throughput.currentRun?.elapsedMs, 500, "model speed should use active stream time rather than task wall time");
+	assert.equal(ctx.getEntryReads(), entryBaseline, "message stream events should not scan entries after baseline");
+	assert.equal(ctx.getBranchReads(), branchBaseline, "message stream events should not scan branch after baseline");
 
-	const renderAfterTurnEnd = harness.getRenderCount();
+	const renderAfterMessageEnd = harness.getRenderCount();
 	harness.session.agentStart();
-	assert.equal(state.throughput.currentRun, null, "agentStart should clear a previous visible current-run throughput");
-	assert.equal(harness.getRenderCount(), renderAfterTurnEnd + 1, "agentStart should render when it clears visible current-run throughput");
+	assert.equal(state.throughput.currentRun, null, "agentStart should clear a previous visible current-run model speed");
+	assert.equal(harness.getRenderCount(), renderAfterMessageEnd + 1, "agentStart should render when it clears visible current-run model speed");
 }
 
 {
@@ -282,18 +286,21 @@ function createSessionHarness(initialConfig: GlanceConfig = cloneConfig()): Sess
 	const entryBaseline = ctx.getEntryReads();
 	const branchBaseline = ctx.getBranchReads();
 	harness.session.agentStart();
+	harness.setNowMs(1000);
+	harness.session.messageUpdate({ message: eventMessage("assistant", { usage: { output: 4, totalTokens: 4 } }), assistantMessageEvent: { type: "text_delta" } });
 	harness.setNowMs(1400);
-	await harness.session.turnEnd({ turnIndex: 1, message: eventMessage("assistant", { usage: { output: 4, totalTokens: 4 } }) }, ctx.ctx);
-	assert.ok(state.throughput.currentRun, "setup turnEnd should set current-run throughput");
-	harness.setNowMs(1800);
+	harness.session.messageUpdate({ message: eventMessage("assistant", { usage: { output: 4, totalTokens: 4 } }), assistantMessageEvent: { type: "text_delta" } });
+	await harness.session.messageEnd(eventMessage("assistant", { usage: { output: 4, totalTokens: 4 } }), ctx.ctx);
+	assert.ok(state.throughput.currentRun, "setup message stream should set current-run model speed");
 	harness.setOnRender(() => {
-		assert.ok(state.throughput.lastTurn, "agentEnd should set last-turn throughput before render");
-		assert.equal(state.throughput.currentRun, null, "agentEnd should clear current-run throughput before render");
+		assert.ok(state.throughput.lastTurn, "agentEnd should set last-turn model speed before render");
+		assert.equal(state.throughput.currentRun, null, "agentEnd should clear current-run model speed before render");
 	});
-	await harness.session.agentEnd({ messages: [eventMessage("assistant", { usage: { output: 8, totalTokens: 8 } })] }, ctx.ctx);
+	await harness.session.agentEnd({ messages: [eventMessage("assistant", { usage: { output: 4, totalTokens: 4 } })] }, ctx.ctx);
 	harness.setOnRender(undefined);
-	assert.ok(state.throughput.lastTurn, "agentEnd should leave last-turn throughput visible after render");
-	assert.equal(state.throughput.currentRun, null, "agentEnd should leave current-run throughput cleared");
+	assert.ok(state.throughput.lastTurn, "agentEnd should leave last-turn model speed visible");
+	assert.equal(state.throughput.currentRun, null, "agentEnd should leave current-run model speed cleared");
+	assert.equal(state.throughput.lastTurn?.elapsedMs, 400, "agentEnd should preserve active model stream duration");
 	assert.equal(ctx.getEntryReads(), entryBaseline, "agentEnd should not scan entries after baseline");
 	assert.equal(ctx.getBranchReads(), branchBaseline, "agentEnd should not scan branch after baseline");
 }

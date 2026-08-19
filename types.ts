@@ -92,6 +92,7 @@ export interface UsageTotals {
 
 export interface TurnThroughputUsage {
 	input: number;
+	/** Provider output tokens with the reported reasoning subset removed when available. */
 	output: number;
 	cacheRead: number;
 	cacheWrite: number;
@@ -100,8 +101,11 @@ export interface TurnThroughputUsage {
 }
 
 export interface TurnThroughput {
+	/** First measured visible-text stream timestamp. */
 	startedAtMs: number;
+	/** Last measured visible-text stream timestamp. */
 	endedAtMs: number;
+	/** Sum of active visible-text intervals; may be less than endedAtMs-startedAtMs. */
 	elapsedMs: number;
 	tokensPerSecond: number;
 	usage: TurnThroughputUsage;

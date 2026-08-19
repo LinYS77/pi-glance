@@ -82,7 +82,7 @@ function turn(rate: number): ThroughputTurnFixture {
 	assert.equal(
 		plain(state, config, 120),
 		"$ $0.000 · spd 20 tok/s · ctx 23% 47k/200k · ai GPT 5.5",
-		"default status line should show finalized Reply speed between Cost and Context while keeping Model last",
+		"default status line should show finalized Model speed between Cost and Context while keeping Model last",
 	);
 	assert.deepEqual(
 		(config.segments as unknown as SegmentConfigLike[]),
@@ -94,7 +94,7 @@ function turn(rate: number): ThroughputTurnFixture {
 			{ id: "tokens", enabled: false },
 			{ id: "model", enabled: true },
 		],
-		"default segments should use the curated order Git, Cost, Reply speed, Context, Tokens, Model",
+		"default segments should use the curated order Git, Cost, Model speed, Context, Tokens, Model",
 	);
 }
 
@@ -103,7 +103,7 @@ function turn(rate: number): ThroughputTurnFixture {
 	assert.equal(
 		plain(withThroughput(testState(), null), config, 120),
 		"$ $0.000 · spd ? tok/s · ctx 23% 47k/200k · ai GPT 5.5",
-		"enabled Reply speed should show an unknown placeholder until a trusted measurement exists",
+		"enabled Model speed should show an unknown placeholder until a trusted measurement exists",
 	);
 }
 
@@ -119,7 +119,7 @@ function turn(rate: number): ThroughputTurnFixture {
 	assert.equal(plain(withThroughput(testState(), null), config, 48), "spd ?/s", "enabled throughput minimal status should render compact ?/s placeholder");
 
 	const nerdConfig = setSegments({ ...defaultConfig(), icons: "nerd" }, [{ id: "throughput", enabled: true }]);
-	assert.equal(plainPreservingSpaces(withThroughput(testState(), null), nerdConfig, 120), "  ? tok/s", "nerd Reply speed icon should keep extra visual spacing before the placeholder");
+	assert.equal(plainPreservingSpaces(withThroughput(testState(), null), nerdConfig, 120), "  ? tok/s", "nerd Model speed icon should keep extra visual spacing before the placeholder");
 }
 
 {
@@ -180,10 +180,10 @@ function turn(rate: number): ThroughputTurnFixture {
 	);
 	const roomy = plain(richState, config, 160);
 	assert.ok(roomy.includes("git main *"), "roomy default-order status should include Git when available");
-	assert.ok(roomy.includes("spd 20 tok/s"), "roomy default-order status should include Reply speed by default");
+	assert.ok(roomy.includes("spd 20 tok/s"), "roomy default-order status should include Model speed by default");
 	assert.ok(roomy.includes("ai GPT 5.5 high"), "roomy default-order status should include Model");
-	assert.ok(roomy.indexOf("$ $0.042") < roomy.indexOf("spd 20 tok/s"), "Cost should render before Reply speed by default");
-	assert.ok(roomy.indexOf("spd 20 tok/s") < roomy.indexOf("ctx 23% 47k/200k"), "Reply speed should render before Context by default");
+	assert.ok(roomy.indexOf("$ $0.042") < roomy.indexOf("spd 20 tok/s"), "Cost should render before Model speed by default");
+	assert.ok(roomy.indexOf("spd 20 tok/s") < roomy.indexOf("ctx 23% 47k/200k"), "Model speed should render before Context by default");
 	assert.ok(roomy.indexOf("ctx 23% 47k/200k") < roomy.indexOf("ai GPT 5.5 high"), "Context should render before final Model by default");
 
 	const withTokens = defaultConfig();

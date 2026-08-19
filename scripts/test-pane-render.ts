@@ -230,14 +230,14 @@ press(darkSlotPreviewPane.component, "\r");
 const darkSlotPreviewRaw = rawText(darkSlotPreviewPane.component, 120);
 assertContains(darkSlotPreviewRaw, fg(PALETTES.dark.border, "╭"), "active Dark theme browser preview should force ambientTone=dark over runtime light tone");
 
-const replySpeedPreviewConfig = defaultConfig();
-replySpeedPreviewConfig.segments = replySpeedPreviewConfig.segments.map((segment) =>
+const modelSpeedPreviewConfig = defaultConfig();
+modelSpeedPreviewConfig.segments = modelSpeedPreviewConfig.segments.map((segment) =>
 	segment.id === "throughput" ? { ...segment, enabled: true } : segment,
 );
-const replySpeedPreviewPane = await makePane(replySpeedPreviewConfig);
-const replySpeedPreviewText = plainText(replySpeedPreviewPane.component, 160);
-assertNotContains(replySpeedPreviewText, "spd 42 tok/s", "Reply speed preview should not inject a fake sample speed before measurement");
-assertContains(replySpeedPreviewText, "spd ? tok/s", "Reply speed preview should show the same unknown placeholder as runtime when no measurement exists");
+const modelSpeedPreviewPane = await makePane(modelSpeedPreviewConfig);
+const modelSpeedPreviewText = plainText(modelSpeedPreviewPane.component, 160);
+assertNotContains(modelSpeedPreviewText, "spd 42 tok/s", "Model speed preview should not inject a fake sample speed before measurement");
+assertContains(modelSpeedPreviewText, "spd ? tok/s", "Model speed preview should show the same unknown placeholder as runtime when no measurement exists");
 
 const previewTurn = {
 	startedAtMs: 0,
@@ -247,22 +247,22 @@ const previewTurn = {
 	usage: { input: 0, output: 42, cacheRead: 0, cacheWrite: 0, totalTokens: 42, assistantMessages: 1 },
 };
 const provisionalPreviewPane = await makePane(
-	replySpeedPreviewConfig,
+	modelSpeedPreviewConfig,
 	testState({ throughput: { lastTurn: null, currentRun: previewTurn } as unknown as GlanceState["throughput"] }),
 );
 assertContains(
 	plainText(provisionalPreviewPane.component, 160),
 	"spd ~42 tok/s",
-	"Reply speed preview should render real previewState.throughput.currentRun as provisional with ~",
+	"Model speed preview should render real previewState.throughput.currentRun as provisional with ~",
 );
 const finalPreviewPane = await makePane(
-	replySpeedPreviewConfig,
+	modelSpeedPreviewConfig,
 	testState({ throughput: { lastTurn: previewTurn, currentRun: null } as unknown as GlanceState["throughput"] }),
 );
 assertContains(
 	plainText(finalPreviewPane.component, 160),
 	"spd 42 tok/s",
-	"Reply speed preview should render real previewState.throughput.lastTurn as final without ~",
+	"Model speed preview should render real previewState.throughput.lastTurn as final without ~",
 );
 
 const themePane = await makePane();
@@ -465,7 +465,7 @@ const iconsSelectedText = plainText(gridSettingPane.component);
 assertContains(iconsSelectedText, "» Icons", "down arrow should move within the setting column");
 assertContains(iconsSelectedText, "Plain text or Nerd Font icons with fallback.", "Icons row hint should mention plain and Nerd Font fallback guidance");
 press(gridSettingPane.component, "\x1b[D");
-assertContains(plainText(gridSettingPane.component), "» Reply speed", "left arrow should move to the category on the same visual row");
+assertContains(plainText(gridSettingPane.component), "» Model speed", "left arrow should move to the category on the same visual row");
 
 const reorderPane = await makePane();
 press(reorderPane.component, "\x1b[B");

@@ -130,7 +130,7 @@ if (/THROUGHPUT_PRECISION_VALUES/.test(throughputSegmentFeature.text)) {
 
 for (const file of [throughput, throughputRunTracker, throughputSegmentFeature]) {
 	if (/\bDate\.now\s*\(/.test(file.text)) fail(`${file.path}: throughput boundary must use injected timestamps/state, not Date.now()`);
-	if (/\b(?:setInterval|setTimeout|setImmediate|requestAnimationFrame)\s*\(/.test(file.text)) fail(`${file.path}: Reply speed UX v2 must not use timers/tickers for provisional or unknown status`);
+	if (/\b(?:setInterval|setTimeout|setImmediate|requestAnimationFrame)\s*\(/.test(file.text)) fail(`${file.path}: Model speed UX v2 must not use timers/tickers for provisional or unknown status`);
 	if (/\.notify\s*\(/.test(file.text)) fail(`${file.path}: throughput boundary must never notify`);
 	if (/(?:\.\s*(?:content|delta|text_delta|thinking_delta)\b|\[\s*["'](?:content|delta|text_delta|thinking_delta)["']\s*\])/.test(file.text)) {
 		fail(`${file.path}: throughput boundary must not read message content/delta text as a token fallback`);
@@ -141,8 +141,8 @@ for (const file of [throughput, throughputRunTracker, throughputSegmentFeature])
 }
 
 for (const file of files) {
-	if (/\.notify\s*\([^;\n]*(?:throughput|reply speed|TPS|tok\/s|spd)/i.test(file.text)) {
-		fail(`${file.path}: throughput/Reply speed copy should not be sent through ctx.ui.notify`);
+	if (/\.notify\s*\([^;\n]*(?:throughput|model speed|TPS|tok\/s|spd)/i.test(file.text)) {
+		fail(`${file.path}: throughput/Model speed copy should not be sent through ctx.ui.notify`);
 	}
 }
 
@@ -150,7 +150,7 @@ for (const fileName of ["throughput.ts", "throughput-run-tracker.ts", "throughpu
 	const file = byPath.get(fileName);
 	assert.ok(file, `${fileName} should exist for throughput boundary checks`);
 	if (/\b(?:setInterval|setTimeout|setImmediate|requestAnimationFrame)\s*\(/.test(file.text)) {
-		fail(`${file.path}: Reply speed UX v2 must not use timers/tickers for provisional or unknown status`);
+		fail(`${file.path}: Model speed UX v2 must not use timers/tickers for provisional or unknown status`);
 	}
 }
 
@@ -158,7 +158,7 @@ for (const fileName of ["throughput.ts", "throughput-run-tracker.ts", "throughpu
 	const file = byPath.get(fileName);
 	assert.ok(file, `${fileName} should exist for throughput estimation boundary checks`);
 	if (/(?:\.\s*(?:content|delta|text_delta|thinking_delta)\b|\[\s*["'](?:content|delta|text_delta|thinking_delta)["']\s*\])/.test(file.text)) {
-		fail(`${file.path}: Reply speed must not inspect content/delta text for token estimation`);
+		fail(`${file.path}: Model speed must not inspect content/delta text for token estimation`);
 	}
 }
 

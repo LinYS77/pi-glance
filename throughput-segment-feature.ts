@@ -57,13 +57,13 @@ function collectThroughput(ctx: SegmentRenderContext): SegmentData | undefined {
 
 export const throughputSegmentFeature = {
 	id: "throughput",
-	label: "Reply speed",
+	label: "Model speed",
 	defaultEnabled: true,
 	settings: [
 		{
 			id: "throughput.precision",
 			label: "Precision",
-			hint: "Decimals for tok/s; wall time, not a benchmark.",
+			hint: "Decimals for active text-stream tok/s.",
 			kind: "cycle",
 			value: (config: GlanceConfig) => THROUGHPUT_PRECISION_DESCRIPTOR.label(config.throughput.precision),
 			mutate: (config: GlanceConfig) => {
