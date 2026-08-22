@@ -113,6 +113,36 @@ function assertNoLegacyPiPackages(packageFiles: SourceFile[]): void {
 	}
 }
 
+function assertPiCompatibilityBaseline(packageFiles: SourceFile[]): void {
+	const packageJsonFile = packageFiles.find((file) => file.path === "package.json");
+	const packageLockFile = packageFiles.find((file) => file.path === "package-lock.json");
+	assert.ok(packageJsonFile, "package.json should be available to compatibility boundary checks");
+	assert.ok(packageLockFile, "package-lock.json should be available to compatibility boundary checks");
+	const manifest = JSON.parse(packageJsonFile.text) as {
+		engines?: Record<string, string>;
+		devDependencies?: Record<string, string>;
+		peerDependencies?: Record<string, string>;
+	};
+	const lock = JSON.parse(packageLockFile.text) as {
+		packages?: Record<string, { engines?: Record<string, string>; devDependencies?: Record<string, string>; peerDependencies?: Record<string, string> }>;
+	};
+	const expectedDevDependencies = {
+		"@earendil-works/pi-ai": "0.84.2",
+		"@earendil-works/pi-coding-agent": "0.84.2",
+		"@earendil-works/pi-tui": "0.84.2",
+		"@types/node": "24.12.4",
+		typescript: "5.9.3",
+	};
+	assert.deepEqual(manifest.devDependencies, expectedDevDependencies, "package.json should pin the Pi 0.84.2 development toolchain exactly");
+	assert.deepEqual(lock.packages?.[""]?.devDependencies, expectedDevDependencies, "package-lock root should match the pinned Pi 0.84.2 development toolchain");
+	assert.equal(manifest.engines?.node, ">=22.19.0", "package.json should match Pi 0.84.2's supported Node runtime floor");
+	assert.equal(lock.packages?.[""]?.engines?.node, ">=22.19.0", "package-lock root should preserve the Node runtime floor");
+	for (const packageName of ALLOWED_PI_IMPORTS) {
+		assert.equal(manifest.peerDependencies?.[packageName], "*", `${packageName} should remain a Pi-supplied wildcard peer dependency`);
+		assert.equal(lock.packages?.[""]?.peerDependencies?.[packageName], "*", `package-lock should preserve ${packageName} as a Pi-supplied wildcard peer dependency`);
+	}
+}
+
 function assertPublicPiImports(files: SourceFile[]): void {
 	const importPattern = /(?:import|export)\s+(?:[^"'`]*?\s+from\s+)?["']([^"']+)["']/g;
 	for (const file of files) {
@@ -914,6 +944,7 @@ const packageFiles: SourceFile[] = [
 
 assertNoLegacyNamespace(sourceFiles);
 assertNoLegacyPiPackages(packageFiles);
+assertPiCompatibilityBaseline(packageFiles);
 assertPublicPiImports(sourceFiles);
 assertNoCorePatching(sourceFiles);
 assertSurfaceLayoutSeamImports(sourceFiles);

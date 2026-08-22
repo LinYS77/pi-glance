@@ -10,8 +10,12 @@ function assertReadmeIncludes(fragment: string, message: string): void {
 }
 
 assert.ok(!readme.includes("pi-glance v0.3.1 targets"), "README compatibility copy should not hard-code stale v0.3.1 wording");
-assertReadmeIncludes("current pi-glance releases target", "README compatibility copy should refer to current pi-glance releases");
+assertReadmeIncludes("development and CI baseline is Pi 0.84.2", "README should document the Pi 0.84.2 compatibility baseline");
+assertReadmeIncludes("Node 22.19.0 or newer", "README should document the current Pi Node runtime floor");
+assertReadmeIncludes("Pi core packages remain peer dependencies supplied by Pi", "README should explain how Pi packages are provided at runtime");
 assertReadmeIncludes("pin `pi-glance@0.3.0`", "README compatibility copy should preserve the legacy pin guidance");
+assert.ok(!readme.includes("github.com/badlogic/pi-mono"), "README should not link to the retired pi-mono repository");
+assertReadmeIncludes("github.com/earendil-works/pi", "README should link to the current Pi repository");
 assertReadmeIncludes("Icons default to `plain`", "README should state that icons default to plain");
 assertReadmeIncludes("`nerd` icons are opt-in", "README should state that nerd icons are opt-in");
 assertReadmeIncludes("/glance` → **General** → `Icons`", "README should point users to /glance General Icons");
@@ -44,5 +48,10 @@ assert.deepEqual(normalizeConfig({ theme: "tokyo-night" }).theme, { light: "toky
 assertReadmeIncludes("exact `light` selects `theme.light`", "README should document exact light ambient tone slot selection");
 assertReadmeIncludes("exact `dark` selects `theme.dark`", "README should document exact dark ambient tone slot selection");
 assertReadmeIncludes("unknown or custom Pi theme names fall back to `theme.light`", "README should document unknown/custom ambient tone fallback");
+assertReadmeIncludes("`auto`, `show`, `hide`, or `rate`", "README should document every Tokens cache mode");
+assertReadmeIncludes("rounded session aggregate cache hit percentage", "README should define cache-rate aggregation semantics");
+assertReadmeIncludes("cacheRead / (input + cacheRead + cacheWrite)", "README should document the CH% denominator");
+assertReadmeIncludes("A known cache miss appears as `CH0%`", "README should distinguish a zero-percent hit rate from unknown usage");
+assertReadmeIncludes("No `CH%` is shown until prompt-token usage exists", "README should document the cache-rate unknown boundary");
 
 console.log("✓ README copy checks passed");

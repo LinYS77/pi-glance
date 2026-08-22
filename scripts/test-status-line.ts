@@ -300,6 +300,68 @@ for (const themeId of ["light", "dark"] as const) {
 	assert.equal(plainLine(["tokens"], state, 96), "tok ↑12k ↓3.1k R800 W20", "tokens cache auto should show cache details in full width");
 	assert.equal(plainLine(["tokens"], state, 95), "tok ↑12k ↓3.1k", "tokens cache auto should hide cache details in compact width");
 	assert.equal(plainLine(["tokens"], state, 63), "tok ↑12k ↓3.1k", "tokens cache auto should hide cache details in minimal width");
+	assert.equal(
+		plainLine(["tokens"], state, 63, state.providers.availableCount, (config) => {
+			config.tokens.cache = "show";
+		}),
+		"tok ↑12k ↓3.1k R800 W20",
+		"tokens cache show should retain read/write details in minimal width mode",
+	);
+	assert.equal(
+		plainLine(["tokens"], state, 96, state.providers.availableCount, (config) => {
+			config.tokens.cache = "hide";
+		}),
+		"tok ↑12k ↓3.1k",
+		"tokens cache hide should suppress read/write details in full width mode",
+	);
+	for (const width of [63, 95, 96]) {
+		assert.equal(
+			plainLine(["tokens"], state, width, state.providers.availableCount, (config) => {
+				config.tokens.cache = "rate";
+			}),
+			"tok ↑12k ↓3.1k CH6%",
+			`tokens cache rate should show the rounded aggregate prompt cache hit percentage without R/W details at width ${width}`,
+		);
+	}
+	assert.equal(
+		plainLine(
+			["tokens"],
+			testState({ usage: { input: 900, output: 50, cacheRead: 0, cacheWrite: 100, cost: 0 } }),
+			96,
+			1,
+			(config) => {
+				config.tokens.cache = "rate";
+			},
+		),
+		"tok ↑900 ↓50 CH0%",
+		"tokens cache rate should distinguish a known zero-percent cache hit from unknown usage",
+	);
+	assert.equal(
+		plainLine(
+			["tokens"],
+			testState({ usage: { input: 0, output: 50, cacheRead: 100, cacheWrite: 0, cost: 0 } }),
+			96,
+			1,
+			(config) => {
+				config.tokens.cache = "rate";
+			},
+		),
+		"tok ↑0 ↓50 CH100%",
+		"tokens cache rate should handle a fully cached prompt",
+	);
+	assert.equal(
+		plainLine(
+			["tokens"],
+			testState({ usage: { input: 0, output: 50, cacheRead: 0, cacheWrite: 0, cost: 0 } }),
+			96,
+			1,
+			(config) => {
+				config.tokens.cache = "rate";
+			},
+		),
+		"tok ↑0 ↓50",
+		"tokens cache rate should stay absent when no prompt-token denominator is known",
+	);
 	assert.equal(plainLine(["model"], modelState(1, "high"), 96), "ai GPT 5.5 high", "model thinking auto should show thinking at full width");
 	assert.equal(plainLine(["model"], modelState(1, "high"), 64), "ai GPT 5.5 high", "model thinking auto should show thinking at compact width");
 	assert.equal(plainLine(["model"], modelState(1, "high"), 63), "ai GPT 5.5", "model thinking auto should hide thinking at minimal width");

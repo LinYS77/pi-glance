@@ -2,14 +2,15 @@
 
 # ◌ pi-glance
 
-**A calm input surface for [pi](https://github.com/badlogic/pi-mono)**
+**A calm input surface for [pi](https://github.com/earendil-works/pi)**
 
 Replace the default prompt with a rounded multiline editor
 and an inline glance at Git, cost, Reply speed, context, optional tokens, and model.
 
 [![npm](https://img.shields.io/npm/v/pi-glance?style=flat-square&color=blue)](https://www.npmjs.com/package/pi-glance)
+[![CI](https://github.com/LinYS77/pi-glance/actions/workflows/ci.yml/badge.svg)](https://github.com/LinYS77/pi-glance/actions/workflows/ci.yml)
 [![license](https://img.shields.io/badge/license-MIT-64748b?style=flat-square)](LICENSE)
-[![pi](https://img.shields.io/badge/pi-package-7c3aed?style=flat-square)](https://github.com/badlogic/pi-mono)
+[![pi](https://img.shields.io/badge/pi-package-7c3aed?style=flat-square)](https://github.com/earendil-works/pi)
 
 </div>
 
@@ -33,7 +34,7 @@ Then restart pi or run `/reload`.
 
 To update installed packages/extensions, use `pi update --extensions` or `pi update --all`. `pi update` updates Pi itself by default.
 
-Compatibility: current pi-glance releases target Pi packages under `@earendil-works/*` and the Node runtime supported by current Pi. If your Pi installation still exposes the older package namespace or runs on Node 20, pin `pi-glance@0.3.0` or upgrade Pi before updating pi-glance.
+Compatibility: the current pi-glance development and CI baseline is Pi 0.84.2 on Node 22.19.0 or newer, matching Pi's supported runtime. Pi core packages remain peer dependencies supplied by Pi, so newer compatible Pi releases can load the extension. If your Pi installation still exposes the older package namespace or runs on Node 20, pin `pi-glance@0.3.0` or upgrade Pi before updating pi-glance.
 
 For development/testing:
 
@@ -44,7 +45,10 @@ pi -e /path/to/pi-glance
 Local checks and Git diagnostics:
 
 ```bash
+npm ci
+npm run check
 npm test
+npm run pack:dry
 npm run test:git
 npm run debug:git
 ```
@@ -81,6 +85,7 @@ That's the only command — opens a calm settings pane with a real input-surface
 - Nerd icons need a Nerd Font or Symbols Nerd Font fallback. If icons look like boxes, choose `plain`.
 - pi-glance does not auto-detect, install, or bundle terminal fonts.
 - Reply speed is enabled by default and appears between cost and context. It shows output tokens per wall time: `?` means no trusted measurement yet, `~42 tok/s` is a provisional current-run checkpoint from completed turns, and `42 tok/s` is the finalized agent-end measurement.
+- The optional Tokens segment can set Cache to `auto`, `show`, `hide`, or `rate`. `rate` shows a rounded session aggregate cache hit percentage such as `CH42%`, calculated as `cacheRead / (input + cacheRead + cacheWrite)`. A known cache miss appears as `CH0%`. No `CH%` is shown until prompt-token usage exists.
 - Configure `/glance` → **Reply speed** → `Precision`: `auto`, `1 digit`, or `0 digits`. Wall time includes tools, waiting, network, and thinking, so it is not a benchmark. Reply speed uses no notifications, no timers/tickers, no token estimation from text/deltas, and adds no command, footer, dashboard, history, or average view.
 
 ## Themes and config
@@ -114,7 +119,7 @@ At render time, pi-glance reads only Pi's public UI theme name to choose a slot:
 - **Cost** — hide zero cost.
 - **Reply speed** — enabled by default; shows unknown `?`, provisional `~`, or finalized output tokens per wall time in the status line. Precision can be `auto`, `1 digit`, or `0 digits`. It sends no notifications, uses no timers, and does not estimate tokens from text or deltas.
 - **Context** — percent / tokens, or hide unknown usage.
-- **Tokens** — input / output, total, or cache details. Tokens stay off by default.
+- **Tokens** — input / output or total; Cache can be `auto`, `show`, `hide`, or `rate`. Rate mode shows the rounded aggregate `CH%`. Tokens stay off by default.
 - **Model** — provider and thinking labels. Model stays last by default.
 
 ## Workspace title

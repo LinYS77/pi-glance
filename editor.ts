@@ -27,11 +27,14 @@ function stripBorderColor(line: string, borderColor: (text: string) => string): 
 
 function isHorizontalBorder(line: string, borderColor: (text: string) => string): boolean {
 	const plain = stripBorderColor(line, borderColor).trim();
-	return (
-		plain.length > 0 &&
-		plain.includes("─") &&
-		[...plain].every((char) => char === "─" || char === "↑" || char === "↓" || char === " " || /[0-9a-z]/i.test(char))
+	if (plain.length === 0) return false;
+	const borderCharactersOnly = [...plain].every(
+		(char) => char === "─" || char === "↑" || char === "↓" || char === " " || char === "." || /[0-9a-z]/i.test(char),
 	);
+	if (!borderCharactersOnly) return false;
+	// Pi 0.84 truncates scroll borders with ASCII periods at very narrow widths,
+	// including pure "." / "..." lines where no horizontal glyph survives.
+	return plain.includes("─") || /^\.+$/.test(plain);
 }
 
 function normalizeRenderedLine(line: string, width: number): string {

@@ -51,12 +51,13 @@ async function main(): Promise<void> {
 			icons: "nerd",
 			display: { adaptive: false, workspaceLabel: "path", showProvider: "always" },
 			git: { shaMode: "always", pollIntervalMs: 30000 },
-			tokens: { display: "total", cache: "show" },
+			tokens: { display: "total", cache: "rate" },
 		});
 		await saveConfig(nextConfig);
 		const savedText = await readFile(configPath, "utf8");
 		assert.equal(savedText, configToText(nextConfig), "saveConfig should write configToText output exactly");
 		assert.deepEqual(JSON.parse(savedText).theme, { light: "one-light", dark: "tokyo-night" }, "saveConfig should serialize the current theme pair shape");
+		assert.equal(JSON.parse(savedText).tokens.cache, "rate", "saveConfig should serialize the cache-rate mode");
 		assert.equal("adaptive" in JSON.parse(savedText).display, false, "saveConfig should drop the legacy adaptive width setting because fitting is always on");
 		assert.deepEqual(configFromText(savedText), normalizeConfig(nextConfig), "configFromText should round-trip saveConfig output");
 		assert.deepEqual(loadConfigSync(), normalizeConfig(nextConfig), "loadConfigSync should round-trip saved config");

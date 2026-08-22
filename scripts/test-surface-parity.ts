@@ -148,11 +148,15 @@ function liveBottom(state: GlanceState, config: GlanceConfig, width: number, foc
 	return liveFrame(state, config, width, focused, "Ask pi to improve the input surface...").at(-1) ?? "";
 }
 
-function liveScrolledBottom(state: GlanceState, config: GlanceConfig, width: number, focused: boolean): string {
+function liveScrolledFrame(state: GlanceState, config: GlanceConfig, width: number, focused: boolean): string[] {
 	const editor = makeLiveEditor(state, config, focused, 10);
 	editor.setText(Array.from({ length: 12 }, (_, index) => `line${index + 1}`).join("\n"));
 	for (let i = 0; i < 20; i++) editor.handleInput("\x1b[A");
-	return stripAnsi(editor.render(width).at(-1) ?? "");
+	return editor.render(width).map(stripAnsi);
+}
+
+function liveScrolledBottom(state: GlanceState, config: GlanceConfig, width: number, focused: boolean): string {
+	return liveScrolledFrame(state, config, width, focused).at(-1) ?? "";
 }
 
 function previewFrame(state: GlanceState, config: GlanceConfig, width: number, contentLines: string[], focused: boolean): string[] {
@@ -563,6 +567,17 @@ for (const width of WIDTHS) {
 	assert.ok(visibleWidth(scrolledBottom) <= width, `live scrolled bottom should fit width ${width}`);
 }
 
+for (const width of Array.from({ length: 13 }, (_, index) => index + 4)) {
+	const config = defaultConfig();
+	config.editor.topMarginRows = 0;
+	const frame = liveScrolledFrame(dirtyState(), config, width, true);
+	assert.equal(topBorderIndex(frame), 0, `Pi 0.84 narrow scrolled editor should retain the Glance top frame at width ${width}`);
+	assert.ok(frame.at(-1)?.startsWith("╰"), `Pi 0.84 narrow scrolled editor should retain the Glance bottom frame at width ${width}`);
+	for (const line of frame) {
+		assert.ok(visibleWidth(line) <= width, `Pi 0.84 narrow scrolled editor line should fit width ${width}: ${line}`);
+	}
+}
+
 {
 	const config = defaultConfig();
 	config.editor.topMarginRows = 0;
@@ -616,6 +631,49 @@ for (const width of WIDTHS) {
 	assert.deepEqual(editorKeyEditor.getCursor(), { line: 0, col: 2 }, "left-arrow editor keybinding should move the inherited Pi editor cursor");
 	editorKeyEditor.handleInput("\u007f");
 	assert.equal(editorKeyEditor.getText(), "ac", "backspace editor keybinding should delete through inherited Pi editor behavior");
+
+	const historyEditor = makeLiveEditor(
+		dirtyState(),
+		config,
+		true,
+		40,
+		keybindingsWith({
+			"tui.editor.historyPrevious": ["\u0010"],
+			"tui.editor.historyNext": ["\u000e"],
+			"app.model.cycleForward": ["\u0010"],
+		}),
+	);
+	let modelCycles = 0;
+	historyEditor.onAction("app.model.cycleForward", () => {
+		modelCycles++;
+	});
+	historyEditor.addToHistory("older prompt");
+	historyEditor.addToHistory("newer prompt");
+	historyEditor.setText("draft prompt");
+	historyEditor.handleInput("\u0010");
+	assert.equal(modelCycles, 0, "Pi 0.84 dedicated history keybindings should be delegated before a conflicting app action while GlanceEditor is focused");
+	historyEditor.setText("draft prompt");
+	historyEditor.render(80);
+	historyEditor.handleInput("\x1b[H");
+	historyEditor.handleInput("\x1b[A");
+	assert.equal(historyEditor.getText(), "newer prompt", "inherited Pi editor history should open the newest prompt from the first visual position");
+	historyEditor.handleInput("\x1b[A");
+	assert.equal(historyEditor.getText(), "older prompt", "inherited Pi editor history should continue to older prompts");
+	historyEditor.handleInput("\x1b[B");
+	assert.equal(historyEditor.getText(), "newer prompt", "inherited Pi editor history should move toward newer prompts");
+	historyEditor.handleInput("\x1b[B");
+	assert.equal(historyEditor.getText(), "draft prompt", "inherited Pi editor history should restore the draft after leaving history browsing");
+
+	const optionsEditor = new GlanceEditor(
+		{ terminal: { rows: 40 }, requestRender: () => undefined } as unknown as TUI,
+		theme,
+		keybindings,
+		() => dirtyState(),
+		() => config,
+		undefined,
+		{ editorOptions: { autocompleteMaxVisible: 7 } },
+	);
+	assert.equal(optionsEditor.getAutocompleteMaxVisible(), 7, "GlanceEditor should forward Pi 0.84 EditorOptions without mixing them with Glance render options");
 }
 
 {
@@ -647,6 +705,25 @@ for (const width of WIDTHS) {
 	assert.ok(autocompleteLine?.startsWith("  "), "autocomplete lines should keep pi-glance indentation outside the framed editor");
 	for (const line of autocompleteFrame) {
 		assert.ok(visibleWidth(line) <= 80, `autocomplete editor frame line should fit width 80: ${line}`);
+	}
+
+	const narrowEditor = makeLiveEditor(dirtyState(), config, true, 10, keybindingsWith({ "tui.input.tab": ["\t"] }));
+	narrowEditor.setText(["src", ...Array.from({ length: 11 }, (_, index) => `line${index + 2}`)].join("\n"));
+	for (let i = 0; i < 20; i++) narrowEditor.handleInput("\x1b[A");
+	narrowEditor.setAutocompleteProvider(provider);
+	narrowEditor.handleInput("\t");
+	await Promise.resolve();
+	await Promise.resolve();
+	for (const width of [4, 16]) {
+		const narrowAutocompleteFrame = narrowEditor.render(width).map(stripAnsi);
+		const narrowTopIndex = topBorderIndex(narrowAutocompleteFrame);
+		const narrowBottomIndex = narrowAutocompleteFrame.findIndex((line) => line.startsWith("╰"));
+		assert.ok(narrowTopIndex >= 0, `Pi 0.84 narrow autocomplete should retain the Glance top frame while the editor can scroll below at width ${width}`);
+		assert.ok(narrowBottomIndex > narrowTopIndex, `Pi 0.84 narrow autocomplete should retain the Glance bottom frame before suggestions at width ${width}`);
+		assert.ok(narrowAutocompleteFrame.length > narrowBottomIndex + 1, `Pi 0.84 narrow autocomplete suggestions should remain outside the Glance frame at width ${width}`);
+		for (const line of narrowAutocompleteFrame) {
+			assert.ok(visibleWidth(line) <= width, `Pi 0.84 narrow autocomplete line should fit width ${width}: ${line}`);
+		}
 	}
 }
 

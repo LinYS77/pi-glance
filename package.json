@@ -14,6 +14,9 @@
   ],
   "type": "module",
   "license": "MIT",
+  "engines": {
+    "node": ">=22.19.0"
+  },
   "author": "linys77",
   "repository": {
     "type": "git",
@@ -39,11 +42,11 @@
     "@earendil-works/pi-tui": "*"
   },
   "devDependencies": {
-    "@earendil-works/pi-ai": "0.80.2",
-    "@earendil-works/pi-coding-agent": "0.80.2",
-    "@earendil-works/pi-tui": "0.80.2",
-    "@types/node": "*",
-    "typescript": "*"
+    "@earendil-works/pi-ai": "0.84.2",
+    "@earendil-works/pi-coding-agent": "0.84.2",
+    "@earendil-works/pi-tui": "0.84.2",
+    "@types/node": "24.12.4",
+    "typescript": "5.9.3"
   },
   "publishConfig": {
     "access": "public"

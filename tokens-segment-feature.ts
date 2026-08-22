@@ -28,9 +28,8 @@ function tokenCacheParts(ctx: SegmentRenderContext): string[] {
 	const usage = ctx.state.usage;
 	const parts: string[] = [];
 	if (ctx.config.tokens.cache === "rate") {
-		// Cache hit rate mode: show only CH{percent}% (consistent with Pi's default CH calculation)
 		const promptTokens = usage.input + usage.cacheRead + usage.cacheWrite;
-		if (promptTokens > 0 && usage.cacheRead > 0) {
+		if (promptTokens > 0) {
 			const hitRate = Math.round((usage.cacheRead / promptTokens) * 100);
 			parts.push(`CH${hitRate}%`);
 		}
