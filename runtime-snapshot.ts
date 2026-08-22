@@ -13,16 +13,6 @@ export interface StateContextUsageInputs {
 	percent: number | null;
 }
 
-export interface StateInputs {
-	cwd: string;
-	model?: StateModelInputs;
-	thinkingLevel: string;
-	contextUsage?: StateContextUsageInputs;
-	usage: UsageTotals;
-	availableProviderCount: number;
-	unknownContextAfterLatestCompaction: boolean;
-}
-
 export interface StateThinkingInputs {
 	model?: StateModelInputs;
 	thinkingLevel: string;
@@ -34,7 +24,7 @@ export interface StateLifecycleInputs extends StateThinkingInputs {
 	contextUsage?: StateContextUsageInputs;
 }
 
-export interface StateCompactInputs extends StateLifecycleInputs {
+export interface StateInputs extends StateLifecycleInputs {
 	usage: UsageTotals;
 }
 
@@ -46,7 +36,7 @@ interface StateMessageCostInputs {
 	cacheWrite?: number;
 }
 
-interface StateMessageUsageInputs {
+export interface StateUsageInputs {
 	totalTokens?: number;
 	input?: number;
 	output?: number;
@@ -58,7 +48,9 @@ interface StateMessageUsageInputs {
 export interface StateMessageInputs {
 	role?: string;
 	stopReason?: string;
-	usage?: StateMessageUsageInputs;
+	responseId?: unknown;
+	toolCallId?: unknown;
+	usage?: StateUsageInputs;
 }
 
 interface ModelRegistryLike {
@@ -71,32 +63,47 @@ interface ProviderContext {
 
 export interface StateSessionEntry {
 	type?: string;
+	id?: unknown;
 	message?: StateMessageInputs;
+	usage?: StateUsageInputs;
 }
 
-function usageCost(message: StateMessageInputs): number {
-	const cost = message.usage?.cost;
+function emptyUsageTotals(): UsageTotals {
+	return { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 };
+}
+
+function usageCost(usage: StateUsageInputs | undefined): number {
+	const cost = usage?.cost;
 	if (!cost) return 0;
 	if (Number.isFinite(cost.total)) return cost.total ?? 0;
 	return (cost.input ?? 0) + (cost.output ?? 0) + (cost.cacheRead ?? 0) + (cost.cacheWrite ?? 0);
 }
 
-export function usageTotalsFromAssistantMessage(message: StateMessageInputs): UsageTotals {
-	if (message.role !== "assistant") return { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 };
+export function usageTotalsFromUsage(usage: StateUsageInputs | undefined): UsageTotals {
 	return {
-		input: message.usage?.input ?? 0,
-		output: message.usage?.output ?? 0,
-		cacheRead: message.usage?.cacheRead ?? 0,
-		cacheWrite: message.usage?.cacheWrite ?? 0,
-		cost: usageCost(message),
+		input: usage?.input ?? 0,
+		output: usage?.output ?? 0,
+		cacheRead: usage?.cacheRead ?? 0,
+		cacheWrite: usage?.cacheWrite ?? 0,
+		cost: usageCost(usage),
 	};
 }
 
+export function usageTotalsFromMessage(message: StateMessageInputs): UsageTotals {
+	if (message.role !== "assistant" && message.role !== "toolResult") return emptyUsageTotals();
+	return usageTotalsFromUsage(message.usage);
+}
+
+export function usageTotalsFromEntry(entry: StateSessionEntry): UsageTotals {
+	if (entry.type === "message" && entry.message) return usageTotalsFromMessage(entry.message);
+	if ((entry.type === "compaction" || entry.type === "branch_summary") && entry.usage) return usageTotalsFromUsage(entry.usage);
+	return emptyUsageTotals();
+}
+
 export function usageTotalsFromEntries(entries: readonly StateSessionEntry[]): UsageTotals {
-	const usage: UsageTotals = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 };
+	const usage = emptyUsageTotals();
 	for (const entry of entries) {
-		if (entry.type !== "message" || !entry.message) continue;
-		const delta = usageTotalsFromAssistantMessage(entry.message);
+		const delta = usageTotalsFromEntry(entry);
 		usage.input += delta.input;
 		usage.output += delta.output;
 		usage.cacheRead += delta.cacheRead;
@@ -104,40 +111,6 @@ export function usageTotalsFromEntries(entries: readonly StateSessionEntry[]): U
 		usage.cost += delta.cost;
 	}
 	return usage;
-}
-
-function assistantContextTokens(message: StateMessageInputs): number {
-	const usage = message.usage;
-	if (!usage) return 0;
-	if (Number.isFinite(usage.totalTokens)) return usage.totalTokens ?? 0;
-	return (usage.input ?? 0) + (usage.output ?? 0) + (usage.cacheRead ?? 0) + (usage.cacheWrite ?? 0);
-}
-
-export function assistantMessageHasKnownContextUsage(message: StateMessageInputs): boolean {
-	if (message.role !== "assistant") return false;
-	if (message.stopReason === "aborted" || message.stopReason === "error") return false;
-	return assistantContextTokens(message) > 0;
-}
-
-export function hasUnknownContextAfterLatestCompaction(branch: readonly StateSessionEntry[]): boolean {
-	let compactionIndex = -1;
-	for (let i = branch.length - 1; i >= 0; i--) {
-		if (branch[i]?.type === "compaction") {
-			compactionIndex = i;
-			break;
-		}
-	}
-	if (compactionIndex < 0) return false;
-
-	for (let i = branch.length - 1; i > compactionIndex; i--) {
-		const entry = branch[i];
-		if (entry?.type !== "message" || entry.message?.role !== "assistant") continue;
-		const message = entry.message;
-		if (message.stopReason === "aborted" || message.stopReason === "error") return true;
-		return assistantContextTokens(message) <= 0;
-	}
-
-	return true;
 }
 
 function availableProviderCountFromContext(ctx: ExtensionContext): number {
@@ -188,16 +161,9 @@ export function lifecycleInputsFromContext(ctx: ExtensionContext, thinkingLevel:
 	};
 }
 
-export function compactInputsFromContext(ctx: ExtensionContext, thinkingLevel: string): StateCompactInputs {
+export function stateInputsFromContext(ctx: ExtensionContext, thinkingLevel: string): StateInputs {
 	return {
 		...lifecycleInputsFromContext(ctx, thinkingLevel),
 		usage: usageTotalsFromEntries(ctx.sessionManager.getEntries()),
-	};
-}
-
-export function stateInputsFromContext(ctx: ExtensionContext, thinkingLevel: string): StateInputs {
-	return {
-		...compactInputsFromContext(ctx, thinkingLevel),
-		unknownContextAfterLatestCompaction: hasUnknownContextAfterLatestCompaction(ctx.sessionManager.getBranch()),
 	};
 }

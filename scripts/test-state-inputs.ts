@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { compactInputsFromContext, hasUnknownContextAfterLatestCompaction, lifecycleInputsFromContext, stateInputsFromContext, thinkingInputsFromContext, usageTotalsFromAssistantMessage, usageTotalsFromEntries, type StateSessionEntry } from "../runtime-snapshot.js";
+import { lifecycleInputsFromContext, stateInputsFromContext, thinkingInputsFromContext, usageTotalsFromEntries, usageTotalsFromMessage, type StateSessionEntry } from "../runtime-snapshot.js";
 
 function message(role: string, options: { usage?: Record<string, unknown>; stopReason?: string } = {}): StateSessionEntry {
 	return {
@@ -11,10 +11,6 @@ function message(role: string, options: { usage?: Record<string, unknown>; stopR
 			stopReason: options.stopReason,
 		},
 	} as StateSessionEntry;
-}
-
-function compaction(): StateSessionEntry {
-	return { type: "compaction" };
 }
 
 interface FakeContextOptions {
@@ -147,56 +143,25 @@ assert.deepEqual(
 	"lifecycleInputsFromContext should read workspace/model/thinking/provider/context without entries or branch scans",
 );
 
-const branchlessCompactInputs = compactInputsFromContext(
-	{
-		cwd: "/fallback-compact",
-		model: { id: "compact-model", provider: "compact-provider", contextWindow: 789000 },
-		modelRegistry: {
-			getAvailable: () => [{ provider: "compact-provider" }, { provider: "other-provider" }],
-		},
-		getContextUsage: () => ({ tokens: 789, contextWindow: 789000, percent: 0.1 }),
-		sessionManager: {
-			getCwd: () => "/workspace-compact",
-			getEntries: () => [message("assistant", { usage: { input: 2, output: 3, cacheRead: 4, cacheWrite: 5, cost: { total: 0.75 } } })],
-			getBranch: () => {
-				throw new Error("compact inputs should not scan session branch");
-			},
-		},
-	} as unknown as ExtensionContext,
-	"low",
-);
 assert.deepEqual(
-	branchlessCompactInputs,
-	{
-		cwd: "/workspace-compact",
-		model: { id: "compact-model", provider: "compact-provider", contextWindow: 789000 },
-		thinkingLevel: "low",
-		availableProviderCount: 2,
-		contextUsage: { tokens: 789, contextWindow: 789000, percent: 0.1 },
-		usage: { input: 2, output: 3, cacheRead: 4, cacheWrite: 5, cost: 0.75 },
-	},
-	"compactInputsFromContext should read compact usage/workspace/model/context without branch scans",
-);
-
-assert.deepEqual(
-	usageTotalsFromAssistantMessage(message("user", { usage: { input: 100, output: 200, cacheRead: 300, cacheWrite: 400, cost: { total: 999 } } }).message ?? {}),
+	usageTotalsFromMessage(message("user", { usage: { input: 100, output: 200, cacheRead: 300, cacheWrite: 400, cost: { total: 999 } } }).message ?? {}),
 	{ input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 },
-	"usageTotalsFromAssistantMessage should ignore non-assistant messages",
+	"usageTotalsFromMessage should ignore user messages",
 );
 assert.deepEqual(
-	usageTotalsFromAssistantMessage(message("assistant", { usage: { input: 1, output: 2, cacheRead: 3, cacheWrite: 4, cost: { total: 0.25, input: 10 } } }).message ?? {}),
+	usageTotalsFromMessage(message("assistant", { usage: { input: 1, output: 2, cacheRead: 3, cacheWrite: 4, cost: { total: 0.25, input: 10 } } }).message ?? {}),
 	{ input: 1, output: 2, cacheRead: 3, cacheWrite: 4, cost: 0.25 },
-	"usageTotalsFromAssistantMessage should prefer finite cost.total over cost components",
+	"usageTotalsFromMessage should prefer finite cost.total over cost components",
 );
 assert.deepEqual(
-	usageTotalsFromAssistantMessage(message("assistant", { usage: { input: 5, output: 6, cacheRead: 7, cacheWrite: 8, cost: { input: 0.1, output: 0.2, cacheRead: 0.3, cacheWrite: 0.4 } } }).message ?? {}),
+	usageTotalsFromMessage(message("toolResult", { usage: { input: 5, output: 6, cacheRead: 7, cacheWrite: 8, cost: { input: 0.1, output: 0.2, cacheRead: 0.3, cacheWrite: 0.4 } } }).message ?? {}),
 	{ input: 5, output: 6, cacheRead: 7, cacheWrite: 8, cost: 1 },
-	"usageTotalsFromAssistantMessage should fall back to cost components when cost.total is absent",
+	"usageTotalsFromMessage should include usage-bearing tool results and fall back to cost components",
 );
 assert.deepEqual(
-	usageTotalsFromAssistantMessage(message("assistant").message ?? {}),
+	usageTotalsFromMessage(message("assistant").message ?? {}),
 	{ input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 },
-	"usageTotalsFromAssistantMessage should default missing usage to zero",
+	"usageTotalsFromMessage should default missing usage to zero",
 );
 
 assert.deepEqual(
@@ -212,10 +177,38 @@ assert.deepEqual(
 );
 
 assert.deepEqual(
+	usageTotalsFromEntries([
+		message("assistant", { usage: { input: 1, output: 2, cacheRead: 3, cacheWrite: 4, cost: { total: 0.1 } } }),
+		message("toolResult", { usage: { input: 10, output: 20, cacheRead: 30, cacheWrite: 40, cost: { total: 1 } } }),
+		{ type: "compaction", usage: { input: 100, output: 200, cacheRead: 300, cacheWrite: 400, cost: { total: 10 } } } as unknown as StateSessionEntry,
+		{ type: "branch_summary", usage: { input: 1000, output: 2000, cacheRead: 3000, cacheWrite: 4000, cost: { total: 100 } } } as unknown as StateSessionEntry,
+	]),
+	{ input: 1111, output: 2222, cacheRead: 3333, cacheWrite: 4444, cost: 111.1 },
+	"usage totals should match Pi 0.84 billed-session semantics across assistant, toolResult, compaction, and branch-summary usage",
+);
+
+const publicContextTruthInputs = stateInputsFromContext(
+	{
+		cwd: "/public-context-truth",
+		model: { id: "truth-model", provider: "truth-provider", contextWindow: 100_000 },
+		modelRegistry: { getAvailable: () => [{ provider: "truth-provider" }] },
+		getContextUsage: () => ({ tokens: null, contextWindow: 100_000, percent: null }),
+		sessionManager: {
+			getCwd: () => "/public-context-truth",
+			getEntries: () => [],
+			getBranch: () => {
+				throw new Error("stateInputsFromContext must not derive context truth from the session branch");
+			},
+		},
+	} as unknown as ExtensionContext,
+	"off",
+);
+assert.deepEqual(publicContextTruthInputs.contextUsage, { tokens: null, contextWindow: 100_000, percent: null }, "state inputs should trust ctx.getContextUsage nulls directly without a branch-derived shadow state");
+
+assert.deepEqual(
 	stateInputsFromContext(
 		fakeContext({
 			entries: [message("assistant", { usage: { input: 2, output: 3, cost: { total: 0.5 } } })],
-			branch: [compaction(), message("assistant", { usage: { totalTokens: 5 } })],
 		}),
 		"low",
 	),
@@ -226,49 +219,8 @@ assert.deepEqual(
 		contextUsage: undefined,
 		usage: { input: 2, output: 3, cacheRead: 0, cacheWrite: 0, cost: 0.5 },
 		availableProviderCount: 1,
-		unknownContextAfterLatestCompaction: false,
 	},
-	"stateInputsFromContext should combine cwd, thinking, usage totals, and compaction status",
-);
-
-assert.equal(hasUnknownContextAfterLatestCompaction([]), false, "no compaction should mean context is not unknown");
-assert.equal(hasUnknownContextAfterLatestCompaction([message("assistant", { usage: { totalTokens: 0 } })]), false, "assistant without compaction should not mark context unknown");
-assert.equal(hasUnknownContextAfterLatestCompaction([compaction()]), true, "compaction followed by no assistant should mark context unknown");
-assert.equal(hasUnknownContextAfterLatestCompaction([compaction(), message("user")]), true, "user messages after compaction should not satisfy context usage recovery");
-assert.equal(hasUnknownContextAfterLatestCompaction([compaction(), message("assistant", { usage: { totalTokens: 1 } })]), false, "positive assistant totalTokens after compaction should clear unknown context");
-assert.equal(hasUnknownContextAfterLatestCompaction([compaction(), message("assistant", { usage: { totalTokens: 0, input: 10, output: 10 } })]), true, "finite totalTokens should take precedence even when component tokens are positive");
-assert.equal(hasUnknownContextAfterLatestCompaction([compaction(), message("assistant", { usage: { input: 1, output: 2, cacheRead: 3, cacheWrite: 4 } })]), false, "positive component token sum should clear unknown context when totalTokens is absent");
-assert.equal(hasUnknownContextAfterLatestCompaction([compaction(), message("assistant", { usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } })]), true, "zero component token sum should keep context unknown");
-assert.equal(hasUnknownContextAfterLatestCompaction([compaction(), message("assistant")]), true, "missing assistant usage after compaction should keep context unknown");
-assert.equal(hasUnknownContextAfterLatestCompaction([compaction(), message("assistant", { usage: { totalTokens: 100 }, stopReason: "aborted" })]), true, "aborted assistant after compaction should keep context unknown");
-assert.equal(hasUnknownContextAfterLatestCompaction([compaction(), message("assistant", { usage: { totalTokens: 100 }, stopReason: "error" })]), true, "errored assistant after compaction should keep context unknown");
-assert.equal(
-	hasUnknownContextAfterLatestCompaction([
-		message("assistant", { usage: { totalTokens: 100 } }),
-		compaction(),
-		message("user"),
-	]),
-	true,
-	"assistants before the latest compaction should be ignored",
-);
-assert.equal(
-	hasUnknownContextAfterLatestCompaction([
-		compaction(),
-		message("assistant", { usage: { totalTokens: 0 } }),
-		compaction(),
-		message("user"),
-	]),
-	true,
-	"only assistants after the latest compaction should count",
-);
-assert.equal(
-	hasUnknownContextAfterLatestCompaction([
-		compaction(),
-		message("assistant", { usage: { totalTokens: 0 } }),
-		message("assistant", { usage: { totalTokens: 8 } }),
-	]),
-	false,
-	"latest assistant after compaction should decide the unknown-context status",
+	"stateInputsFromContext should combine cwd, thinking, complete session usage totals, and public context facts",
 );
 
 console.log("✓ state input extraction checks passed");

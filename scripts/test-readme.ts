@@ -51,6 +51,9 @@ assertReadmeIncludes("unknown or custom Pi theme names fall back to `theme.light
 assertReadmeIncludes("`auto`, `show`, `hide`, or `rate`", "README should document every Tokens cache mode");
 assertReadmeIncludes("rounded session aggregate cache hit percentage", "README should define cache-rate aggregation semantics");
 assertReadmeIncludes("cacheRead / (input + cacheRead + cacheWrite)", "README should document the CH% denominator");
+assertReadmeIncludes("billed assistant responses, usage-bearing tool results, compactions, and branch summaries", "README should document complete Pi 0.84 session usage sources");
+assertReadmeIncludes("Pi's public `ctx.getContextUsage()` result", "README should name the public context truth boundary");
+assertReadmeIncludes("Tokens and Cost use Pi's billed-session semantics", "README should align Tokens and Cost copy with complete session totals");
 assertReadmeIncludes("A known cache miss appears as `CH0%`", "README should distinguish a zero-percent hit rate from unknown usage");
 assertReadmeIncludes("No `CH%` is shown until prompt-token usage exists", "README should document the cache-rate unknown boundary");
 

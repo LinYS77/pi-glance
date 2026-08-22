@@ -1,12 +1,16 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { applyRuntimeRefreshPlan } from "./runtime-plan-executor.js";
 import { runtimePlanFor, type RuntimeEventFacts, type RuntimeEventKind } from "./runtime-policy.js";
-import { assistantMessageHasKnownContextUsage, stateInputsFromContext, usageTotalsFromAssistantMessage, type StateInputs, type StateMessageInputs } from "./runtime-snapshot.js";
+import { stateInputsFromContext, usageTotalsFromEntry, usageTotalsFromMessage, type StateInputs, type StateMessageInputs, type StateSessionEntry } from "./runtime-snapshot.js";
 import { addUsageTotals, clearCurrentRunThroughput, createInitialState, setCurrentRunThroughput, setGitSnapshot, setLastTurnThroughput } from "./state.js";
 import { ThroughputRunTracker, type ThroughputRunStateIntent } from "./throughput-run-tracker.js";
-import type { GitSnapshot, GlanceConfig, GlanceState } from "./types.js";
+import type { GitSnapshot, GlanceConfig, GlanceState, UsageTotals } from "./types.js";
 
-export type RuntimeMessageEndInput = StateMessageInputs & { responseId?: unknown };
+export type RuntimeMessageEndInput = StateMessageInputs;
+
+export interface RuntimeSessionCompactInput {
+	compactionEntry: StateSessionEntry;
+}
 
 export interface RuntimeTurnEndInput {
 	turnIndex?: unknown;
@@ -49,9 +53,8 @@ function applyThroughputIntent(state: GlanceState, intent: ThroughputRunStateInt
 
 export class RuntimeRefreshSession {
 	private state?: GlanceState;
-	private unknownContextAfterLatestCompaction = false;
-	private appliedAssistantMessageObjects = new WeakSet<object>();
-	private appliedAssistantMessageResponseIds = new Set<string>();
+	private appliedUsageObjects = new WeakSet<object>();
+	private appliedUsageKeys = new Set<string>();
 	private readonly throughputTracker = new ThroughputRunTracker();
 
 	constructor(private readonly host: RuntimeRefreshSessionHost) {}
@@ -60,19 +63,13 @@ export class RuntimeRefreshSession {
 		return this.state;
 	}
 
-	private setUnknownContextAfterLatestCompaction(value: boolean): void {
-		this.unknownContextAfterLatestCompaction = value;
-	}
-
 	private readStateInputs(ctx: ExtensionContext): StateInputs {
-		const inputs = stateInputsFromContext(ctx, this.host.getThinkingLevel());
-		this.setUnknownContextAfterLatestCompaction(inputs.unknownContextAfterLatestCompaction);
-		return inputs;
+		return stateInputsFromContext(ctx, this.host.getThinkingLevel());
 	}
 
 	resetAccumulators(): void {
-		this.appliedAssistantMessageObjects = new WeakSet<object>();
-		this.appliedAssistantMessageResponseIds = new Set<string>();
+		this.appliedUsageObjects = new WeakSet<object>();
+		this.appliedUsageKeys = new Set<string>();
 		this.throughputTracker.reset();
 	}
 
@@ -95,28 +92,38 @@ export class RuntimeRefreshSession {
 		return this.state;
 	}
 
-	clearContextUnknownAfterKnownAssistantUsage(message: StateMessageInputs): void {
-		if (this.unknownContextAfterLatestCompaction && assistantMessageHasKnownContextUsage(message)) {
-			this.unknownContextAfterLatestCompaction = false;
-		}
-	}
-
-	private usageTotalsAreZero(delta: ReturnType<typeof usageTotalsFromAssistantMessage>): boolean {
+	private usageTotalsAreZero(delta: UsageTotals): boolean {
 		return delta.input === 0 && delta.output === 0 && delta.cacheRead === 0 && delta.cacheWrite === 0 && delta.cost === 0;
 	}
 
-	private applyAssistantMessageUsageDelta(message: RuntimeMessageEndInput): boolean {
-		if (!this.state || message.role !== "assistant") return false;
-		const delta = usageTotalsFromAssistantMessage(message);
-		if (this.usageTotalsAreZero(delta)) return false;
-		if (typeof message.responseId === "string" && message.responseId) {
-			if (this.appliedAssistantMessageResponseIds.has(message.responseId)) return false;
-			this.appliedAssistantMessageResponseIds.add(message.responseId);
-		} else if (typeof message === "object" && message !== null) {
-			if (this.appliedAssistantMessageObjects.has(message)) return false;
-			this.appliedAssistantMessageObjects.add(message);
+	private claimUsageDelta(source: object, key: string | undefined): boolean {
+		if (key) {
+			if (this.appliedUsageKeys.has(key)) return false;
+			this.appliedUsageKeys.add(key);
+			return true;
 		}
+		if (this.appliedUsageObjects.has(source)) return false;
+		this.appliedUsageObjects.add(source);
+		return true;
+	}
+
+	private applyUsageDelta(source: object, delta: UsageTotals, key?: string): boolean {
+		if (!this.state || this.usageTotalsAreZero(delta) || !this.claimUsageDelta(source, key)) return false;
 		return addUsageTotals(this.state, delta);
+	}
+
+	private messageUsageKey(message: RuntimeMessageEndInput): string | undefined {
+		if (message.role === "assistant" && typeof message.responseId === "string" && message.responseId) {
+			return `assistant:${message.responseId}`;
+		}
+		if (message.role === "toolResult" && typeof message.toolCallId === "string" && message.toolCallId) {
+			return `toolResult:${message.toolCallId}`;
+		}
+		return undefined;
+	}
+
+	private entryUsageKey(entry: StateSessionEntry): string | undefined {
+		return typeof entry.id === "string" && entry.id ? `${entry.type ?? "entry"}:${entry.id}` : undefined;
 	}
 
 	async execute(kind: RuntimeEventKind, ctx: ExtensionContext, options: RuntimeRefreshExecuteOptions = {}): Promise<void> {
@@ -130,8 +137,6 @@ export class RuntimeRefreshSession {
 				ctx,
 				plan,
 				getThinkingLevel: () => this.host.getThinkingLevel(),
-				unknownContextAfterLatestCompaction: this.unknownContextAfterLatestCompaction,
-				setUnknownContextAfterLatestCompaction: (value) => this.setUnknownContextAfterLatestCompaction(value),
 				scheduleGitRefresh: (immediate) => this.host.scheduleGitRefresh(immediate),
 			});
 		}
@@ -140,11 +145,23 @@ export class RuntimeRefreshSession {
 	}
 
 	async messageEnd(message: RuntimeMessageEndInput, ctx: ExtensionContext): Promise<void> {
-		if (message.role === "assistant") this.clearContextUnknownAfterKnownAssistantUsage(message);
+		const hadState = this.state !== undefined;
+		const delta = usageTotalsFromMessage(message);
 		await this.execute("message_end", ctx, {
-			facts: { messageRole: message.role },
+			facts: { messageRole: message.role, messageHasUsage: !this.usageTotalsAreZero(delta) },
 			beforeRender: () => {
-				this.applyAssistantMessageUsageDelta(message);
+				if (hadState) this.applyUsageDelta(message, delta, this.messageUsageKey(message));
+			},
+		});
+	}
+
+	async sessionCompact(event: RuntimeSessionCompactInput, ctx: ExtensionContext): Promise<void> {
+		const hadState = this.state !== undefined;
+		const entry = event.compactionEntry;
+		const delta = usageTotalsFromEntry(entry);
+		await this.execute("session_compact", ctx, {
+			beforeRender: () => {
+				if (hadState) this.applyUsageDelta(entry, delta, this.entryUsageKey(entry));
 			},
 		});
 	}

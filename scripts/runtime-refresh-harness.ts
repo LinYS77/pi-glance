@@ -30,7 +30,6 @@ export interface RuntimeRefreshContextHarness {
 	getBranchReads(): number;
 	setCwd(cwd: string): void;
 	setEntries(entries: readonly StateSessionEntry[]): void;
-	setBranch(branch: readonly StateSessionEntry[]): void;
 	setContextUsage(contextUsage: MutableContextUsage | undefined): void;
 	setModel(model: MutableModelInfo | undefined): void;
 	setAvailableProviders(providers: readonly string[]): void;
@@ -40,21 +39,26 @@ export function cloneConfig(config: GlanceConfig = defaultConfig()): GlanceConfi
 	return JSON.parse(JSON.stringify(config)) as GlanceConfig;
 }
 
-export function message(role: string, options: { usage?: Record<string, unknown>; stopReason?: string; responseId?: string } = {}): StateSessionEntry {
-	const entryMessage: StateSessionEntry["message"] & { responseId?: string } = {
+export function message(role: string, options: { usage?: Record<string, unknown>; stopReason?: string; responseId?: string; toolCallId?: string } = {}): StateSessionEntry {
+	const entryMessage: StateSessionEntry["message"] = {
 		role,
 		usage: options.usage,
 		stopReason: options.stopReason,
+		responseId: options.responseId,
+		toolCallId: options.toolCallId,
 	};
-	if (options.responseId !== undefined) entryMessage.responseId = options.responseId;
 	return {
 		type: "message",
 		message: entryMessage,
 	};
 }
 
-export function compaction(): StateSessionEntry {
-	return { type: "compaction" };
+export function compaction(options: { id?: string; usage?: Record<string, unknown> } = {}): StateSessionEntry {
+	return { type: "compaction", id: options.id, usage: options.usage };
+}
+
+export function branchSummary(options: { id?: string; usage?: Record<string, unknown> } = {}): StateSessionEntry {
+	return { type: "branch_summary", id: options.id, usage: options.usage };
 }
 
 export function gitSnapshot(branch?: string, updatedAt?: number): GitSnapshot;
@@ -125,9 +129,6 @@ export function createRuntimeRefreshContext(options: RuntimeRefreshContextOption
 		},
 		setEntries: (nextEntries) => {
 			entries = nextEntries;
-		},
-		setBranch: (nextBranch) => {
-			branch = nextBranch;
 		},
 		setContextUsage: (nextContextUsage) => {
 			contextUsage = nextContextUsage;

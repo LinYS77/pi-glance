@@ -552,8 +552,11 @@ function assertRuntimePlanExecutorSeam(files: SourceFile[]): void {
 	}
 	if (!executor.text.includes("interface RuntimePlanExecutionInput")) fail(`${executor.path}: plan executor should expose an explicit input interface`);
 	if (!executor.text.includes("applyRuntimeRefreshPlan")) fail(`${executor.path}: plan executor should expose applyRuntimeRefreshPlan`);
-	for (const mode of ["reliable", "lifecycle", "message", "thinking", "compact", "none"] as const) {
+	for (const mode of ["reliable", "lifecycle", "thinking", "none"] as const) {
 		if (!executor.text.includes(`\"${mode}\"`)) fail(`${executor.path}: plan executor should handle ${mode} snapshot mode`);
+	}
+	if (/unknownContextAfterLatestCompaction|compactInputsFromContext|clearContextUsage|snapshot\s*===\s*["'](?:compact|message)["']/.test(executor.text)) {
+		fail(`${executor.path}: plan executor must trust public context facts without the removed compaction shadow state`);
 	}
 	if (/GitRefresher|readPiUiTheme|resolveRuntimeRenderStyleContext|ctx\.ui\.theme|ctx\.ui\.setTheme|getAllThemes|getTheme\s*\(|setTheme\s*\(/.test(executor.text)) {
 		fail(`${executor.path}: plan executor must not depend on git implementation, UI, or Pi theme provider APIs`);
@@ -601,17 +604,21 @@ function assertRuntimeRefreshSessionSeam(files: SourceFile[]): void {
 		if (!allowedSpecifiers.has(specifier)) fail(`${session.path}: refresh session must not import ${specifier}`);
 	}
 	if (!session.text.includes("class RuntimeRefreshSession")) fail(`${session.path}: refresh session should expose RuntimeRefreshSession class`);
-	for (const member of ["getState", "ensureState", "resetState", "execute", "messageEnd", "turnEnd", "agentStart", "agentEnd", "resetAccumulators", "sessionStart", "sessionShutdown", "clearContextUnknownAfterKnownAssistantUsage", "applyGitSnapshot"] as const) {
+	for (const member of ["getState", "ensureState", "resetState", "execute", "messageEnd", "sessionCompact", "turnEnd", "agentStart", "agentEnd", "resetAccumulators", "sessionStart", "sessionShutdown", "applyGitSnapshot"] as const) {
 		if (!session.text.includes(member)) fail(`${session.path}: refresh session should expose ${member}`);
 	}
-	if (!session.text.includes("unknownContextAfterLatestCompaction")) fail(`${session.path}: refresh session should own context-unknown state`);
+	if (/unknownContextAfterLatestCompaction|clearContextUnknownAfterKnownAssistantUsage|assistantMessageHasKnownContextUsage/.test(session.text)) {
+		fail(`${session.path}: refresh session must not maintain a second compaction/context truth state`);
+	}
 	if (!session.text.includes("beforeRender")) fail(`${session.path}: refresh session should own beforeRender ordering around plan execution and final render`);
 	if (!session.text.includes("applyRuntimeRefreshPlan")) fail(`${session.path}: refresh session should delegate plan application to runtime-plan-executor`);
 	if (!session.text.includes("setGitSnapshot")) fail(`${session.path}: refresh session should own git snapshot state application`);
 	if (!session.text.includes("ThroughputRunTracker")) fail(`${session.path}: refresh session should own throughput run tracking after Slice 2C`);
 	if (!session.text.includes("setCurrentRunThroughput") || !session.text.includes("setLastTurnThroughput") || !session.text.includes("clearCurrentRunThroughput")) fail(`${session.path}: refresh session should own throughput state intent application after Slice 2C`);
-	if (!session.text.includes("appliedAssistantMessageObjects") || !session.text.includes("appliedAssistantMessageResponseIds")) fail(`${session.path}: refresh session should own assistant message dedupe accumulators after Slice 2C`);
-	if (!session.text.includes("usageTotalsFromAssistantMessage") || !session.text.includes("addUsageTotals")) fail(`${session.path}: refresh session should own assistant usage delta accumulation after Slice 2C`);
+	if (!session.text.includes("appliedUsageObjects") || !session.text.includes("appliedUsageKeys")) fail(`${session.path}: refresh session should own generic billed-usage dedupe accumulators`);
+	if (!session.text.includes("usageTotalsFromMessage") || !session.text.includes("usageTotalsFromEntry") || !session.text.includes("addUsageTotals")) {
+		fail(`${session.path}: refresh session should own assistant/tool/compaction usage delta accumulation`);
+	}
 	if (/GitRefresher|readPiUiTheme|resolveRuntimeRenderStyleContext|ctx\.ui\.theme|ctx\.ui\.setTheme|getAllThemes|getTheme\s*\(|setTheme\s*\(/.test(session.text)) {
 		fail(`${session.path}: refresh session must not depend on git implementation, UI, or Pi theme provider APIs`);
 	}
@@ -634,6 +641,12 @@ function assertRuntimeSnapshotAdapterSeam(files: SourceFile[]): void {
 		}
 		if (IO_NETWORK_PROCESS_IMPORTS.has(specifier)) fail(`${runtimeSnapshot.path}: runtime-snapshot must not import IO/network/process module ${specifier}`);
 		if (forbiddenLocalSpecifiers.has(specifier) || forbiddenRenderModulePattern.test(specifier)) fail(`${runtimeSnapshot.path}: runtime-snapshot must not import runtime/session/executor/state/render/UI module ${specifier}`);
+	}
+	for (const required of ["usageTotalsFromMessage", "usageTotalsFromEntry", "usageTotalsFromEntries", "ctx.sessionManager.getEntries()", "ctx.getContextUsage()"] as const) {
+		if (!runtimeSnapshot.text.includes(required)) fail(`${runtimeSnapshot.path}: runtime snapshot should expose complete public session fact ${required}`);
+	}
+	if (/getBranch\s*\(|unknownContextAfterLatestCompaction|hasUnknownContextAfterLatestCompaction|assistantMessageHasKnownContextUsage|compactInputsFromContext|usageTotalsFromAssistantMessage/.test(runtimeSnapshot.text)) {
+		fail(`${runtimeSnapshot.path}: runtime snapshot must not duplicate Pi context truth or retain assistant-only usage semantics`);
 	}
 }
 
@@ -676,10 +689,10 @@ function assertRuntimeStateSnapshotFrameBoundary(files: SourceFile[]): void {
 	if (runtimeImports.includes("./runtime-snapshot.js")) fail(`${runtime.path}: runtime should not import runtime-snapshot directly after accumulator migration`);
 	if (runtimeImports.includes("./throughput-run-tracker.js")) fail(`${runtime.path}: runtime should not import throughput tracker directly after accumulator migration`);
 	if (runtimeImports.includes("./state.js")) fail(`${runtime.path}: runtime should not import state mutators directly after accumulator migration`);
-	if (/plan\.snapshot|snapshot\s*===\s*["'](?:reliable|lifecycle|message|thinking|compact|none)["']/.test(runtime.text)) {
+	if (/plan\.snapshot|snapshot\s*===\s*["'](?:reliable|lifecycle|thinking|none)["']/.test(runtime.text)) {
 		fail(`${runtime.path}: runtime must not contain snapshot-mode branching after plan executor extraction`);
 	}
-	if (/let\s+state\s*:|unknownContextAfterLatestCompaction|stateInputsFromContext|thinkingInputsFromContext|lifecycleInputsFromContext|compactInputsFromContext|assistantMessageHasKnownContextUsage|createInitialState|setGitSnapshot|setUsageTotals|refreshContextUsage|clearContextUsage|refreshModel|refreshWorkspace|setProviderCount|usageTotalsFromAssistantMessage|addUsageTotals|ThroughputRunTracker|setCurrentRunThroughput|setLastTurnThroughput|clearCurrentRunThroughput/.test(runtime.text)) {
+	if (/let\s+state\s*:|unknownContextAfterLatestCompaction|stateInputsFromContext|thinkingInputsFromContext|lifecycleInputsFromContext|compactInputsFromContext|assistantMessageHasKnownContextUsage|createInitialState|setGitSnapshot|setUsageTotals|refreshContextUsage|clearContextUsage|refreshModel|refreshWorkspace|setProviderCount|usageTotalsFromAssistantMessage|usageTotalsFromMessage|usageTotalsFromEntry|addUsageTotals|ThroughputRunTracker|setCurrentRunThroughput|setLastTurnThroughput|clearCurrentRunThroughput/.test(runtime.text)) {
 		fail(`${runtime.path}: runtime must not own refresh state core after RuntimeRefreshSession extraction`);
 	}
 	const forbiddenRuntimeFrameSpecifiers = new Set(["./input-surface-frame.js", "./surface-layout.js", "./status-line.js", "./renderer.js", "./pane.js", "./segments.js"]);

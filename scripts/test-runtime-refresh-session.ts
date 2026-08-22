@@ -1,7 +1,7 @@
 import { strict as assert } from "node:assert";
 import { RuntimeRefreshSession, type RuntimeRefreshSessionHost } from "../runtime-refresh-session.js";
 import type { GlanceConfig } from "../types.js";
-import { cloneConfig, compaction, createRuntimeRefreshContext as createContext, gitSnapshot, message } from "./runtime-refresh-harness.js";
+import { cloneConfig, branchSummary, compaction, createRuntimeRefreshContext as createContext, gitSnapshot, message } from "./runtime-refresh-harness.js";
 
 interface SessionHarness {
 	session: RuntimeRefreshSession;
@@ -13,12 +13,13 @@ interface SessionHarness {
 	setOnRender(onRender: (() => void) | undefined): void;
 }
 
-function eventMessage(role: string, options: { usage?: Record<string, unknown>; stopReason?: string; responseId?: string } = {}) {
+function eventMessage(role: string, options: { usage?: Record<string, unknown>; stopReason?: string; responseId?: string; toolCallId?: string } = {}) {
 	return {
 		role,
 		usage: options.usage,
 		stopReason: options.stopReason,
 		responseId: options.responseId,
+		toolCallId: options.toolCallId,
 	};
 }
 
@@ -73,19 +74,19 @@ function createSessionHarness(initialConfig: GlanceConfig = cloneConfig()): Sess
 
 	const state = harness.session.ensureState(ctx.ctx);
 	assert.equal(ctx.getEntryReads(), 1, "ensureState should create initial state from one full entries scan");
-	assert.equal(ctx.getBranchReads(), 1, "ensureState should sync context-unknown state from one full branch scan");
+	assert.equal(ctx.getBranchReads(), 0, "ensureState should trust ctx.getContextUsage without a direct branch scan");
 	assert.equal(state.workspace.path, "/initial-repo", "ensureState should initialize workspace from full scan");
 	assert.equal(state.providers.availableCount, 2, "ensureState should initialize provider count from full scan");
 	assert.equal(state.model.id, "initial-model", "ensureState should initialize model from full scan");
 	assert.deepEqual(state.usage, { input: 1, output: 2, cacheRead: 3, cacheWrite: 4, cost: 0.5 }, "ensureState should initialize usage totals from entries");
-	assert.equal(state.context.tokens, null, "ensureState should suppress context tokens when the full scan marks context unknown");
-	assert.equal(state.context.window, 300_000, "ensureState should still initialize context window when context is unknown");
-	assert.equal(state.context.percent, null, "ensureState should suppress context percent when the full scan marks context unknown");
+	assert.equal(state.context.tokens, 123_000, "ensureState should trust public context tokens even when the branch contains a compaction");
+	assert.equal(state.context.window, 300_000, "ensureState should initialize context window from public context facts");
+	assert.equal(state.context.percent, 41, "ensureState should trust public context percent");
 
 	const sameState = harness.session.ensureState(ctx.ctx);
 	assert.equal(sameState, state, "repeated ensureState should return the same state object");
 	assert.equal(ctx.getEntryReads(), 1, "repeated ensureState should not rescan entries");
-	assert.equal(ctx.getBranchReads(), 1, "repeated ensureState should not rescan branch");
+	assert.equal(ctx.getBranchReads(), 0, "repeated ensureState should not scan branch");
 }
 
 {
@@ -98,31 +99,28 @@ function createSessionHarness(initialConfig: GlanceConfig = cloneConfig()): Sess
 	});
 	const harness = createSessionHarness();
 	const state = harness.session.ensureState(ctx.ctx);
-	assert.equal(state.context.tokens, 88_000, "baseline state should start with known context usage");
 	const entryBaseline = ctx.getEntryReads();
 	const branchBaseline = ctx.getBranchReads();
+	const compactEntry = compaction({ id: "compact-1", usage: { input: 5, output: 6, cacheRead: 7, cacheWrite: 8, cost: { total: 0.75 } } });
 
-	ctx.setEntries([message("assistant", { usage: { input: 5, output: 6, cacheRead: 7, cacheWrite: 8, cost: { total: 0.75 } } })]);
-	ctx.setContextUsage({ tokens: 99_000, contextWindow: 222_000, percent: 44.5 });
-	await harness.session.execute("session_compact", ctx.ctx);
-	assert.equal(ctx.getEntryReads(), entryBaseline + 1, "session compact execute should scan entries for usage totals");
-	assert.equal(ctx.getBranchReads(), branchBaseline, "session compact execute should not scan branch");
-	assert.deepEqual(state.usage, { input: 5, output: 6, cacheRead: 7, cacheWrite: 8, cost: 0.75 }, "session compact should update usage totals");
-	assert.equal(state.context.tokens, null, "session compact should clear visible context tokens");
-	assert.equal(state.context.window, 222_000, "session compact should keep context window from current model");
-	assert.equal(state.context.percent, null, "session compact should clear visible context percent");
+	ctx.setContextUsage({ tokens: null, contextWindow: 222_000, percent: null });
+	await harness.session.sessionCompact({ compactionEntry: compactEntry }, ctx.ctx);
+	assert.equal(ctx.getEntryReads(), entryBaseline, "session compact should apply event usage without rescanning entries");
+	assert.equal(ctx.getBranchReads(), branchBaseline, "session compact should not directly scan branch");
+	assert.deepEqual(state.usage, { input: 7, output: 9, cacheRead: 11, cacheWrite: 13, cost: 1 }, "session compact should add compaction-entry billed usage to existing session totals");
+	assert.equal(state.context.tokens, null, "session compact should use public null context tokens");
+	assert.equal(state.context.window, 222_000, "session compact should keep the public context window");
+	assert.equal(state.context.percent, null, "session compact should use public null context percent");
 	assert.deepEqual(harness.schedules, [true], "session compact should schedule immediate git refresh");
-	assert.equal(harness.getRenderCount(), 1, "session compact should request one render after plan application");
+	assert.equal(harness.getRenderCount(), 1, "session compact should request one render after plan and delta application");
+
+	await harness.session.sessionCompact({ compactionEntry: { ...compactEntry } }, ctx.ctx);
+	assert.deepEqual(state.usage, { input: 7, output: 9, cacheRead: 11, cacheWrite: 13, cost: 1 }, "session compact should dedupe repeated entry ids");
 
 	ctx.setContextUsage({ tokens: 55_000, contextWindow: 222_000, percent: 24.8 });
 	await harness.session.execute("model_select", ctx.ctx);
-	assert.equal(state.context.tokens, null, "lifecycle execute should not refill stale context while session context is unknown");
-	assert.equal(state.context.percent, null, "lifecycle execute should keep percent unknown while session context is unknown");
-
-	harness.session.clearContextUnknownAfterKnownAssistantUsage({ role: "assistant", usage: { totalTokens: 1 } });
-	await harness.session.execute("model_select", ctx.ctx);
-	assert.equal(state.context.tokens, 55_000, "known assistant usage should clear session context-unknown state before the next lifecycle refresh");
-	assert.equal(state.context.percent, 24.8, "known assistant usage should allow lifecycle context percent to refresh");
+	assert.equal(state.context.tokens, 55_000, "later lifecycle refresh should use newly known public context tokens directly");
+	assert.equal(state.context.percent, 24.8, "later lifecycle refresh should use newly known public context percent directly");
 }
 
 {
@@ -130,24 +128,35 @@ function createSessionHarness(initialConfig: GlanceConfig = cloneConfig()): Sess
 		cwd: "/reliable-repo",
 		model: { id: "reliable-model", provider: "anthropic", contextWindow: 200_000 },
 		contextUsage: { tokens: 66_000, contextWindow: 200_000, percent: 33 },
-		entries: [message("assistant", { usage: { input: 1, output: 1, cost: { total: 0.1 } } })],
-		branch: [message("assistant", { usage: { totalTokens: 1 } })],
+		entries: [
+			message("assistant", { usage: { input: 1, output: 1, cost: { total: 0.1 } } }),
+			message("toolResult", { usage: { input: 2, output: 3, cost: { total: 0.2 } } }),
+			compaction({ id: "compact-reliable", usage: { input: 4, output: 5, cost: { total: 0.3 } } }),
+			branchSummary({ id: "summary-reliable", usage: { input: 6, output: 7, cost: { total: 0.4 } } }),
+		],
+		branch: [compaction()],
 	});
 	const harness = createSessionHarness();
 	const state = harness.session.ensureState(ctx.ctx);
-	assert.equal(state.context.tokens, 66_000, "baseline reliable-sync state should start known");
+	assert.deepEqual(state.usage, { input: 13, output: 16, cacheRead: 0, cacheWrite: 0, cost: 1 }, "initial reliable state should include every Pi 0.84 billed usage source");
+	const branchBaseline = ctx.getBranchReads();
 
-	ctx.setBranch([compaction()]);
-	ctx.setContextUsage({ tokens: 77_000, contextWindow: 200_000, percent: 38.5 });
+	ctx.setEntries([
+		message("assistant", { usage: { input: 10, output: 20, cost: { total: 1 } } }),
+		message("toolResult", { usage: { input: 30, output: 40, cost: { total: 2 } } }),
+		branchSummary({ id: "summary-next", usage: { input: 50, output: 60, cost: { total: 3 } } }),
+	]);
+	ctx.setContextUsage({ tokens: null, contextWindow: 200_000, percent: null });
 	await harness.session.execute("session_tree", ctx.ctx);
-	assert.equal(state.context.tokens, null, "reliable execute should sync unknown=true from full branch scan");
-	assert.equal(state.context.percent, null, "reliable execute should clear percent when branch says context is unknown");
+	assert.deepEqual(state.usage, { input: 90, output: 120, cacheRead: 0, cacheWrite: 0, cost: 6 }, "session_tree reliable reconciliation should include assistant, tool, and branch-summary usage");
+	assert.equal(ctx.getBranchReads(), branchBaseline, "session_tree reconciliation should not duplicate public context truth with a branch scan");
+	assert.equal(state.context.tokens, null, "session_tree should accept public unknown context tokens");
+	assert.equal(state.context.percent, null, "session_tree should accept public unknown context percent");
 
-	ctx.setBranch([compaction(), message("assistant", { usage: { totalTokens: 1 } })]);
 	ctx.setContextUsage({ tokens: 88_000, contextWindow: 200_000, percent: 44 });
 	await harness.session.execute("session_tree", ctx.ctx);
-	assert.equal(state.context.tokens, 88_000, "reliable execute should sync unknown=false from full branch scan");
-	assert.equal(state.context.percent, 44, "reliable execute should restore context percent after full branch scan clears unknown");
+	assert.equal(state.context.tokens, 88_000, "session_tree should restore context directly when the public API reports known tokens");
+	assert.equal(state.context.percent, 44, "session_tree should restore context directly when the public API reports known percent");
 }
 
 {
@@ -211,6 +220,38 @@ function createSessionHarness(initialConfig: GlanceConfig = cloneConfig()): Sess
 }
 
 {
+	const ctx = createContext({ contextUsage: { tokens: 10_000, contextWindow: 200_000, percent: 5 } });
+	const harness = createSessionHarness();
+	const state = harness.session.ensureState(ctx.ctx);
+	const entryBaseline = ctx.getEntryReads();
+	const branchBaseline = ctx.getBranchReads();
+	const toolResult = eventMessage("toolResult", {
+		toolCallId: "tool-call-1",
+		usage: { input: 11, output: 12, cacheRead: 13, cacheWrite: 14, totalTokens: 50, cost: { total: 1.1 } },
+	});
+
+	await harness.session.messageEnd(toolResult, ctx.ctx);
+	assert.deepEqual(state.usage, { input: 11, output: 12, cacheRead: 13, cacheWrite: 14, cost: 1.1 }, "usage-bearing toolResult messageEnd should update complete session totals incrementally");
+	await harness.session.messageEnd({ ...toolResult }, ctx.ctx);
+	assert.deepEqual(state.usage, { input: 11, output: 12, cacheRead: 13, cacheWrite: 14, cost: 1.1 }, "toolResult messageEnd should dedupe cloned events by toolCallId");
+	assert.equal(ctx.getEntryReads(), entryBaseline, "toolResult messageEnd should not scan entries");
+	assert.equal(ctx.getBranchReads(), branchBaseline, "toolResult messageEnd should not scan branch");
+}
+
+{
+	const ctx = createContext({ contextUsage: { tokens: 10_000, contextWindow: 200_000, percent: 5 } });
+	const harness = createSessionHarness();
+	const state = harness.session.ensureState(ctx.ctx);
+	const toolResult = eventMessage("toolResult", {
+		usage: { input: 2, output: 3, cacheRead: 4, cacheWrite: 5, totalTokens: 14, cost: { total: 0.7 } },
+	});
+
+	await harness.session.messageEnd(toolResult, ctx.ctx);
+	await harness.session.messageEnd(toolResult, ctx.ctx);
+	assert.deepEqual(state.usage, { input: 2, output: 3, cacheRead: 4, cacheWrite: 5, cost: 0.7 }, "toolResult without toolCallId should dedupe by object identity");
+}
+
+{
 	const ctx = createContext({
 		contextUsage: { tokens: 10_000, contextWindow: 200_000, percent: 5 },
 		entries: [message("assistant", { usage: { input: 9, output: 9, cost: { total: 0.9 } } })],
@@ -233,17 +274,17 @@ function createSessionHarness(initialConfig: GlanceConfig = cloneConfig()): Sess
 	const ctx = createContext({
 		model: { id: "compact-message-model", provider: "anthropic", contextWindow: 200_000 },
 		contextUsage: { tokens: 10_000, contextWindow: 200_000, percent: 5 },
-		branch: [message("assistant", { usage: { totalTokens: 1 } })],
 	});
 	const harness = createSessionHarness();
 	const state = harness.session.ensureState(ctx.ctx);
-	await harness.session.execute("session_compact", ctx.ctx);
-	assert.equal(state.context.tokens, null, "compact before messageEnd should mark context unknown");
+	ctx.setContextUsage({ tokens: null, contextWindow: 200_000, percent: null });
+	await harness.session.sessionCompact({ compactionEntry: compaction({ id: "context-compact" }) }, ctx.ctx);
+	assert.equal(state.context.tokens, null, "public context null after compact should be reflected directly");
 
 	ctx.setContextUsage({ tokens: 64_000, contextWindow: 200_000, percent: 32 });
 	await harness.session.messageEnd(eventMessage("assistant", { responseId: "known-context", usage: { input: 1, output: 2, totalTokens: 3, cost: { total: 0.1 } } }), ctx.ctx);
-	assert.equal(state.context.tokens, 64_000, "known assistant messageEnd should clear context unknown before message snapshot refresh");
-	assert.equal(state.context.percent, 32, "known assistant messageEnd should allow context percent to refill");
+	assert.equal(state.context.tokens, 64_000, "known assistant messageEnd should refresh directly from public context truth");
+	assert.equal(state.context.percent, 32, "known assistant messageEnd should refresh public context percent");
 }
 
 {

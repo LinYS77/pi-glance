@@ -82,6 +82,11 @@ export interface GlanceConfig {
 	throughput: ThroughputConfig;
 }
 
+/**
+ * Billed usage accumulated across the whole persisted Pi session: assistant
+ * responses, usage-bearing tool results, compactions, and branch summaries.
+ * Token cache rate is derived from these same session totals.
+ */
 export interface UsageTotals {
 	input: number;
 	output: number;

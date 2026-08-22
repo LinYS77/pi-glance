@@ -55,7 +55,6 @@ export interface RuntimeTestContext {
 	setModel(model: RuntimeMutableModelInfo | undefined): void;
 	setContextUsage(usage: RuntimeMutableContextUsage | undefined): void;
 	setSessionEntries(entries: StateSessionEntry[]): void;
-	setSessionBranch(branch: StateSessionEntry[]): void;
 	setUiTheme(theme: unknown): void;
 }
 
@@ -133,7 +132,16 @@ export function assistantMessage(options: { responseId?: string; usage?: Record<
 	};
 }
 
-export function sessionMessage(role: string, options: { usage?: Record<string, unknown>; stopReason?: string; responseId?: string } = {}): StateSessionEntry {
+export function toolResultMessage(options: { toolCallId?: string; usage?: Record<string, unknown>; timestamp?: number } = {}) {
+	return {
+		role: "toolResult",
+		toolCallId: options.toolCallId ?? "tool-call-1",
+		usage: options.usage,
+		timestamp: options.timestamp ?? 1000,
+	};
+}
+
+export function sessionMessage(role: string, options: { usage?: Record<string, unknown>; stopReason?: string; responseId?: string; toolCallId?: string } = {}): StateSessionEntry {
 	return {
 		type: "message",
 		message: {
@@ -141,8 +149,17 @@ export function sessionMessage(role: string, options: { usage?: Record<string, u
 			usage: options.usage,
 			stopReason: options.stopReason,
 			responseId: options.responseId,
-		} as StateSessionEntry["message"] & { responseId?: string },
+			toolCallId: options.toolCallId,
+		},
 	};
+}
+
+export function sessionCompaction(options: { id?: string; usage?: Record<string, unknown> } = {}): StateSessionEntry {
+	return { type: "compaction", id: options.id ?? "compaction-1", usage: options.usage };
+}
+
+export function sessionBranchSummary(options: { id?: string; usage?: Record<string, unknown> } = {}): StateSessionEntry {
+	return { type: "branch_summary", id: options.id ?? "branch-summary-1", usage: options.usage };
 }
 
 export function fakePiTheme(name = "runtime-current-pi-theme") {
@@ -270,9 +287,6 @@ export function createRuntimeTestContext(options: RuntimeTestContextOptions = {}
 		},
 		setSessionEntries: (nextEntries: StateSessionEntry[]) => {
 			entries = nextEntries;
-		},
-		setSessionBranch: (nextBranch: StateSessionEntry[]) => {
-			branch = nextBranch;
 		},
 		setUiTheme: (theme: unknown) => {
 			uiTheme = theme;

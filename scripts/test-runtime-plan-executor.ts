@@ -6,8 +6,6 @@ import type { GlanceConfig, GlanceState, UsageTotals } from "../types.js";
 import { cloneConfig, compaction, createRuntimeRefreshContext as createContext, gitSnapshot, message } from "./runtime-refresh-harness.js";
 
 interface ExecutorResult {
-	unknown: boolean;
-	unknownWrites: boolean[];
 	schedules: Array<boolean | undefined>;
 }
 
@@ -29,9 +27,7 @@ function baseState(overrides: Partial<GlanceState> = {}): GlanceState {
 	};
 }
 
-function executePlan(options: { state: GlanceState; ctx: ExtensionContext; plan: RuntimeRefreshPlan; config?: GlanceConfig; thinkingLevel?: string; unknown?: boolean }): ExecutorResult {
-	let unknown = options.unknown ?? false;
-	const unknownWrites: boolean[] = [];
+function executePlan(options: { state: GlanceState; ctx: ExtensionContext; plan: RuntimeRefreshPlan; config?: GlanceConfig; thinkingLevel?: string }): ExecutorResult {
 	const schedules: Array<boolean | undefined> = [];
 	const input: RuntimePlanExecutionInput = {
 		state: options.state,
@@ -39,15 +35,10 @@ function executePlan(options: { state: GlanceState; ctx: ExtensionContext; plan:
 		ctx: options.ctx,
 		plan: options.plan,
 		getThinkingLevel: () => options.thinkingLevel ?? "medium",
-		unknownContextAfterLatestCompaction: unknown,
-		setUnknownContextAfterLatestCompaction: (value) => {
-			unknown = value;
-			unknownWrites.push(value);
-		},
 		scheduleGitRefresh: (immediate) => schedules.push(immediate),
 	};
 	applyRuntimeRefreshPlan(input);
-	return { unknown, unknownWrites, schedules };
+	return { schedules };
 }
 
 {
@@ -63,39 +54,36 @@ function executePlan(options: { state: GlanceState; ctx: ExtensionContext; plan:
 	const result = executePlan({ state, ctx: ctx.ctx, plan: runtimePlanFor("session_tree"), thinkingLevel: "high" });
 
 	assert.equal(ctx.getEntryReads(), 1, "reliable snapshot should scan session entries for usage totals");
-	assert.equal(ctx.getBranchReads(), 1, "reliable snapshot should scan session branch for compaction context status");
-	assert.deepEqual(result.unknownWrites, [true], "reliable snapshot should sync explicit context-unknown state from the full scan");
-	assert.equal(result.unknown, true, "reliable snapshot should expose the full-scan context-unknown result to runtime state");
+	assert.equal(ctx.getBranchReads(), 0, "reliable snapshot should not duplicate ctx.getContextUsage with a direct branch scan");
 	assert.equal(state.workspace.path, "/reliable-repo", "reliable snapshot should refresh workspace");
 	assert.equal(state.providers.availableCount, 2, "reliable snapshot should refresh provider count");
 	assert.equal(state.model.id, "reliable-model", "reliable snapshot should refresh model id");
 	assert.deepEqual(state.usage, usage(1, 2, 3, 4, 0.5), "reliable snapshot should reconcile usage totals from entries");
-	assert.equal(state.context.tokens, null, "reliable snapshot should suppress context tokens while full scan says context is unknown");
-	assert.equal(state.context.window, 300_000, "reliable snapshot should still refresh context window");
-	assert.equal(state.context.percent, null, "reliable snapshot should suppress context percent while full scan says context is unknown");
+	assert.equal(state.context.tokens, 123_000, "reliable snapshot should trust ctx.getContextUsage tokens directly");
+	assert.equal(state.context.window, 300_000, "reliable snapshot should refresh context window");
+	assert.equal(state.context.percent, 41, "reliable snapshot should trust ctx.getContextUsage percent directly");
 	assert.deepEqual(result.schedules, [true], "reliable immediate git plan should schedule an immediate refresh");
 }
 
 {
-	const state = baseState({ context: { tokens: 88_000, window: 100_000, percent: 88 } });
+	const previousUsage = usage(10, 20, 30, 40, 2);
+	const state = baseState({ usage: previousUsage, context: { tokens: 88_000, window: 100_000, percent: 88 } });
 	const ctx = createContext({
 		cwd: "/compact-repo",
 		model: { id: "compact-model", provider: "openai", contextWindow: 222_000 },
-		contextUsage: { tokens: 99_000, contextWindow: 222_000, percent: 44.5 },
+		contextUsage: { tokens: null, contextWindow: 222_000, percent: null },
 		entries: [message("assistant", { usage: { input: 5, output: 6, cacheRead: 7, cacheWrite: 8, cost: { total: 0.75 } } })],
 		branch: [compaction(), message("assistant", { usage: { totalTokens: 100 } })],
 	});
 	const result = executePlan({ state, ctx: ctx.ctx, plan: runtimePlanFor("session_compact"), thinkingLevel: "low" });
 
-	assert.equal(ctx.getEntryReads(), 1, "compact snapshot should scan entries for usage totals");
-	assert.equal(ctx.getBranchReads(), 0, "compact snapshot must not scan branch");
-	assert.deepEqual(result.unknownWrites, [true], "compact snapshot should explicitly mark context as unknown");
-	assert.equal(result.unknown, true, "compact snapshot should keep runtime context-unknown state true");
-	assert.deepEqual(state.usage, usage(5, 6, 7, 8, 0.75), "compact snapshot should refresh usage totals from entries");
-	assert.equal(state.context.tokens, null, "compact snapshot should clear visible context tokens");
-	assert.equal(state.context.window, 222_000, "compact snapshot should preserve/update context window from current model inputs");
-	assert.equal(state.context.percent, null, "compact snapshot should clear visible context percent");
-	assert.deepEqual(result.schedules, [true], "compact immediate git plan should schedule an immediate refresh");
+	assert.equal(ctx.getEntryReads(), 0, "session_compact lifecycle snapshot should not rescan all entries; the event delta owns compaction usage");
+	assert.equal(ctx.getBranchReads(), 0, "session_compact should trust ctx.getContextUsage without a direct branch scan");
+	assert.deepEqual(state.usage, previousUsage, "session_compact plan execution should preserve usage until the event delta is applied by RuntimeRefreshSession");
+	assert.equal(state.context.tokens, null, "session_compact should accept public unknown context tokens");
+	assert.equal(state.context.window, 222_000, "session_compact should preserve/update context window from public context facts");
+	assert.equal(state.context.percent, null, "session_compact should accept public unknown context percent");
+	assert.deepEqual(result.schedules, [true], "session compact immediate git plan should schedule an immediate refresh");
 }
 
 {
@@ -146,6 +134,16 @@ function executePlan(options: { state: GlanceState; ctx: ExtensionContext; plan:
 	assert.equal(messageCtx.getBranchReads(), 0, "message snapshot should not scan branch");
 	assert.equal(messageState.context.tokens, 25_000, "message snapshot should refresh context tokens through the lifecycle reader");
 	assert.deepEqual(messageResult.schedules, [], "message on-workspace-change git plan should not schedule when workspace is unchanged");
+
+	const unavailableContextState = baseState({ context: { tokens: 77_000, window: 250_000, percent: 30.8 } });
+	const unavailableContext = createContext({ model: { id: "no-context-model", provider: "openai", contextWindow: 250_000 } });
+	unavailableContext.setContextUsage(undefined);
+	executePlan({ state: unavailableContextState, ctx: unavailableContext.ctx, plan: runtimePlanFor("model_select") });
+	assert.deepEqual(
+		unavailableContextState.context,
+		{ tokens: null, window: 250_000, percent: null },
+		"ctx.getContextUsage undefined should clear stale visible context facts while preserving the active model window",
+	);
 }
 
 {
@@ -183,20 +181,19 @@ function executePlan(options: { state: GlanceState; ctx: ExtensionContext; plan:
 }
 
 {
-	const state = baseState({ context: { tokens: null, window: 200_000, percent: null } });
+	const state = baseState({ context: { tokens: 99_000, window: 200_000, percent: 49.5 } });
 	const ctx = createContext({
 		model: { id: "post-compact-model", provider: "anthropic", contextWindow: 200_000 },
-		contextUsage: { tokens: 66_000, contextWindow: 200_000, percent: 33 },
+		contextUsage: { tokens: null, contextWindow: 200_000, percent: null },
+		branch: [compaction()],
 	});
-	const result = executePlan({ state, ctx: ctx.ctx, plan: runtimePlanFor("model_select"), unknown: true });
+	executePlan({ state, ctx: ctx.ctx, plan: runtimePlanFor("model_select") });
 
-	assert.equal(ctx.getEntryReads(), 0, "post-compaction lifecycle refresh should not scan entries");
-	assert.equal(ctx.getBranchReads(), 0, "post-compaction lifecycle refresh should not scan branch");
-	assert.deepEqual(result.unknownWrites, [], "lifecycle refresh should not clear explicit context-unknown state by itself");
-	assert.equal(result.unknown, true, "lifecycle refresh should keep context unknown until runtime sees known assistant usage or a full scan");
-	assert.equal(state.context.tokens, null, "unknown context should suppress stale lifecycle context tokens");
-	assert.equal(state.context.window, 200_000, "unknown context should still keep the current context window");
-	assert.equal(state.context.percent, null, "unknown context should suppress stale lifecycle context percent");
+	assert.equal(ctx.getEntryReads(), 0, "public unknown-context lifecycle refresh should not scan entries");
+	assert.equal(ctx.getBranchReads(), 0, "public unknown-context lifecycle refresh should not directly scan branch");
+	assert.equal(state.context.tokens, null, "ctx.getContextUsage null tokens should clear stale context tokens");
+	assert.equal(state.context.window, 200_000, "public context truth should keep the current context window");
+	assert.equal(state.context.percent, null, "ctx.getContextUsage null percent should clear stale context percent");
 }
 
 console.log("✓ runtime plan executor checks passed");

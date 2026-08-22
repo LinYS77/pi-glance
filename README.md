@@ -85,7 +85,7 @@ That's the only command — opens a calm settings pane with a real input-surface
 - Nerd icons need a Nerd Font or Symbols Nerd Font fallback. If icons look like boxes, choose `plain`.
 - pi-glance does not auto-detect, install, or bundle terminal fonts.
 - Reply speed is enabled by default and appears between cost and context. It shows output tokens per wall time: `?` means no trusted measurement yet, `~42 tok/s` is a provisional current-run checkpoint from completed turns, and `42 tok/s` is the finalized agent-end measurement.
-- The optional Tokens segment can set Cache to `auto`, `show`, `hide`, or `rate`. `rate` shows a rounded session aggregate cache hit percentage such as `CH42%`, calculated as `cacheRead / (input + cacheRead + cacheWrite)`. A known cache miss appears as `CH0%`. No `CH%` is shown until prompt-token usage exists.
+- The optional Tokens segment can set Cache to `auto`, `show`, `hide`, or `rate`. `rate` shows a rounded session aggregate cache hit percentage such as `CH42%`, calculated as `cacheRead / (input + cacheRead + cacheWrite)`. The session ledger includes billed assistant responses, usage-bearing tool results, compactions, and branch summaries. A known cache miss appears as `CH0%`. No `CH%` is shown until prompt-token usage exists.
 - Configure `/glance` → **Reply speed** → `Precision`: `auto`, `1 digit`, or `0 digits`. Wall time includes tools, waiting, network, and thinking, so it is not a benchmark. Reply speed uses no notifications, no timers/tickers, no token estimation from text/deltas, and adds no command, footer, dashboard, history, or average view.
 
 ## Themes and config
@@ -159,6 +159,8 @@ npm run debug:git
 ## Design
 
 - No pi core patches — public extension APIs only
+- Context facts come from Pi's public `ctx.getContextUsage()` result; `null` remains unknown after compaction until Pi reports a known value.
+- Tokens and Cost use Pi's billed-session semantics across assistant, tool, compaction, and branch-summary usage.
 - No render-time IO — Git is collected asynchronously and cached
 - Global config at `~/.pi/agent/pi-glance/config.json`
 

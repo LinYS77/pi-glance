@@ -109,16 +109,6 @@ export function setProviderCount(state: GlanceState, availableCount: number): bo
 	return true;
 }
 
-export function clearContextUsage(state: GlanceState, inputs?: Pick<StateInputs, "model">): boolean {
-	const window = inputs?.model?.contextWindow ?? state.context.window ?? 0;
-	if (state.context.tokens === null && state.context.percent === null && state.context.window === window) return false;
-	state.context.tokens = null;
-	state.context.window = window;
-	state.context.percent = null;
-	touch(state);
-	return true;
-}
-
 export function refreshWorkspace(state: GlanceState, inputs: Pick<StateInputs, "cwd">): boolean {
 	const cwd = inputs.cwd;
 	if (state.workspace.path === cwd) return false;
@@ -160,12 +150,11 @@ export function setGitSnapshot(state: GlanceState, cwd: string, snapshot: GitSna
 	return true;
 }
 
-export function refreshContextUsage(state: GlanceState, inputs: Pick<StateInputs, "contextUsage" | "model" | "unknownContextAfterLatestCompaction">): boolean {
+export function refreshContextUsage(state: GlanceState, inputs: Pick<StateInputs, "contextUsage" | "model">): boolean {
 	const usage = inputs.contextUsage;
-	const unknownAfterCompaction = inputs.unknownContextAfterLatestCompaction;
-	const tokens = unknownAfterCompaction ? null : usage ? usage.tokens : (state.context.tokens ?? null);
-	const window = usage?.contextWindow ?? inputs.model?.contextWindow ?? state.context.window ?? 0;
-	const percent = unknownAfterCompaction ? null : usage ? usage.percent : (state.context.percent ?? null);
+	const tokens = usage?.tokens ?? null;
+	const window = usage?.contextWindow ?? inputs.model?.contextWindow ?? 0;
+	const percent = usage?.percent ?? null;
 	if (state.context.tokens === tokens && state.context.window === window && state.context.percent === percent) return false;
 	state.context.tokens = tokens;
 	state.context.window = window;

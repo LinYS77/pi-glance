@@ -1,7 +1,7 @@
 import { TOKENS_CACHE_MODE_VALUES, TOKENS_DISPLAY_MODE_VALUES } from "./config-options.js";
 import { formatTokens } from "./segment-display-primitives.js";
 import type { SegmentFeature } from "./segment-feature.js";
-import type { GlanceConfig, SegmentData, SegmentRenderContext } from "./types.js";
+import type { GlanceConfig, SegmentData, SegmentRenderContext, UsageTotals } from "./types.js";
 
 const TOKENS_DISPLAY_LABELS: Record<GlanceConfig["tokens"]["display"], string> = {
 	"input-output": "input / output",
@@ -23,16 +23,18 @@ function shouldShowTokenCache(ctx: SegmentRenderContext): boolean {
 	return ctx.widthMode === "full";
 }
 
+function sessionCacheHitPercent(usage: UsageTotals): number | undefined {
+	const promptTokens = usage.input + usage.cacheRead + usage.cacheWrite;
+	return promptTokens > 0 ? Math.round((usage.cacheRead / promptTokens) * 100) : undefined;
+}
+
 function tokenCacheParts(ctx: SegmentRenderContext): string[] {
 	if (!shouldShowTokenCache(ctx)) return [];
 	const usage = ctx.state.usage;
 	const parts: string[] = [];
 	if (ctx.config.tokens.cache === "rate") {
-		const promptTokens = usage.input + usage.cacheRead + usage.cacheWrite;
-		if (promptTokens > 0) {
-			const hitRate = Math.round((usage.cacheRead / promptTokens) * 100);
-			parts.push(`CH${hitRate}%`);
-		}
+		const hitRate = sessionCacheHitPercent(usage);
+		if (hitRate !== undefined) parts.push(`CH${hitRate}%`);
 	} else {
 		// Default mode: show cache read and cache write tokens
 		if (usage.cacheRead) parts.push(`R${formatTokens(usage.cacheRead)}`);

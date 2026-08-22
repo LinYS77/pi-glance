@@ -3,7 +3,7 @@ import { GlanceEditor } from "./editor.js";
 import { GlanceFooter } from "./footer.js";
 import { GitRefresher } from "./git.js";
 import { resolveRuntimeRenderStyleContext } from "./render-style-context.js";
-import { RuntimeRefreshSession, type RuntimeAgentEndInput, type RuntimeMessageEndInput, type RuntimeTurnEndInput } from "./runtime-refresh-session.js";
+import { RuntimeRefreshSession, type RuntimeAgentEndInput, type RuntimeMessageEndInput, type RuntimeSessionCompactInput, type RuntimeTurnEndInput } from "./runtime-refresh-session.js";
 import type { GlanceRenderStyleContext } from "./theme-adapter.js";
 import { readPiAmbientTone } from "./theme-tone.js";
 import type { GitSnapshot, GlanceConfig, GlanceState } from "./types.js";
@@ -58,7 +58,7 @@ export interface GlanceRuntime {
 		turnStart(event: unknown, ctx: ExtensionContext): Promise<void>;
 		toolExecutionEnd(event: unknown, ctx: ExtensionContext): Promise<void>;
 		sessionTree(event: unknown, ctx: ExtensionContext): Promise<void>;
-		sessionCompact(event: unknown, ctx: ExtensionContext): Promise<void>;
+		sessionCompact(event: RuntimeSessionCompactInput, ctx: ExtensionContext): Promise<void>;
 		messageEnd(event: MessageEndLikeEvent, ctx: ExtensionContext): Promise<void>;
 		turnEnd(event: TurnEndLikeEvent, ctx: ExtensionContext): Promise<void>;
 		agentStart(event: unknown, ctx: ExtensionContext): void;
@@ -253,8 +253,8 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 			sessionTree: async (_event, ctx) => {
 				await refreshSession.execute("session_tree", ctx);
 			},
-			sessionCompact: async (_event, ctx) => {
-				await refreshSession.execute("session_compact", ctx);
+			sessionCompact: async (event, ctx) => {
+				await refreshSession.sessionCompact(event, ctx);
 			},
 			messageEnd: async (event, ctx) => {
 				await refreshSession.messageEnd(event.message, ctx);

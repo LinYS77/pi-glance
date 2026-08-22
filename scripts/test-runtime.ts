@@ -17,7 +17,10 @@ import {
 	isPromiseLike,
 	nextEnabledConfig,
 	runtimeGitSnapshot as gitSnapshot,
+	sessionBranchSummary,
+	sessionCompaction,
 	sessionMessage,
+	toolResultMessage,
 	type RuntimeHarness,
 	type RuntimeHarnessOptions,
 	type RuntimeTestContext,
@@ -92,7 +95,7 @@ async function assertRuntimeScanMatrixCase(matrixCase: RuntimeScanMatrixCase, ex
 	const harness = createRuntimeHarness({ loadConfigSyncConfig: defaultConfig(), git: createGitHarness() });
 	const beforeSessionStart = scanCounts(test);
 	harness.runtime.events.sessionStart({}, test.ctx);
-	assertScanDelta("session_start", beforeSessionStart, test, { entries: "increased", branch: "increased" });
+	assertScanDelta("session_start", beforeSessionStart, test, { entries: "increased", branch: "same" });
 }
 
 for (const matrixCase of [
@@ -100,21 +103,25 @@ for (const matrixCase of [
 		name: "session_tree",
 		invoke: (harness, test) => harness.runtime.events.sessionTree({}, test.ctx as ExtensionContext),
 	},
+] satisfies RuntimeScanMatrixCase[]) {
+	await assertRuntimeScanMatrixCase(matrixCase, { entries: "increased", branch: "same" });
+}
+
+await assertRuntimeScanMatrixCase(
 	{
 		name: "config_save_success",
 		showPaneResults: [{ action: "save", config: nextEnabledConfig(defaultConfig()) }],
 		invoke: (harness, test) => harness.runtime.commands.openPane("", test.ctx),
 	},
-] satisfies RuntimeScanMatrixCase[]) {
-	await assertRuntimeScanMatrixCase(matrixCase, { entries: "increased", branch: "increased" });
-}
+	{ entries: "same", branch: "same" },
+);
 
 await assertRuntimeScanMatrixCase(
 	{
 		name: "session_compact",
-		invoke: (harness, test) => harness.runtime.events.sessionCompact({}, test.ctx as ExtensionContext),
+		invoke: (harness, test) => harness.runtime.events.sessionCompact({ compactionEntry: sessionCompaction() }, test.ctx as ExtensionContext),
 	},
-	{ entries: "increased", branch: "same" },
+	{ entries: "same", branch: "same" },
 );
 
 for (const matrixCase of [
@@ -256,7 +263,7 @@ for (const matrixCase of [
 	const entryBaseline = test.getEntryReads();
 	const branchBaseline = test.getBranchReads();
 	assert.ok(entryBaseline > 0, "model_select counter baseline should include the session_start entries read");
-	assert.ok(branchBaseline > 0, "model_select counter baseline should include the session_start branch read");
+	assert.equal(branchBaseline, 0, "model_select baseline should confirm session_start does not directly scan branch");
 	const renderBaseline = test.getRenderRequests();
 	const scheduleBaseline = git.schedules.length;
 	test.setAvailableProviders(["openai", "anthropic", "openai", "local"]);
@@ -304,7 +311,7 @@ for (const matrixCase of [
 	const entryBaseline = test.getEntryReads();
 	const branchBaseline = test.getBranchReads();
 	assert.ok(entryBaseline > 0, "thinking_level_select counter baseline should include the session_start entries read");
-	assert.ok(branchBaseline > 0, "thinking_level_select counter baseline should include the session_start branch read");
+	assert.equal(branchBaseline, 0, "thinking_level_select baseline should confirm session_start does not directly scan branch");
 	const renderBaseline = test.getRenderRequests();
 	const scheduleBaseline = git.schedules.length;
 	thinkingLevel = "high";
@@ -362,7 +369,7 @@ for (const matrixCase of [
 	const entryBaseline = test.getEntryReads();
 	const branchBaseline = test.getBranchReads();
 	assert.ok(entryBaseline > 0, "editor_thinking_cycle counter baseline should include the session_start entries read");
-	assert.ok(branchBaseline > 0, "editor_thinking_cycle counter baseline should include the session_start branch read");
+	assert.equal(branchBaseline, 0, "editor_thinking_cycle baseline should confirm session_start does not directly scan branch");
 	const renderBaseline = editorRenderRequests;
 	const scheduleBaseline = git.schedules.length;
 	thinkingLevel = "medium";
@@ -402,7 +409,7 @@ for (const matrixCase of [
 	const entryBaseline = test.getEntryReads();
 	const branchBaseline = test.getBranchReads();
 	assert.ok(entryBaseline > 0, "turn_start counter baseline should include the session_start entries read");
-	assert.ok(branchBaseline > 0, "turn_start counter baseline should include the session_start branch read");
+	assert.equal(branchBaseline, 0, "turn_start baseline should confirm session_start does not directly scan branch");
 	const scheduleBaseline = git.schedules.length;
 	test.setCwd("/workspace/fresh-repo");
 	test.setAvailableProviders(["openai", "anthropic", "openai"]);
@@ -450,7 +457,7 @@ for (const matrixCase of [
 	const entryBaseline = test.getEntryReads();
 	const branchBaseline = test.getBranchReads();
 	assert.ok(entryBaseline > 0, "tool_execution_end counter baseline should include the session_start entries read");
-	assert.ok(branchBaseline > 0, "tool_execution_end counter baseline should include the session_start branch read");
+	assert.equal(branchBaseline, 0, "tool_execution_end baseline should confirm session_start does not directly scan branch");
 	const scheduleBaseline = git.schedules.length;
 	const renderBaseline = test.getRenderRequests();
 	test.setCwd("/workspace/tool-repo");
@@ -494,13 +501,13 @@ for (const matrixCase of [
 	const entryBaseline = test.getEntryReads();
 	const branchBaseline = test.getBranchReads();
 	await harness.runtime.events.sessionTree({}, test.ctx as ExtensionContext);
-	assert.ok(test.getEntryReads() > entryBaseline, "session_tree should remain a structural full entries scan");
-	assert.ok(test.getBranchReads() > branchBaseline, "session_tree should remain a structural full branch scan");
+	assert.ok(test.getEntryReads() > entryBaseline, "session_tree should remain a structural full entries reconciliation");
+	assert.equal(test.getBranchReads(), branchBaseline, "session_tree should use ctx.getContextUsage instead of directly scanning the branch");
 	const entryAfterTree = test.getEntryReads();
 	const branchAfterTree = test.getBranchReads();
-	await harness.runtime.events.sessionCompact({}, test.ctx as ExtensionContext);
-	assert.ok(test.getEntryReads() > entryAfterTree, "session_compact should keep entries scan for usage totals");
-	assert.equal(test.getBranchReads(), branchAfterTree, "session_compact should use explicit context-unknown state instead of a branch scan");
+	await harness.runtime.events.sessionCompact({ compactionEntry: sessionCompaction() }, test.ctx as ExtensionContext);
+	assert.equal(test.getEntryReads(), entryAfterTree, "session_compact should apply its public event delta without rescanning entries");
+	assert.equal(test.getBranchReads(), branchAfterTree, "session_compact should use ctx.getContextUsage instead of directly scanning the branch");
 }
 
 {
@@ -519,24 +526,28 @@ for (const matrixCase of [
 	harness.runtime.events.sessionStart({}, test.ctx);
 	const entryBaseline = test.getEntryReads();
 	const branchBaseline = test.getBranchReads();
-	assert.ok(entryBaseline > 0, "session_compact context-unknown test baseline should include session_start entries read");
-	assert.ok(branchBaseline > 0, "session_compact context-unknown test baseline should include session_start branch read");
+	assert.ok(entryBaseline > 0, "session_compact public-facts test baseline should include session_start entries read");
+	assert.equal(branchBaseline, 0, "session_start should not directly scan the branch for context truth");
 	const scheduleBaseline = git.schedules.length;
 	const renderBaseline = test.getRenderRequests();
-	test.setContextUsage({ tokens: 99_999, contextWindow: 100_000, percent: 99.999 });
-	await harness.runtime.events.sessionCompact({}, test.ctx as ExtensionContext);
+	const compactionEntry = sessionCompaction({
+		id: "runtime-compaction-1",
+		usage: { input: 10, output: 20, cacheRead: 30, cacheWrite: 40, cost: { total: 0.9 } },
+	});
+	test.setContextUsage({ tokens: null, contextWindow: 100_000, percent: null });
+	await harness.runtime.events.sessionCompact({ compactionEntry }, test.ctx as ExtensionContext);
 
-	assert.ok(test.getEntryReads() > entryBaseline, "session_compact should still scan entries for usage totals in context-unknown test");
-	assert.equal(test.getBranchReads(), branchBaseline, "session_compact should not scan branch in context-unknown test");
+	assert.equal(test.getEntryReads(), entryBaseline, "session_compact should apply compaction usage without a full entries scan");
+	assert.equal(test.getBranchReads(), branchBaseline, "session_compact should not directly scan branch");
 	assert.deepEqual(git.schedules.slice(scheduleBaseline), [true], "session_compact should preserve immediate git refresh behavior");
 	assert.ok(test.getRenderRequests() > renderBaseline, "session_compact should request render after clearing context");
 	await harness.runtime.commands.openPane("", test.ctx);
 	let previewState = harness.showPanePreviewStates.at(-1);
-	assert.ok(previewState, "session_compact context clear should open /glance with preview state");
-	assert.deepEqual(previewState.usage, { input: 1, output: 2, cacheRead: 3, cacheWrite: 4, cost: 0.1 }, "session_compact should preserve usage totals from entries");
-	assert.equal(previewState.context.tokens, null, "session_compact should clear visible context tokens to unknown");
-	assert.equal(previewState.context.window, 100_000, "session_compact should preserve current context window");
-	assert.equal(previewState.context.percent, null, "session_compact should clear visible context percent to unknown");
+	assert.ok(previewState, "session_compact public context check should open /glance with preview state");
+	assert.deepEqual(previewState.usage, { input: 11, output: 22, cacheRead: 33, cacheWrite: 44, cost: 1 }, "session_compact should add public compaction-entry billed usage to prior totals");
+	assert.equal(previewState.context.tokens, null, "session_compact should display ctx.getContextUsage null tokens");
+	assert.equal(previewState.context.window, 100_000, "session_compact should preserve the public context window");
+	assert.equal(previewState.context.percent, null, "session_compact should display ctx.getContextUsage null percent");
 
 	test.setAvailableProviders(["openai", "anthropic"]);
 	test.setModel({ id: "post-compact-model", provider: "anthropic", contextWindow: 200_000 });
@@ -554,16 +565,16 @@ for (const matrixCase of [
 	await harness.runtime.events.messageEnd({ message: assistantMessage({ responseId: "zero-usage-after-compact", usage: { totalTokens: 0, input: 10, output: 10 } }) }, test.ctx as ExtensionContext);
 	await harness.runtime.events.messageEnd({ message: assistantMessage({ responseId: "aborted-after-compact", stopReason: "aborted", usage: { totalTokens: 100, input: 10 } }) }, test.ctx as ExtensionContext);
 	await harness.runtime.events.messageEnd({ message: assistantMessage({ responseId: "error-after-compact", stopReason: "error", usage: { totalTokens: 100, input: 10 } }) }, test.ctx as ExtensionContext);
-	assert.equal(test.getEntryReads(), entryAfterCompact, "lifecycle/message/turn_end/agent_end events after compact should not scan entries while context is unknown");
-	assert.equal(test.getBranchReads(), branchAfterCompact, "lifecycle/message/turn_end/agent_end events after compact should not scan branch while context is unknown");
+	assert.equal(test.getEntryReads(), entryAfterCompact, "lifecycle/message/turn_end/agent_end events after compact should remain incremental");
+	assert.equal(test.getBranchReads(), branchAfterCompact, "lifecycle/message/turn_end/agent_end events should not directly scan branch");
 	await harness.runtime.commands.openPane("", test.ctx);
 	previewState = harness.showPanePreviewStates.at(-1);
-	assert.ok(previewState, "post-compact stale context check should open /glance with preview state");
+	assert.ok(previewState, "post-compact public context check should open /glance with preview state");
 	assert.equal(previewState.providers.availableCount, 2, "post-compact lifecycle refreshes should still update provider count");
 	assert.equal(previewState.model.id, "post-compact-model", "post-compact model_select should still update model id");
-	assert.equal(previewState.context.tokens, null, "post-compact lifecycle/message refreshes should not refill stale context tokens");
-	assert.equal(previewState.context.window, 200_000, "post-compact lifecycle refreshes should still update context window");
-	assert.equal(previewState.context.percent, null, "post-compact lifecycle/message refreshes should not refill stale context percent");
+	assert.equal(previewState.context.tokens, 88_000, "post-compact lifecycle refreshes should trust newly known public context tokens");
+	assert.equal(previewState.context.window, 200_000, "post-compact lifecycle refreshes should update context window");
+	assert.equal(previewState.context.percent, 44, "post-compact lifecycle refreshes should trust newly known public context percent");
 
 	test.setContextUsage({ tokens: 55_000, contextWindow: 200_000, percent: 27.5 });
 	const branchBeforeKnownAssistant = test.getBranchReads();
@@ -571,22 +582,25 @@ for (const matrixCase of [
 	assert.equal(test.getBranchReads(), branchBeforeKnownAssistant, "valid assistant context recovery should not scan branch");
 	await harness.runtime.commands.openPane("", test.ctx);
 	previewState = harness.showPanePreviewStates.at(-1);
-	assert.ok(previewState, "valid assistant context recovery should open /glance with preview state");
-	assert.equal(previewState.context.tokens, 55_000, "valid assistant context usage should clear unknown and refresh context tokens");
-	assert.equal(previewState.context.window, 200_000, "valid assistant context usage should keep the current context window");
-	assert.equal(previewState.context.percent, 27.5, "valid assistant context usage should clear unknown and refresh context percent");
+	assert.ok(previewState, "known public context refresh should open /glance with preview state");
+	assert.equal(previewState.context.tokens, 55_000, "assistant message_end should refresh from ctx.getContextUsage");
+	assert.equal(previewState.context.window, 200_000, "assistant message_end should keep the public context window");
+	assert.equal(previewState.context.percent, 27.5, "assistant message_end should refresh the public context percent");
 
-	test.setSessionBranch([{ type: "compaction" }]);
-	test.setSessionEntries([sessionMessage("assistant", { usage: { input: 8, output: 9, cost: { total: 0.3 } } })]);
+	test.setSessionEntries([
+		sessionMessage("assistant", { usage: { input: 8, output: 9, cost: { total: 0.3 } } }),
+		sessionBranchSummary({ id: "runtime-summary-1", usage: { input: 10, output: 11, cost: { total: 0.4 } } }),
+	]);
 	test.setContextUsage({ tokens: 66_000, contextWindow: 200_000, percent: 33 });
 	const branchBeforeFullSync = test.getBranchReads();
 	await harness.runtime.events.sessionTree({}, test.ctx as ExtensionContext);
-	assert.ok(test.getBranchReads() > branchBeforeFullSync, "session_tree should still sync context-unknown state from branch-derived facts");
+	assert.equal(test.getBranchReads(), branchBeforeFullSync, "session_tree should not duplicate ctx.getContextUsage with a branch scan");
 	await harness.runtime.commands.openPane("", test.ctx);
 	previewState = harness.showPanePreviewStates.at(-1);
-	assert.ok(previewState, "full branch sync unknown check should open /glance with preview state");
-	assert.equal(previewState.context.tokens, null, "full branch sync should restore explicit unknown context when branch is compacted without known assistant usage");
-	assert.equal(previewState.context.percent, null, "full branch sync should clear context percent when branch is compacted without known assistant usage");
+	assert.ok(previewState, "session_tree public-facts check should open /glance with preview state");
+	assert.deepEqual(previewState.usage, { input: 18, output: 20, cacheRead: 0, cacheWrite: 0, cost: 0.7 }, "session_tree should reconcile branch-summary billed usage from the session ledger");
+	assert.equal(previewState.context.tokens, 66_000, "session_tree should trust public context tokens regardless of raw branch shape");
+	assert.equal(previewState.context.percent, 33, "session_tree should trust public context percent regardless of raw branch shape");
 }
 
 {
@@ -594,7 +608,7 @@ for (const matrixCase of [
 	const test = createContext();
 	const harness = createRuntimeHarness({
 		loadConfigSyncConfig: defaultConfig(),
-		showPaneResults: [{ action: "cancel" }, { action: "cancel" }, { action: "cancel" }, { action: "cancel" }, { action: "cancel" }],
+		showPaneResults: Array.from({ length: 6 }, () => ({ action: "cancel" as const })),
 		git,
 	});
 
@@ -602,7 +616,7 @@ for (const matrixCase of [
 	const entryBaseline = test.getEntryReads();
 	const branchBaseline = test.getBranchReads();
 	assert.ok(entryBaseline > 0, "assistant message_end counter baseline should include the session_start entries read");
-	assert.ok(branchBaseline > 0, "assistant message_end counter baseline should include the session_start branch read");
+	assert.equal(branchBaseline, 0, "message_end baseline should confirm session_start does not directly scan branch");
 	const renderBaseline = test.getRenderRequests();
 	const scheduleBaseline = git.schedules.length;
 	await harness.runtime.events.messageEnd({ message: { role: "user", usage: { input: 100, output: 100, cost: { total: 100 } } } }, test.ctx as ExtensionContext);
@@ -641,8 +655,20 @@ for (const matrixCase of [
 	assert.equal(test.getEntryReads(), entryBaseline, "assistant message_end duplicate checks should still avoid entries scans");
 	assert.equal(test.getBranchReads(), branchBaseline, "assistant message_end duplicate checks should still avoid branch scans");
 
+	const nestedToolResult = toolResultMessage({
+		toolCallId: "nested-model-tool-1",
+		usage: { input: 11, output: 12, cacheRead: 13, cacheWrite: 14, cost: { total: 1.1 } },
+	});
+	await harness.runtime.events.messageEnd({ message: nestedToolResult }, test.ctx as ExtensionContext);
+	await harness.runtime.events.messageEnd({ message: { ...nestedToolResult } }, test.ctx as ExtensionContext);
+	await harness.runtime.commands.openPane("", test.ctx);
+	previewState = harness.showPanePreviewStates.at(-1);
+	assert.ok(previewState, "usage-bearing toolResult message_end should open /glance with preview state");
+	assert.deepEqual(previewState.usage, { input: 20, output: 23, cacheRead: 26, cacheWrite: 29, cost: 2.6 }, "toolResult message_end should add nested billed usage once and dedupe by toolCallId");
+	assert.equal(test.getEntryReads(), entryBaseline, "toolResult message_end should remain incremental without entries scans");
+	assert.equal(test.getBranchReads(), branchBaseline, "toolResult message_end should not directly scan branch");
+
 	test.setSessionEntries([sessionMessage("assistant", { usage: { input: 20, output: 30, cacheRead: 40, cacheWrite: 50, cost: { total: 2.5 } } })]);
-	test.setSessionBranch([{ type: "compaction" }]);
 	test.setCwd("/workspace/turn-end-repo");
 	test.setContextUsage({ tokens: 22_000, contextWindow: 200_000, percent: 11 });
 	const scheduleBeforeTurnEnd = git.schedules.length;
@@ -656,10 +682,9 @@ for (const matrixCase of [
 	assert.ok(previewState, "turn_end narrow refresh check should open /glance with preview state");
 	assert.equal(previewState.workspace.path, "/workspace/turn-end-repo", "turn_end should still refresh workspace through the lifecycle path");
 	assert.equal(previewState.context.tokens, 22_000, "turn_end should still refresh context tokens through the lifecycle path");
-	assert.deepEqual(previewState.usage, { input: 9, output: 11, cacheRead: 13, cacheWrite: 15, cost: 1.5 }, "turn_end should preserve assistant message_end usage totals without full entries reconciliation");
+	assert.deepEqual(previewState.usage, { input: 20, output: 23, cacheRead: 26, cacheWrite: 29, cost: 2.6 }, "turn_end should preserve complete incremental session usage without full entries reconciliation");
 
 	test.setSessionEntries([sessionMessage("assistant", { usage: { input: 100, output: 200, cacheRead: 300, cacheWrite: 400, cost: { total: 9.9 } } })]);
-	test.setSessionBranch([{ type: "compaction" }, sessionMessage("assistant", { usage: { totalTokens: 0 } })]);
 	test.setCwd("/workspace/agent-end-repo");
 	test.setContextUsage({ tokens: 33_000, contextWindow: 200_000, percent: 16.5 });
 	const entryAfterTurnEnd = test.getEntryReads();
@@ -675,7 +700,7 @@ for (const matrixCase of [
 	assert.ok(previewState, "agent_end narrow refresh check should open /glance with preview state");
 	assert.equal(previewState.workspace.path, "/workspace/agent-end-repo", "agent_end should still refresh workspace through the lifecycle path");
 	assert.equal(previewState.context.tokens, 33_000, "agent_end should still refresh context tokens through the lifecycle path");
-	assert.deepEqual(previewState.usage, { input: 9, output: 11, cacheRead: 13, cacheWrite: 15, cost: 1.5 }, "agent_end should preserve assistant message_end usage totals without full entries reconciliation");
+	assert.deepEqual(previewState.usage, { input: 20, output: 23, cacheRead: 26, cacheWrite: 29, cost: 2.6 }, "agent_end should preserve complete incremental session usage without full entries reconciliation");
 }
 
 {
@@ -1042,7 +1067,7 @@ for (const mode of ["rpc", "json", "print"] as const) {
 	await harness.runtime.events.thinkingLevelSelect({}, test.ctx as ExtensionContext);
 	await harness.runtime.events.toolExecutionEnd({}, test.ctx as ExtensionContext);
 	await harness.runtime.events.sessionTree({}, test.ctx as ExtensionContext);
-	await harness.runtime.events.sessionCompact({}, test.ctx as ExtensionContext);
+	await harness.runtime.events.sessionCompact({ compactionEntry: sessionCompaction() }, test.ctx as ExtensionContext);
 	await harness.runtime.events.messageEnd({ message: { role: "assistant" } }, test.ctx as ExtensionContext);
 	await harness.runtime.events.turnEnd({ turnIndex: 1, message: { role: "assistant" } }, test.ctx as ExtensionContext);
 	harness.runtime.events.agentStart({}, test.ctx as ExtensionContext);

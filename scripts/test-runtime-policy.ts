@@ -13,9 +13,9 @@ type RuntimeEventKind =
 	| "config_save_success"
 	| "editor_thinking_cycle";
 
-type RuntimeSnapshotMode = "none" | "reliable" | "lifecycle" | "message" | "thinking" | "compact";
+type RuntimeSnapshotMode = "none" | "reliable" | "lifecycle" | "thinking";
 type RuntimeGitRefreshMode = "never" | "onWorkspaceChange" | "immediate";
-type RuntimeContextPlan = "none" | "refresh" | "clear";
+type RuntimeContextPlan = "none" | "refresh";
 
 interface RuntimeRefreshPlan {
 	ensureConfig: boolean;
@@ -31,6 +31,7 @@ interface RuntimeRefreshPlan {
 
 interface RuntimeEventFacts {
 	messageRole?: string;
+	messageHasUsage?: boolean;
 }
 
 interface RuntimePolicyModule {
@@ -114,20 +115,21 @@ assertPlan("tool_execution_end", {
 assertPlan("session_compact", {
 	ensureConfig: true,
 	ensureState: true,
-	snapshot: "compact",
+	snapshot: "lifecycle",
 	refreshWorkspace: true,
 	refreshModel: true,
-	refreshUsageTotals: true,
-	context: "clear",
+	refreshUsageTotals: false,
+	context: "refresh",
 	git: "immediate",
 	render: true,
 });
-assert.equal(runtimePlanFor("session_compact").context, "clear", "session_compact should clear context rather than refresh it");
+assert.equal(runtimePlanFor("session_compact").context, "refresh", "session_compact should trust ctx.getContextUsage rather than force a second context state");
+assert.equal(runtimePlanFor("session_compact").refreshUsageTotals, false, "session_compact should apply its public event usage delta without rescanning all entries");
 
 assertPlan("message_end", {
 	ensureConfig: true,
 	ensureState: true,
-	snapshot: "message",
+	snapshot: "lifecycle",
 	refreshWorkspace: true,
 	refreshModel: false,
 	refreshUsageTotals: false,
@@ -135,7 +137,7 @@ assertPlan("message_end", {
 	git: "onWorkspaceChange",
 	render: true,
 }, { messageRole: "assistant" });
-for (const role of ["user", "system", undefined]) {
+for (const role of ["user", "system", "toolResult", undefined]) {
 	assertPlan(
 		"message_end",
 		{
@@ -152,6 +154,21 @@ for (const role of ["user", "system", undefined]) {
 		role === undefined ? undefined : { messageRole: role },
 	);
 }
+assertPlan(
+	"message_end",
+	{
+		ensureConfig: true,
+		ensureState: true,
+		snapshot: "none",
+		refreshWorkspace: false,
+		refreshModel: false,
+		refreshUsageTotals: false,
+		context: "none",
+		git: "never",
+		render: true,
+	},
+	{ messageRole: "toolResult", messageHasUsage: true },
+);
 
 assertPlan("turn_end", lifecycleNoModelOnWorkspaceChange);
 assertPlan("agent_end", lifecycleNoModelOnWorkspaceChange);
@@ -183,20 +200,20 @@ assertPlan("editor_thinking_cycle", {
 assertPlan("config_save_success", {
 	ensureConfig: false,
 	ensureState: false,
-	snapshot: "reliable",
+	snapshot: "lifecycle",
 	refreshWorkspace: true,
 	refreshModel: true,
-	refreshUsageTotals: true,
+	refreshUsageTotals: false,
 	context: "refresh",
 	git: "immediate",
 	render: true,
 });
 
-for (const kind of ["model_select", "turn_start", "tool_execution_end", "turn_end", "agent_end"] as const) {
+for (const kind of ["model_select", "turn_start", "tool_execution_end", "session_compact", "turn_end", "agent_end"] as const) {
 	assert.equal(runtimePlanFor(kind).snapshot, "lifecycle", `${kind} should use the narrow lifecycle snapshot reader`);
 	assert.equal(runtimePlanFor(kind).refreshUsageTotals, false, `${kind} should not request a usage totals refresh`);
 }
-assert.equal(runtimePlanFor("message_end", { messageRole: "assistant" }).snapshot, "message", "assistant message_end should use the message-level snapshot reader");
+assert.equal(runtimePlanFor("message_end", { messageRole: "assistant" }).snapshot, "lifecycle", "assistant message_end should share the narrow public lifecycle snapshot reader");
 assert.equal(runtimePlanFor("message_end", { messageRole: "assistant" }).refreshUsageTotals, false, "assistant message_end should not request a usage totals scan");
 
 for (const kind of ["thinking_level_select", "editor_thinking_cycle"] as const) {
@@ -224,7 +241,7 @@ const policyControlledKinds: readonly RuntimeEventKind[] = [
 	"config_save_success",
 	"editor_thinking_cycle",
 ];
-const fullReconciliationKinds = new Set<RuntimeEventKind>(["session_tree", "config_save_success"]);
+const fullReconciliationKinds = new Set<RuntimeEventKind>(["session_tree"]);
 for (const kind of policyControlledKinds) {
 	const facts = kind === "message_end" ? { messageRole: "assistant" } : undefined;
 	assert.equal(
@@ -233,9 +250,10 @@ for (const kind of policyControlledKinds) {
 		`${kind} final matrix reliable/full-snapshot membership should stay locked`,
 	);
 }
-assert.equal(runtimePlanFor("session_compact").snapshot, "compact", "session_compact final matrix should use the compact branchless snapshot reader");
+assert.equal(runtimePlanFor("session_compact").snapshot, "lifecycle", "session_compact final matrix should use public context facts plus its event usage delta");
 
 assert.equal(runtimePlanFor("message_end", { messageRole: "assistant" }).git, "onWorkspaceChange", "assistant message_end should only refresh git when workspace changes");
-assert.equal(runtimePlanFor("message_end", { messageRole: "user" }).render, false, "non-assistant message_end should not render");
+assert.equal(runtimePlanFor("message_end", { messageRole: "user" }).render, false, "non-usage message_end should not render");
+assert.equal(runtimePlanFor("message_end", { messageRole: "toolResult", messageHasUsage: true }).render, true, "usage-bearing toolResult message_end should render its incremental session total");
 
 console.log("✓ runtime policy checks passed");
