@@ -296,20 +296,56 @@ for (const themeId of ["light", "dark"] as const) {
 }
 
 {
+	const reportedState = testState({
+		git: { ...testState().git, repo: true, branch: "main", status: "clean", dirty: false },
+		usage: { input: 20_000_000, output: 1_100_000, cacheRead: 320_000_000, cacheWrite: 0, cost: 297 },
+		context: { tokens: 76_000, window: 200_000, percent: 38 },
+		throughput: { currentRun: null, lastRun: null },
+		model: { id: "gpt-5.6-sol", provider: "OTTAI", displayName: "GPT 5.6 sol", thinking: "max" },
+		providers: { availableCount: 1 },
+	});
+	const reportedConfig = configWithSegments(["git", "cost", "throughput", "context", "tokens", "model"], (config) => {
+		config.icons = "nerd";
+	});
+	assert.equal(
+		stripControls(renderGlanceLine(reportedState, reportedConfig, 75, 1)),
+		" main · 󰈸 $297.0 ·  ?/s · 󰔟 38% · 󰄨 ↑20M ↓1.1M · 󰚩 GPT 5.6 sol max",
+		"compact status should fold Tokens cache detail before dropping the final Model segment",
+	);
+}
+
+{
 	const state = richState();
-	for (const width of [63, 95, 96]) {
-		assert.equal(
-			plainLine(["tokens"], state, width),
-			"tok ↑12k ↓3.1k CH6%",
-			`tokens cache should default to aggregate hit rate at width ${width}`,
-		);
-	}
+	assert.equal(plainLine(["tokens"], state, 96), "tok ↑12k ↓3.1k CH6%", "tokens full mode should include configured cache hit rate");
+	assert.equal(plainLine(["tokens"], state, 95), "tok ↑12k ↓3.1k", "tokens compact mode should fold cache detail");
+	assert.equal(plainLine(["tokens"], state, 63), "tok 16k", "tokens minimal mode should fold input/output into total usage");
+	assert.equal(
+		plainLine(["tokens"], state, 96, state.providers.availableCount, (config) => {
+			config.tokens.cache = "read-write";
+		}),
+		"tok ↑12k ↓3.1k R800 W20",
+		"tokens cache read/write mode should show actual cache token amounts in full mode",
+	);
+	assert.equal(
+		plainLine(["tokens"], state, 95, state.providers.availableCount, (config) => {
+			config.tokens.cache = "read-write";
+		}),
+		"tok ↑12k ↓3.1k",
+		"tokens compact mode should fold read/write cache detail",
+	);
 	assert.equal(
 		plainLine(["tokens"], state, 63, state.providers.availableCount, (config) => {
 			config.tokens.cache = "read-write";
 		}),
-		"tok ↑12k ↓3.1k R800 W20",
-		"tokens cache read/write mode should retain actual cache token amounts in minimal width mode",
+		"tok 16k",
+		"tokens minimal mode should fold read/write cache detail and input/output breakdown",
+	);
+	assert.equal(
+		plainLine(["tokens"], state, 63, state.providers.availableCount, (config) => {
+			config.tokens.display = "total";
+		}),
+		"tok 16k",
+		"tokens minimal mode should keep only the configured total value without a redundant label",
 	);
 	assert.equal(
 		plainLine(["tokens"], state, 96, state.providers.availableCount, (config) => {

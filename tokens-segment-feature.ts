@@ -57,6 +57,10 @@ function tokenPrimary(ctx: SegmentRenderContext): string {
 	return `↑${formatTokens(usage.input)} ↓${formatTokens(usage.output)}`;
 }
 
+function tokenMinimal(ctx: SegmentRenderContext): string {
+	return formatTokens(ctx.state.usage.input + ctx.state.usage.output);
+}
+
 function collectTokens(ctx: SegmentRenderContext): SegmentData | undefined {
 	const primary = tokenPrimary(ctx);
 	const cacheParts = tokenCacheParts(ctx);
@@ -65,8 +69,8 @@ function collectTokens(ctx: SegmentRenderContext): SegmentData | undefined {
 		secondary: cacheParts.join(" ") || undefined,
 		display: {
 			full: [primary, ...cacheParts].join(" "),
-			compact: [primary, ...cacheParts].join(" "),
-			minimal: [primary, ...cacheParts].join(" "),
+			compact: primary,
+			minimal: tokenMinimal(ctx),
 		},
 	};
 }

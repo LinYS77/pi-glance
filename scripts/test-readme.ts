@@ -56,6 +56,7 @@ assertReadmeIncludes("exact `dark` selects `theme.dark`", "README should documen
 assertReadmeIncludes("unknown or custom Pi theme names fall back to `theme.light`", "README should document unknown/custom ambient tone fallback");
 assertReadmeIncludes("three Cache modes: `rate` (default), `read/write`, and `hide`", "README should document the simplified Tokens cache modes and default");
 assertReadmeIncludes("actual aggregate cache token amounts such as `R563M W12M`", "README should explain the read/write cache amount mode");
+assertReadmeIncludes("shows configured cache detail in full mode, folds to input/output in compact mode, and folds to one total in minimal mode", "README should document Tokens adaptive folding tiers");
 assertReadmeIncludes("Legacy `auto` configs migrate to `rate`", "README should document the legacy auto migration");
 assertReadmeIncludes("legacy `show` configs migrate to the canonical `read-write` value", "README should document the legacy show migration");
 assert.ok(!readme.includes("Cache to `auto`, `show`, `hide`, or `rate`"), "README should not advertise the removed width-dependent auto mode");

@@ -95,8 +95,8 @@ assert.equal(
 );
 assert.equal(
 	line("tokens", { usage: { input: 12_400, output: 3_100, cacheRead: 800, cacheWrite: 20, cost: 0 } }, undefined, 80),
-	"tok ↑12k ↓3.1k CH6%",
-	"tokens cache rate should remain content-stable outside full width",
+	"tok ↑12k ↓3.1k",
+	"tokens compact mode should fold the configured cache hit rate",
 );
 assert.equal(
 	line(
@@ -107,8 +107,8 @@ assert.equal(
 		},
 		80,
 	),
-	"tok ↑12k ↓3.1k R800 W20",
-	"tokens cache read/write mode keeps actual cache token amounts outside full width",
+	"tok ↑12k ↓3.1k",
+	"tokens compact mode should fold actual read/write cache amounts",
 );
 assert.equal(
 	line(
