@@ -23,7 +23,8 @@ pi-glance owns:
 
 - the Glance editor frame and status line;
 - always-on adaptive segment fitting;
-- the `/glance` settings pane and preview;
+- the `/glance` settings pane, bounded theme browser, and transient density preview;
+- injected Pi selection keybindings and hierarchy-preserving pane navigation;
 - six display features: Git, Cost, Model speed, Context, Tokens, and Model;
 - its 22 curated Glance palettes;
 - asynchronous cached Git status collection;
@@ -94,6 +95,15 @@ GlanceEditor
 - Ordinary lifecycle events request a render only when visible Glance state changes.
 - Config save always requests a render because display configuration can change without changing session facts.
 - Git snapshots request a render only when visible Git facts change; timestamp-only updates remain silent.
+
+## `/glance` interaction rules
+
+- Navigation follows category → setting → value. Enter/Right descends one level; Esc/Left ascends one level without changing the selected parent.
+- Vertical selection movement, paging, confirmation, and cancellation use the `KeybindingsManager` injected into `ctx.ui.custom()`.
+- Ctrl-C remains an unconditional pane cancel; extension-specific save/reset/reorder/density keys remain local commands.
+- The theme catalog remains complete, but `SelectList` renders only a terminal-height-aware 4–8 row viewport.
+- `GlanceConfigPane` translates input into model intents itself rather than calling `SelectList.handleInput()`, preserving the injected keybinding boundary on Pi 0.84.
+- Preview density cycles through Auto, Full, Compact, and Minimal without entering `GlanceConfig` or dirty comparison.
 
 ## Session fact semantics
 

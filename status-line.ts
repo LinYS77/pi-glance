@@ -7,6 +7,10 @@ import type { GlanceConfig, GlanceState, SegmentRenderContext, SegmentRenderResu
 
 const RESET = "\x1b[0m";
 
+interface GlanceLineRenderOptions extends GlanceRenderStyleContext {
+	readonly widthMode?: WidthMode;
+}
+
 function applyInlineSegmentStyle(segment: SegmentRenderResult, styles: ResolvedGlanceStyles, text: string): string {
 	if (segment.id === "context") {
 		const match = text.match(/([0-9]+(?:\.[0-9]+)?)%/);
@@ -35,10 +39,10 @@ function renderEnabledSegments(
 	config: GlanceConfig,
 	width: number,
 	providerCount = 1,
-	styleContext: GlanceRenderStyleContext = {},
+	options: GlanceLineRenderOptions = {},
 ): { styles: ResolvedGlanceStyles; segments: SegmentRenderResult[] } {
-	const widthMode = widthModeFor(width);
-	const styles = resolveGlanceRenderStyles(config.theme, styleContext);
+	const widthMode = options.widthMode ?? widthModeFor(width);
+	const styles = resolveGlanceRenderStyles(config.theme, options);
 	const icons = ICONS[config.icons];
 	const ctx: SegmentRenderContext = {
 		state,
@@ -86,10 +90,10 @@ export function renderGlanceLine(
 	config: GlanceConfig,
 	width: number,
 	providerCount = state.providers.availableCount,
-	styleContext: GlanceRenderStyleContext = {},
+	options: GlanceLineRenderOptions = {},
 ): string {
 	if (!config.enabled) return "";
-	const { styles, segments } = renderEnabledSegments(state, config, width, providerCount, styleContext);
+	const { styles, segments } = renderEnabledSegments(state, config, width, providerCount, options);
 	const line = fitSegments(styles, segments, width);
 	if (line.width > width) {
 		return truncateToWidth(line.text, width, styles.dim("…"));

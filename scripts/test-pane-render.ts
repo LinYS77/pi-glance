@@ -186,6 +186,8 @@ const first = await makePane();
 const initial = plainText(first.component);
 assertContains(initial, "✓ Saved", "initial pane should be clean");
 assertContains(initial, "Ask pi to improve the input surface...", "preview should render");
+assertContains(initial, "Preview · density Auto", "preview should start in automatic density mode");
+assertContains(initial, "[D] cycle", "preview caption should expose transient density cycling without crowding pane footer help");
 assertNotContains(initial, "PREVIEW", "preview label should stay removed");
 assertContains(initial, "Enabled", "settings section should render");
 assertThemeRow(initial, "Light", "Light theme");
@@ -200,6 +202,39 @@ assertNotContains(initial, "[J/K] switch", "category help should not describe re
 assertNotContains(initial, "Changes stay local", "empty default status copy should stay removed");
 assertNotContains(initial, "NOTES", "old notes section should stay removed");
 assertNotContains(initial, "[Tab]", "tab navigation should stay removed");
+
+const densityPane = await makePane();
+const densityRenderBaseline = densityPane.renders();
+press(densityPane.component, "d");
+let densityText = plainText(densityPane.component, 160);
+let densityFrame = findLineContaining(densityText, "╭");
+assertContains(densityText, "Preview · density Full", "D should cycle automatic preview into explicit full density");
+assertContains(densityFrame, "ctx 23% 47k/200k", "full density preview should retain full Context detail");
+assertContains(densityFrame, "ai anthropic/Sonnet 4 high", "full density preview should retain provider and thinking detail");
+assertContains(densityText, "✓ Saved", "density preview should not dirty config");
+
+press(densityPane.component, "d");
+densityText = plainText(densityPane.component, 160);
+densityFrame = findLineContaining(densityText, "╭");
+assertContains(densityText, "Preview · density Compact", "D should cycle full preview into compact density");
+assertContains(densityFrame, "ctx 23%", "compact density preview should retain Context percentage");
+assertNotContains(densityFrame, "47k/200k", "compact density preview should fold Context token detail at the same pane width");
+assertContains(densityFrame, "ai Sonnet 4 high", "compact density preview should retain thinking while folding provider detail");
+assertNotContains(densityFrame, "anthropic/", "compact density preview should fold automatic provider detail");
+
+press(densityPane.component, "d");
+densityText = plainText(densityPane.component, 160);
+densityFrame = findLineContaining(densityText, "╭");
+assertContains(densityText, "Preview · density Minimal", "D should cycle compact preview into minimal density");
+assertContains(densityFrame, "git main *", "minimal density preview should retain the core Git fact");
+assertNotContains(densityFrame, "↑2 ↓1", "minimal density preview should fold Git ahead/behind detail");
+assertContains(densityFrame, "ai Sonnet 4", "minimal density preview should retain the model name");
+assertNotContains(densityFrame, "Sonnet 4 high", "minimal density preview should fold automatic thinking detail");
+assertContains(densityText, "✓ Saved", "all density previews should remain transient");
+
+press(densityPane.component, "d");
+assertContains(plainText(densityPane.component, 160), "Preview · density Auto", "D should wrap minimal preview back to automatic density");
+assert.equal(densityPane.renders() - densityRenderBaseline, 4, "each density cycle should request exactly one pane render");
 
 const injectedBindings = keybindingsWith({
 	"tui.select.up": ["u"],

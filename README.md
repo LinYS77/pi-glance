@@ -76,9 +76,16 @@ That's the only command — opens a calm settings pane with a real input-surface
 | 💤 | **Dim unfocused** | Surface quiets down when you scroll the chat |
 | 🎨 | **Themes** | 22 built-in palettes, from Light/Dark to Catppuccin, Solarized, Gruvbox, Rosé Pine, One, Kanagawa, Everforest, and High Contrast |
 
+## Using `/glance`
+
+- Navigation follows the settings hierarchy: Enter or Right descends from category → setting → value, while Esc or Left returns one level without jumping to a different visual row.
+- Up/down, Page Up/Page Down, Enter, and cancel use Pi's injected `tui.select.*` keybindings, so `/glance` follows user remappings from `keybindings.json`. Ctrl-C remains a hard cancel.
+- The theme browser uses a bounded SelectList viewport: eight palettes on normal terminals and four on short terminals. Page Up/Page Down moves by the current viewport size while all 22 palettes remain available.
+- Press `D` to cycle the live preview through `Auto`, `Full`, `Compact`, and `Minimal` density. Density preview is transient: it demonstrates always-on adaptive folding and never changes or dirties the saved config.
+
 ## Notes
 
-- To switch themes, open `/glance` → **General** → `Light theme` or `Dark theme`, press Enter, preview palettes in the browser, then press Enter to accept or Esc/Left to return. Both rows can choose from all 22 built-in Glance palettes: the Light theme browser lists light-toned palettes first and the Dark theme browser lists dark-toned palettes first, but neither browser filters the catalog. Built-ins: Light, Dark, Catppuccin Latte/Mocha/Frappé/Macchiato, Nord, Tokyo Night, Gruvbox Light/Dark, Solarized Light/Dark, Rosé Pine/Dawn, One Light/Dark, Kanagawa Wave/Lotus, Everforest Light/Dark, and High Contrast Light/Dark.
+- To switch themes, open `/glance` → **General** → `Light theme` or `Dark theme`, press Enter, preview palettes in the bounded browser, then press Enter to accept or Esc/Left to return. Both rows can choose from all 22 built-in Glance palettes: the Light theme browser lists light-toned palettes first and the Dark theme browser lists dark-toned palettes first, but neither browser filters the catalog. Built-ins: Light, Dark, Catppuccin Latte/Mocha/Frappé/Macchiato, Nord, Tokyo Night, Gruvbox Light/Dark, Solarized Light/Dark, Rosé Pine/Dawn, One Light/Dark, Kanagawa Wave/Lotus, Everforest Light/Dark, and High Contrast Light/Dark.
 - Icons default to `plain` so pi-glance works with normal terminal fonts.
 - Editor top spacing is configurable: open `/glance` → **General** → `Top spacing` and choose `none`, `1 row`, or `2 rows`.
 - `nerd` icons are opt-in: open `/glance` → **General** → `Icons` and choose `nerd` for richer symbols.

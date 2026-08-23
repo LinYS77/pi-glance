@@ -31,7 +31,7 @@ assertReadmeIncludes("does not patch or wrap arbitrary third-party editors", "RE
 assert.equal(GLANCE_THEMES.length, 22, "README theme copy should describe the curated 22-theme collection");
 assertReadmeIncludes("22 built-in palettes", "README should describe the curated 22-theme count");
 assertReadmeIncludes("/glance` → **General** → `Light theme` or `Dark theme`", "README should document the split /glance theme rows");
-assertReadmeIncludes("press Enter, preview palettes in the browser", "README should describe the theme browser flow");
+assertReadmeIncludes("press Enter, preview palettes in the bounded browser", "README should describe the theme browser flow");
 assertReadmeIncludes("Both rows can choose from all 22 built-in Glance palettes", "README should state both theme slots can choose all built-in palettes");
 assertReadmeIncludes("Light theme browser lists light-toned palettes first", "README should document light-slot preferred ordering");
 assertReadmeIncludes("Dark theme browser lists dark-toned palettes first", "README should document dark-slot preferred ordering");
@@ -74,6 +74,13 @@ assert.ok(!readme.includes("CH%") && !/CH\d+%/.test(readme), "README should not 
 assertReadmeIncludes("Architecture context and accepted decisions", "README should link contributors to tracked architecture context");
 assertReadmeIncludes("CONTEXT.md", "README should link the tracked context map");
 assertReadmeIncludes("docs/adr/", "README should link accepted architecture decisions");
+
+assertReadmeIncludes("Navigation follows the settings hierarchy", "README should document corrected hierarchical pane navigation");
+assertReadmeIncludes("Pi's injected `tui.select.*` keybindings", "README should document injected keybinding support");
+assertReadmeIncludes("bounded SelectList viewport", "README should document the bounded theme browser");
+assertReadmeIncludes("Page Up/Page Down moves by the current viewport size", "README should document theme browser page navigation");
+assertReadmeIncludes("cycle the live preview through `Auto`, `Full`, `Compact`, and `Minimal` density", "README should document density preview modes");
+assertReadmeIncludes("Density preview is transient", "README should distinguish preview density from saved config");
 
 assertReadmeIncludes("Global config at `~/.pi/agent/pi-glance/config.json`; saves use an atomic temporary-file rename", "README should document atomic config persistence");
 assertReadmeIncludes("Invalid, unreadable, or newer-version config files are diagnosed and treated as read-only", "README should document conservative config load diagnostics");

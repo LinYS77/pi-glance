@@ -6,9 +6,10 @@ import { PALETTES, fg } from "../palette.js";
 import { resolveBuiltInGlanceStyles, type GlanceRenderStyleContext } from "../theme-adapter.js";
 import { GLANCE_THEME_IDS } from "../themes.js";
 import { testState } from "./helpers.js";
-import type { GlanceConfig, GlanceState, GlanceThemeName, SegmentId } from "../types.js";
+import type { GlanceConfig, GlanceState, GlanceThemeName, SegmentId, WidthMode } from "../types.js";
 
-type RenderGlanceLine = (state: GlanceState, config: GlanceConfig, width: number, providerCount?: number, styleContext?: GlanceRenderStyleContext) => string;
+type RenderGlanceLineOptions = GlanceRenderStyleContext & { widthMode?: WidthMode };
+type RenderGlanceLine = (state: GlanceState, config: GlanceConfig, width: number, providerCount?: number, options?: RenderGlanceLineOptions) => string;
 
 const RESET = "\x1b[0m";
 
@@ -227,6 +228,23 @@ for (const themeId of ["light", "dark"] as const) {
 		}),
 		"ai GPT 5.5",
 		"provider display never should hide provider even at full width with multiple providers",
+	);
+
+	const forcedDensityConfig = configWithSegments(["model"]);
+	assert.equal(
+		stripControls(renderGlanceLine(modelState(2, "high"), forcedDensityConfig, 120, 2, { widthMode: "full" })),
+		"ai openai/GPT 5.5 high",
+		"forced full preview density should retain provider and thinking detail at a wide physical width",
+	);
+	assert.equal(
+		stripControls(renderGlanceLine(modelState(2, "high"), forcedDensityConfig, 120, 2, { widthMode: "compact" })),
+		"ai GPT 5.5 high",
+		"forced compact preview density should fold provider detail without changing physical width",
+	);
+	assert.equal(
+		stripControls(renderGlanceLine(modelState(2, "high"), forcedDensityConfig, 120, 2, { widthMode: "minimal" })),
+		"ai GPT 5.5",
+		"forced minimal preview density should fold provider and thinking detail without changing physical width",
 	);
 }
 

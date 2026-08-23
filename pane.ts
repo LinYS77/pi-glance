@@ -190,6 +190,7 @@ function paneIntentFromKey(data: string, keybindings: KeybindingsManager | undef
 	if (matchesKey(data, Key.space)) return { type: "noop" };
 	if (data === "s" || data === "S") return { type: "save" };
 	if (data === "r" || data === "R") return { type: "resetDefaults" };
+	if (data === "d" || data === "D") return { type: "cyclePreviewDensity" };
 	if (data === "j" || data === "J") return { type: "reorderSegment", direction: 1 };
 	if (data === "k" || data === "K") return { type: "reorderSegment", direction: -1 };
 	return undefined;
@@ -229,11 +230,13 @@ class GlanceConfigPane implements Component {
 		if (update.requestRender) this.requestRender();
 	}
 
-	private renderPreview(lines: string[], layout: PaneLayout): void {
+	private renderPreview(lines: string[], model: GlancePaneViewModel, layout: PaneLayout, colors: PaneColors): void {
+		lines.push(paneLine(layout, [colors.dim(`Preview · density ${model.previewDensityLabel} · [D] cycle`)]));
 		const previewOptions = {
 			contentLines: ["Ask pi to improve the input surface..."],
 			focused: true,
 			...(this.options.renderStyleContext ?? {}),
+			...(model.previewDensity === "auto" ? {} : { previewDensity: model.previewDensity }),
 			...(this.model.themeBrowser ? { ambientTone: this.model.themeBrowser.slot } : {}),
 		};
 		const preview = this.previewState
@@ -403,7 +406,7 @@ class GlanceConfigPane implements Component {
 
 		if (model.status) lines.push(paneLine(layout, [colors.dim(model.status)]));
 
-		this.renderPreview(lines, layout);
+		this.renderPreview(lines, model, layout, colors);
 		lines.push("");
 
 		this.renderSettings(lines, model, layout, colors);

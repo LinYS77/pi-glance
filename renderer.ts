@@ -1,11 +1,13 @@
 import { renderInputSurfaceFrame } from "./input-surface-frame.js";
+import { renderGlanceLine } from "./status-line.js";
 import { resolveGlanceRenderStyles, type GlanceRenderStyleContext } from "./theme-adapter.js";
-import type { GlanceConfig, GlanceState } from "./types.js";
+import type { GlanceConfig, GlanceState, WidthMode } from "./types.js";
 
 interface InputSurfaceRenderOptions extends GlanceRenderStyleContext {
 	contentLines?: string[];
 	focused?: boolean;
 	showTitle?: boolean;
+	previewDensity?: WidthMode;
 }
 
 export function renderInputSurfacePreview(config: GlanceConfig, width: number, options: InputSurfaceRenderOptions = {}): string[] {
@@ -44,6 +46,14 @@ export function renderInputSurface(
 	options: InputSurfaceRenderOptions = {},
 ): string[] {
 	const styles = resolveGlanceRenderStyles(config.theme, options);
+	const status = options.previewDensity
+		? {
+				render: (budget: number) => renderGlanceLine(state, config, budget, state.providers.availableCount, {
+					styles,
+					widthMode: options.previewDensity,
+				}),
+			}
+		: undefined;
 	return renderInputSurfaceFrame({
 		state,
 		config,
@@ -57,5 +67,6 @@ export function renderInputSurface(
 		chrome: {
 			showTitle: options.showTitle,
 		},
+		status,
 	});
 }

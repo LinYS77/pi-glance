@@ -12,7 +12,9 @@ import {
 	type SettingsCategoryId,
 	type SettingsRow,
 } from "./settings-catalog.js";
-import type { GlanceConfig, GlanceThemeName } from "./types.js";
+import type { GlanceConfig, GlanceThemeName, WidthMode } from "./types.js";
+
+export type PanePreviewDensity = "auto" | WidthMode;
 
 export type PaneFocus = "categories" | "settings" | "values";
 export type PaneSubview = "settings" | "themeBrowser";
@@ -25,6 +27,7 @@ export type PaneIntent =
 	| { type: "activate" }
 	| { type: "save" }
 	| { type: "resetDefaults" }
+	| { type: "cyclePreviewDensity" }
 	| { type: "reorderSegment"; direction: -1 | 1 }
 	| { type: "noop" };
 
@@ -46,6 +49,7 @@ export interface PaneModelState {
 	categoryIndex: number;
 	settingIndex: number;
 	status: string;
+	previewDensity: PanePreviewDensity;
 	subview: PaneSubview;
 	themeBrowser?: ThemeBrowserState;
 }
@@ -119,8 +123,22 @@ export interface GlancePaneViewModel {
 	settingsTitle: string;
 	settings: SettingViewModel[];
 	selectedHint?: string;
+	previewDensity: PanePreviewDensity;
+	previewDensityLabel: string;
 	themeBrowser?: ThemeBrowserViewModel;
 	help: HelpShortcut[];
+}
+
+const PREVIEW_DENSITIES: readonly PanePreviewDensity[] = ["auto", "full", "compact", "minimal"];
+
+function previewDensityLabel(density: PanePreviewDensity): string {
+	return density === "auto" ? "Auto" : density[0]!.toUpperCase() + density.slice(1);
+}
+
+function cyclePreviewDensity(model: PaneModelState): PaneModelState {
+	const index = PREVIEW_DENSITIES.indexOf(model.previewDensity);
+	const previewDensity = PREVIEW_DENSITIES[(index + 1) % PREVIEW_DENSITIES.length] ?? "auto";
+	return withModel(model, { previewDensity });
 }
 
 function sameConfig(a: GlanceConfig, b: GlanceConfig): boolean {
@@ -181,7 +199,6 @@ function helpShortcuts(focus: PaneFocus, width: number): HelpShortcut[] {
 		case "categories":
 			if (isNarrow) {
 				return [
-					{ key: "Enter", label: "open" },
 					{ key: "S", label: "save" },
 					{ key: "J/K", label: "reorder" },
 					{ key: "Esc", label: "cancel" },
@@ -366,6 +383,7 @@ export function createPaneModel(initial: GlanceConfig): PaneModelState {
 		categoryIndex: 0,
 		settingIndex: 0,
 		status: "",
+		previewDensity: "auto",
 		subview: "settings",
 	};
 }
@@ -436,6 +454,8 @@ export function createPaneViewModel(model: PaneModelState, width: number): Glanc
 			valueHasFocus: model.focus === "values",
 		})),
 		selectedHint: settings[model.settingIndex]?.hint,
+		previewDensity: model.previewDensity,
+		previewDensityLabel: previewDensityLabel(model.previewDensity),
 		themeBrowser: createThemeBrowserViewModel(model),
 		help: model.subview === "themeBrowser" ? themeBrowserHelpShortcuts() : helpShortcuts(model.focus, width),
 	};
@@ -468,6 +488,8 @@ export function updatePaneModel(model: PaneModelState, intent: PaneIntent): Pane
 				}),
 				true,
 			);
+		case "cyclePreviewDensity":
+			return result(cyclePreviewDensity(model), true);
 		case "reorderSegment":
 			if (model.focus !== "categories") return result(model, false);
 			return result(reorderCurrentSegment(model, intent.direction), true);

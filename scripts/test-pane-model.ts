@@ -7,6 +7,7 @@ import type { GlanceConfig, GlanceThemeName, SegmentId } from "../types.js";
 
 type PaneFocus = "categories" | "settings" | "values";
 type PaneSubview = "settings" | "themeBrowser";
+type PreviewDensity = "auto" | "full" | "compact" | "minimal";
 type MoveDirection = "left" | "right" | "up" | "down";
 type PaneIntent =
 	| { type: "cancel" }
@@ -15,6 +16,7 @@ type PaneIntent =
 	| { type: "activate" }
 	| { type: "save" }
 	| { type: "resetDefaults" }
+	| { type: "cyclePreviewDensity" }
 	| { type: "reorderSegment"; direction: -1 | 1 }
 	| { type: "noop" };
 type PaneCompletion = { action: "save"; config: GlanceConfig } | { action: "cancel" };
@@ -37,6 +39,7 @@ interface PaneModelState {
 	categoryIndex: number;
 	settingIndex: number;
 	status: string;
+	previewDensity: PreviewDensity;
 	subview: PaneSubview;
 	themeBrowser?: ThemeBrowserState;
 }
@@ -99,6 +102,8 @@ interface GlancePaneViewModel {
 	settingsTitle: string;
 	settings: SettingViewModel[];
 	selectedHint?: string;
+	previewDensity: PreviewDensity;
+	previewDensityLabel: string;
 	themeBrowser?: ThemeBrowserViewModel;
 	help: HelpShortcut[];
 }
@@ -192,6 +197,7 @@ assert.equal(model.themeBrowser, undefined, "initial model should not carry them
 assert.equal(model.categoryIndex, 0, "initial category index should select General");
 assert.equal(model.settingIndex, 0, "initial setting index should select the first row");
 assert.equal(model.status, "", "initial status should be empty");
+assert.equal(model.previewDensity, "auto", "initial preview density should follow the pane width automatically");
 assert.deepEqual(model.initial, config, "initial model should preserve the supplied config value");
 assert.deepEqual(model.draft, config, "initial draft should start from the supplied config value");
 assert.notEqual(model.initial, config, "initial config should be cloned away from the caller input");
@@ -208,6 +214,8 @@ const initialView = view(model);
 assert.equal(initialView.dirty, false, "initial view should not be dirty");
 assert.equal(paneIsDirty(model), false, "initial model should not be dirty");
 assert.equal(initialView.status, "", "initial view status should be empty");
+assert.equal(initialView.previewDensity, "auto", "initial view should expose automatic preview density");
+assert.equal(initialView.previewDensityLabel, "Auto", "initial view should expose a friendly automatic density label");
 assert.equal(initialView.subview, "settings", "initial view should expose the normal settings subview");
 assert.equal(initialView.themeBrowser, undefined, "initial view should not expose theme browser data");
 assert.equal(initialView.selectedCategory?.id, "general", "initial view should select General");
@@ -263,6 +271,23 @@ assertHelp(
 	],
 	"wide category help should include movement, save/reset, segment reorder, and cancel",
 );
+
+let densityModel = model;
+for (const [density, label] of [
+	["full", "Full"],
+	["compact", "Compact"],
+	["minimal", "Minimal"],
+	["auto", "Auto"],
+] as const) {
+	const update = updatePaneModel(densityModel, { type: "cyclePreviewDensity" });
+	assert.equal(update.requestRender, true, `cycling preview density to ${density} should request render`);
+	assert.equal(update.completion, undefined, "preview density cycling should not complete the pane");
+	assert.equal(update.model.previewDensity, density, `preview density should cycle to ${density}`);
+	assert.equal(view(update.model).previewDensityLabel, label, `preview density ${density} should expose friendly label ${label}`);
+	assert.deepEqual(update.model.draft, model.draft, "preview density should not mutate display config");
+	assert.equal(paneIsDirty(update.model), false, "preview density should remain transient and never dirty config");
+	densityModel = update.model;
+}
 
 const reorderedConfig = cloneConfig(config);
 reorderedConfig.segments = [
@@ -689,12 +714,11 @@ assertHelp(
 assertHelp(
 	view(model, 56).help,
 	[
-		{ key: "Enter", label: "open" },
 		{ key: "S", label: "save" },
 		{ key: "J/K", label: "reorder" },
 		{ key: "Esc", label: "cancel" },
 	],
-	"narrow category help should collapse to open/save/reorder/cancel",
+	"narrow category help should prioritize save/reorder/cancel while Enter/Right remain documented at wider widths",
 );
 assertHelp(
 	view(gitSettings.model, 56).help,
