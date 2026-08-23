@@ -95,6 +95,10 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 		return config;
 	}
 
+	function shouldRunGitRefresher(activeConfig: GlanceConfig = getConfig()): boolean {
+		return activeConfig.enabled && activeConfig.segments.some((segment) => segment.id === "git" && segment.enabled);
+	}
+
 	function renderNow(): void {
 		footer?.invalidate();
 		requestRender?.();
@@ -132,6 +136,7 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 	}
 
 	function scheduleGitRefresh(immediate = false): void {
+		if (!shouldRunGitRefresher()) return;
 		gitRefresher?.schedule(immediate);
 	}
 
@@ -150,6 +155,15 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 	function clearGitRefresher(): void {
 		gitRefresher?.dispose();
 		gitRefresher = undefined;
+	}
+
+	function reconcileGitRefresher(immediate = false): void {
+		if (!shouldRunGitRefresher()) {
+			clearGitRefresher();
+			return;
+		}
+		const refresher = ensureGitRefresher();
+		if (immediate) refresher.schedule(true);
 	}
 
 	function restoreOwnedEditor(ctx: ExtensionContext): void {
@@ -181,7 +195,7 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 		const renderStyleContext = runtimeRenderStyleContext(ctx);
 		const generation = invalidateUiOwnership();
 
-		ensureGitRefresher().schedule(true);
+		reconcileGitRefresher(true);
 		ctx.ui.setFooter((tui) => {
 			const nextFooter = new GlanceFooter();
 			if (isCurrentUiGeneration(generation)) {
@@ -237,6 +251,7 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 				}
 
 				config = nextConfig;
+				if (previousConfig.enabled && nextConfig.enabled) reconcileGitRefresher();
 				await refreshSession.execute("config_save_success", ctx, {
 					beforeRender: previousConfig.enabled === nextConfig.enabled ? undefined : () => installInputSurface(ctx),
 				});

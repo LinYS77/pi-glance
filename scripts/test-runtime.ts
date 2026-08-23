@@ -6,6 +6,7 @@ import { renderInputSurface } from "../renderer.js";
 import type { GlanceRenderStyleContext } from "../theme-adapter.js";
 import {
 	assistantMessage,
+	cloneConfig,
 	createGitHarness,
 	createRuntimeHarness,
 	createRuntimeTestContext as createContext,
@@ -203,6 +204,21 @@ for (const matrixCase of [
 	assert.deepEqual(test.surfaceCalls, ["setFooter:install", "setEditorComponent:install"], "enabled TUI sessionStart should synchronously install footer before editor");
 	assert.deepEqual(git.schedules, [true], "enabled sessionStart should schedule an immediate git refresh through the adapter");
 	assert.equal(harness.getLoadConfigCalls(), 0, "sessionStart should not call the async loadConfig adapter");
+}
+
+{
+	const config = defaultConfig();
+	config.segments = config.segments.map((segment) => segment.id === "git" ? { ...segment, enabled: false } : segment);
+	const git = createGitHarness();
+	const test = createContext();
+	const harness = createRuntimeHarness({ loadConfigSyncConfig: config, git });
+
+	harness.runtime.events.sessionStart({}, test.ctx);
+	assert.deepEqual(test.surfaceCalls, ["setFooter:install", "setEditorComponent:install"], "disabling only the Git segment should keep the rest of the input surface installed");
+	assert.equal(git.created, 0, "disabled Git segment should not create a background refresher at session start");
+	await harness.runtime.events.toolExecutionEnd({}, test.ctx as ExtensionContext);
+	await harness.runtime.events.modelSelect({}, test.ctx as ExtensionContext);
+	assert.equal(git.created, 0, "lifecycle events should not start Git polling while the Git segment remains disabled");
 }
 
 {
@@ -835,6 +851,54 @@ for (const matrixCase of [
 	await harness.runtime.commands.openPane("", test.ctx);
 	assert.deepEqual(harness.showPaneInitials[1], nextConfig, "after successful save, later pane opens should receive the next active config");
 	assertAmbientPaneOptions(harness.showPaneOptions[1], "later pane open after save");
+}
+
+{
+	const initialConfig = defaultConfig();
+	const nextConfig = cloneConfig(initialConfig);
+	nextConfig.segments = nextConfig.segments.map((segment) => segment.id === "git" ? { ...segment, enabled: false } : segment);
+	const git = createGitHarness();
+	const test = createContext();
+	const harness = createRuntimeHarness({
+		loadConfigSyncConfig: initialConfig,
+		showPaneResults: [{ action: "save", config: nextConfig }],
+		git,
+	});
+
+	harness.runtime.events.sessionStart({}, test.ctx);
+	const surfaceBaseline = test.surfaceCalls.length;
+	const scheduleBaseline = git.schedules.length;
+	await harness.runtime.commands.openPane("", test.ctx);
+
+	assert.deepEqual(test.surfaceCalls.slice(surfaceBaseline), [], "Git on->off should not rebuild the enabled input surface");
+	assert.equal(git.disposeCount, 1, "Git on->off should dispose the active background refresher");
+	assert.deepEqual(git.schedules.slice(scheduleBaseline), [], "Git on->off should not schedule another refresh after the new config becomes active");
+	await harness.runtime.events.toolExecutionEnd({}, test.ctx as ExtensionContext);
+	assert.equal(git.created, 1, "later lifecycle events should not recreate Git polling while the segment is disabled");
+}
+
+{
+	const initialConfig = defaultConfig();
+	initialConfig.segments = initialConfig.segments.map((segment) => segment.id === "git" ? { ...segment, enabled: false } : segment);
+	const nextConfig = cloneConfig(initialConfig);
+	nextConfig.segments = nextConfig.segments.map((segment) => segment.id === "git" ? { ...segment, enabled: true } : segment);
+	const git = createGitHarness();
+	const test = createContext();
+	const harness = createRuntimeHarness({
+		loadConfigSyncConfig: initialConfig,
+		showPaneResults: [{ action: "save", config: nextConfig }],
+		git,
+	});
+
+	harness.runtime.events.sessionStart({}, test.ctx);
+	assert.equal(git.created, 0, "Git-disabled session should begin without a refresher");
+	const surfaceBaseline = test.surfaceCalls.length;
+	await harness.runtime.commands.openPane("", test.ctx);
+
+	assert.deepEqual(test.surfaceCalls.slice(surfaceBaseline), [], "Git off->on should not rebuild the enabled input surface");
+	assert.equal(git.created, 1, "Git off->on should create the background refresher after persistence succeeds");
+	assert.deepEqual(git.schedules, [true], "Git off->on should schedule one immediate refresh");
+	assert.deepEqual(git.options?.getConfig(), nextConfig.git, "new Git refresher should read the newly active Git settings");
 }
 
 {
