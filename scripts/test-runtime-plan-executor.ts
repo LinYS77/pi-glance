@@ -21,7 +21,7 @@ function baseState(overrides: Partial<GlanceState> = {}): GlanceState {
 		model: { id: "initial-model", provider: "initial-provider", displayName: "initial-model", thinking: "off" },
 		context: { tokens: 10_000, window: 100_000, percent: 10 },
 		usage: usage(100, 200, 300, 400, 1.5),
-		throughput: { lastTurn: null, currentRun: null },
+		throughput: { lastRun: null, currentRun: null },
 		version: 0,
 		...overrides,
 	};

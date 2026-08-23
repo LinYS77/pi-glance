@@ -10,7 +10,7 @@ export function testState(overrides: Partial<GlanceState> = {}): GlanceState {
 		model: { id: "gpt-5.5", provider: "openai", displayName: "GPT 5.5", thinking: "off" },
 		context: { tokens: 46_800, window: 200_000, percent: 23.4 },
 		usage: { input: 100, output: 50, cacheRead: 0, cacheWrite: 0, cost: 0 },
-		throughput: { lastTurn: null, currentRun: null },
+		throughput: { lastRun: null, currentRun: null },
 		version: 0,
 	} as GlanceState & Record<string, unknown>;
 	return {

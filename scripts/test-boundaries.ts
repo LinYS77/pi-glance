@@ -604,8 +604,16 @@ function assertRuntimeRefreshSessionSeam(files: SourceFile[]): void {
 		if (!allowedSpecifiers.has(specifier)) fail(`${session.path}: refresh session must not import ${specifier}`);
 	}
 	if (!session.text.includes("class RuntimeRefreshSession")) fail(`${session.path}: refresh session should expose RuntimeRefreshSession class`);
-	for (const member of ["getState", "ensureState", "resetState", "execute", "messageEnd", "sessionCompact", "turnEnd", "agentStart", "agentEnd", "resetAccumulators", "sessionStart", "sessionShutdown", "applyGitSnapshot"] as const) {
+	for (const member of ["getState", "ensureState", "resetState", "execute", "messageUpdate", "messageEnd", "sessionCompact", "turnEnd", "agentStart", "agentEnd", "agentSettled", "resetAccumulators", "sessionStart", "sessionShutdown", "applyGitSnapshot"] as const) {
 		if (!session.text.includes(member)) fail(`${session.path}: refresh session should expose ${member}`);
+	}
+	for (const publicEventType of ["MessageUpdateEvent", "MessageEndEvent", "SessionCompactEvent"] as const) {
+		if (!session.text.includes(publicEventType)) fail(`${session.path}: refresh session adapter should derive ${publicEventType} facts from Pi's public event types`);
+	}
+	if (!session.text.includes("compactionRetry(event.willRetry === true)")) fail(`${session.path}: refresh session should retract recoverable compaction responses from model speed using the public willRetry fact`);
+	if (!session.text.includes("modelSpeedTracker.settle()")) fail(`${session.path}: refresh session should finalize model speed only through agentSettled`);
+	if (/modelSpeedTracker\.finish\s*\(|modelSpeedTracker\.checkpoint\s*\(/.test(session.text)) {
+		fail(`${session.path}: refresh session must not finalize model speed at legacy agent_end/turn_end boundaries`);
 	}
 	if (/unknownContextAfterLatestCompaction|clearContextUnknownAfterKnownAssistantUsage|assistantMessageHasKnownContextUsage/.test(session.text)) {
 		fail(`${session.path}: refresh session must not maintain a second compaction/context truth state`);
@@ -613,8 +621,8 @@ function assertRuntimeRefreshSessionSeam(files: SourceFile[]): void {
 	if (!session.text.includes("beforeRender")) fail(`${session.path}: refresh session should own beforeRender ordering around plan execution and final render`);
 	if (!session.text.includes("applyRuntimeRefreshPlan")) fail(`${session.path}: refresh session should delegate plan application to runtime-plan-executor`);
 	if (!session.text.includes("setGitSnapshot")) fail(`${session.path}: refresh session should own git snapshot state application`);
-	if (!session.text.includes("ThroughputRunTracker")) fail(`${session.path}: refresh session should own throughput run tracking after Slice 2C`);
-	if (!session.text.includes("setCurrentRunThroughput") || !session.text.includes("setLastTurnThroughput") || !session.text.includes("clearCurrentRunThroughput")) fail(`${session.path}: refresh session should own throughput state intent application after Slice 2C`);
+	if (!session.text.includes("ModelSpeedRunTracker")) fail(`${session.path}: refresh session should own throughput run tracking after Slice 2C`);
+	if (!session.text.includes("setCurrentRunModelSpeed") || !session.text.includes("setLastRunModelSpeed") || !session.text.includes("clearCurrentRunModelSpeed")) fail(`${session.path}: refresh session should own throughput state intent application after Slice 2C`);
 	if (!session.text.includes("appliedUsageObjects") || !session.text.includes("appliedUsageKeys")) fail(`${session.path}: refresh session should own generic billed-usage dedupe accumulators`);
 	if (!session.text.includes("usageTotalsFromMessage") || !session.text.includes("usageTotalsFromEntry") || !session.text.includes("addUsageTotals")) {
 		fail(`${session.path}: refresh session should own assistant/tool/compaction usage delta accumulation`);
@@ -689,10 +697,15 @@ function assertRuntimeStateSnapshotFrameBoundary(files: SourceFile[]): void {
 	if (runtimeImports.includes("./runtime-snapshot.js")) fail(`${runtime.path}: runtime should not import runtime-snapshot directly after accumulator migration`);
 	if (runtimeImports.includes("./throughput-run-tracker.js")) fail(`${runtime.path}: runtime should not import throughput tracker directly after accumulator migration`);
 	if (runtimeImports.includes("./state.js")) fail(`${runtime.path}: runtime should not import state mutators directly after accumulator migration`);
+	for (const typedEventSurface of ["messageUpdate(event: MessageUpdateEvent", "messageEnd(event: MessageEndEvent", "agentSettled(event: AgentSettledEvent"] as const) {
+		if (!runtime.text.includes(typedEventSurface)) fail(`${runtime.path}: runtime event surface should expose ${typedEventSurface}`);
+	}
+	if (!runtime.text.includes("performance.now()")) fail(`${runtime.path}: runtime should use a monotonic default clock for model-stream timing`);
+	if (!runtime.text.includes("agentSettled")) fail(`${runtime.path}: runtime should expose the public agent_settled lifecycle boundary`);
 	if (/plan\.snapshot|snapshot\s*===\s*["'](?:reliable|lifecycle|thinking|none)["']/.test(runtime.text)) {
 		fail(`${runtime.path}: runtime must not contain snapshot-mode branching after plan executor extraction`);
 	}
-	if (/let\s+state\s*:|unknownContextAfterLatestCompaction|stateInputsFromContext|thinkingInputsFromContext|lifecycleInputsFromContext|compactInputsFromContext|assistantMessageHasKnownContextUsage|createInitialState|setGitSnapshot|setUsageTotals|refreshContextUsage|clearContextUsage|refreshModel|refreshWorkspace|setProviderCount|usageTotalsFromAssistantMessage|usageTotalsFromMessage|usageTotalsFromEntry|addUsageTotals|ThroughputRunTracker|setCurrentRunThroughput|setLastTurnThroughput|clearCurrentRunThroughput/.test(runtime.text)) {
+	if (/let\s+state\s*:|unknownContextAfterLatestCompaction|stateInputsFromContext|thinkingInputsFromContext|lifecycleInputsFromContext|compactInputsFromContext|assistantMessageHasKnownContextUsage|createInitialState|setGitSnapshot|setUsageTotals|refreshContextUsage|clearContextUsage|refreshModel|refreshWorkspace|setProviderCount|usageTotalsFromAssistantMessage|usageTotalsFromMessage|usageTotalsFromEntry|addUsageTotals|ModelSpeedRunTracker|setCurrentRunModelSpeed|setLastRunModelSpeed|clearCurrentRunModelSpeed/.test(runtime.text)) {
 		fail(`${runtime.path}: runtime must not own refresh state core after RuntimeRefreshSession extraction`);
 	}
 	const forbiddenRuntimeFrameSpecifiers = new Set(["./input-surface-frame.js", "./surface-layout.js", "./status-line.js", "./renderer.js", "./pane.js", "./segments.js"]);

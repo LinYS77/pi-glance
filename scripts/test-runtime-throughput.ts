@@ -4,25 +4,17 @@ import { defaultConfig } from "../config.js";
 import { createGlanceRuntime } from "../runtime.js";
 import type { GlanceConfig } from "../types.js";
 
-interface Notification {
-	message: string;
-	type: "info" | "warning" | "error" | undefined;
-}
-
 interface TestContext {
 	ctx: ExtensionCommandContext;
-	notifications: Notification[];
 	getRenderRequests(): number;
 }
 
 interface RuntimeRecord {
 	events: Record<string, (event: unknown, ctx: ExtensionCommandContext) => unknown>;
-	commands: {
-		openPane(args: string, ctx: ExtensionCommandContext): Promise<void>;
-	};
+	commands: { openPane(args: string, ctx: ExtensionCommandContext): Promise<void> };
 }
 
-interface TurnThroughputExpectation {
+interface ModelSpeedExpectation {
 	startedAtMs: number;
 	endedAtMs: number;
 	elapsedMs: number;
@@ -41,52 +33,65 @@ function cloneConfig(config: GlanceConfig): GlanceConfig {
 	return JSON.parse(JSON.stringify(config)) as GlanceConfig;
 }
 
-function assistant(output: number, extras: Record<string, unknown> = {}, stopReason = "stop"): unknown {
+function assistant(output: number, extras: Record<string, unknown> = {}, stopReason = "stop", responseId?: string): Record<string, unknown> {
 	return {
 		role: "assistant",
+		content: [],
+		api: "openai-completions",
+		provider: "test-provider",
+		model: "test-model",
+		responseId,
 		stopReason,
-		usage: { output, totalTokens: output, ...extras },
+		timestamp: 1,
+		usage: {
+			input: 0,
+			output,
+			cacheRead: 0,
+			cacheWrite: 0,
+			totalTokens: output,
+			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+			...extras,
+		},
 	};
 }
 
-function user(output: number): unknown {
-	return { role: "user", usage: { output, totalTokens: output } };
+function toolResult(toolCallId: string, usage: Record<string, unknown>): Record<string, unknown> {
+	return { role: "toolResult", toolCallId, toolName: "nested-model", content: [], isError: false, timestamp: 1, usage };
 }
 
-function turnEnd(turnIndex: unknown, message: unknown): unknown {
-	return { type: "turn_end", turnIndex, message, toolResults: [] };
+function messageUpdate(message: unknown, type: string): unknown {
+	return { type: "message_update", message, assistantMessageEvent: { type } };
+}
+
+function messageEnd(message: unknown): unknown {
+	return { type: "message_end", message };
 }
 
 function createContext(): TestContext {
-	const notifications: Notification[] = [];
 	let renderRequests = 0;
 	const fakeTui = { requestRender: () => renderRequests++ };
 	const fakeTheme = {};
-
 	const ctx = {
 		mode: "tui",
 		hasUI: true,
 		cwd: "/repo",
 		model: { id: "test-model", provider: "test-provider", contextWindow: 200_000 },
-		modelRegistry: {
-			getAvailable: () => [{ provider: "test-provider", id: "test-model" }],
-		},
+		modelRegistry: { getAvailable: () => [{ provider: "test-provider", id: "test-model" }] },
 		sessionManager: {
 			getCwd: () => "/repo",
 			getEntries: () => [],
 			getBranch: () => [],
 		},
 		ui: {
-			notify: (message: string, type?: "info" | "warning" | "error") => notifications.push({ message, type }),
 			setFooter: (factory: unknown) => {
 				if (factory) (factory as (tui: unknown, theme: unknown) => unknown)(fakeTui, fakeTheme);
 			},
 			setEditorComponent: (_factory: unknown) => {},
+			notify: (_message: string, _type?: string) => {},
 		},
 		getContextUsage: () => ({ tokens: 42, contextWindow: 200_000, percent: 0.021 }),
 	} as unknown as ExtensionCommandContext;
-
-	return { ctx, notifications, getRenderRequests: () => renderRequests };
+	return { ctx, getRenderRequests: () => renderRequests };
 }
 
 function createRuntime(nowValues: number[]): { runtime: RuntimeRecord; capturedStates: unknown[]; getRemainingNowReads(): number } {
@@ -94,7 +99,7 @@ function createRuntime(nowValues: number[]): { runtime: RuntimeRecord; capturedS
 	const pendingNowValues = [...nowValues];
 	const config = defaultConfig();
 	const adapters = {
-		getThinkingLevel: () => "off",
+		getThinkingLevel: () => "max",
 		loadConfigSync: () => cloneConfig(config),
 		loadConfig: async () => cloneConfig(config),
 		saveConfig: async (_config: GlanceConfig) => {},
@@ -104,492 +109,178 @@ function createRuntime(nowValues: number[]): { runtime: RuntimeRecord; capturedS
 		},
 		createGitRefresher: () => ({ schedule: (_immediate?: boolean) => {}, dispose: () => {} }),
 		nowMs: () => {
-			assert.ok(pendingNowValues.length > 0, "runtime should only read injected nowMs for agent_start/turn_end/agent_end timing");
+			assert.ok(pendingNowValues.length > 0, "runtime should read injected time only for text/tool-call output deltas");
 			return pendingNowValues.shift()!;
 		},
 	};
-	return { runtime: createGlanceRuntime(adapters) as unknown as RuntimeRecord, capturedStates, getRemainingNowReads: () => pendingNowValues.length };
+	return {
+		runtime: createGlanceRuntime(adapters) as unknown as RuntimeRecord,
+		capturedStates,
+		getRemainingNowReads: () => pendingNowValues.length,
+	};
 }
 
-async function captureState(runtime: RuntimeRecord, test: TestContext, capturedStates: unknown[]): Promise<unknown> {
+async function captureState(runtime: RuntimeRecord, test: TestContext, capturedStates: unknown[]): Promise<any> {
 	await runtime.commands.openPane("", test.ctx);
-	return capturedStates.at(-1);
+	return capturedStates.at(-1) as any;
 }
 
-function throughputSlots(state: unknown): { lastTurn?: unknown; currentRun?: unknown } {
-	return ((state as { throughput?: { lastTurn?: unknown; currentRun?: unknown } } | undefined)?.throughput ?? {}) as { lastTurn?: unknown; currentRun?: unknown };
+function slots(state: any): { lastRun: unknown; currentRun: unknown } {
+	return state.throughput;
 }
 
-function assertSlots(state: unknown, expected: { lastTurn: unknown; currentRun: unknown }, message: string): void {
-	assert.deepEqual(throughputSlots(state), expected, message);
-}
-
-const firstFinal: TurnThroughputExpectation = {
-	startedAtMs: 1_000,
-	endedAtMs: 3_500,
-	elapsedMs: 2_500,
-	tokensPerSecond: 20,
-	usage: {
-		input: 0,
-		output: 50,
-		cacheRead: 0,
-		cacheWrite: 0,
-		totalTokens: 50,
-		assistantMessages: 1,
-	},
-};
-
-{
-	const test = createContext();
-	const { runtime, capturedStates } = createRuntime([1_000]);
-	runtime.events.sessionStart({}, test.ctx);
-	const before = await captureState(runtime, test, capturedStates);
-	const renderBaseline = test.getRenderRequests();
-	const notificationBaseline = test.notifications.length;
-
-	assert.equal(typeof runtime.events.agentStart, "function", "runtime.events should expose agentStart for pi.on('agent_start') wiring");
-	runtime.events.agentStart({}, test.ctx);
-	const after = await captureState(runtime, test, capturedStates);
-
-	assert.deepEqual(throughputSlots(after), throughputSlots(before), "agentStart should not change visible throughput state before a checkpoint");
-	assert.equal(test.getRenderRequests(), renderBaseline, "agentStart should only record local start time and must not request render");
-	assert.deepEqual(test.notifications.slice(notificationBaseline), [{ message: "pi-glance configuration cancelled", type: "info" }], "agentStart lifecycle should not call ctx.ui.notify");
-}
-
-{
-	const test = createContext();
-	const { runtime, capturedStates } = createRuntime([1_000, 3_500, 5_000]);
-	runtime.events.sessionStart({}, test.ctx);
-
-	runtime.events.agentStart({}, test.ctx);
-	await runtime.events.agentEnd({ messages: [assistant(50)] }, test.ctx);
-	const afterFinal = await captureState(runtime, test, capturedStates);
-	assertSlots(afterFinal, { lastTurn: firstFinal, currentRun: null }, "valid agentEnd should store final lastTurn and keep currentRun clear");
-
-	const renderAfterFinal = test.getRenderRequests();
-	runtime.events.agentStart({}, test.ctx);
-	const afterNextStart = await captureState(runtime, test, capturedStates);
-	assertSlots(afterNextStart, { lastTurn: firstFinal, currentRun: null }, "previous final should remain visible after a new agentStart until a valid turn_end checkpoint exists");
-	assert.equal(test.getRenderRequests(), renderAfterFinal, "agentStart with no currentRun should not request an extra render while preserving lastTurn");
-}
-
-{
-	const test = createContext();
-	const { runtime, capturedStates } = createRuntime([10_000, 11_250]);
-	runtime.events.sessionStart({}, test.ctx);
-
-	runtime.events.agentStart({}, test.ctx);
-	await runtime.events.turnEnd(turnEnd(0, assistant(40)), test.ctx);
-	const afterTurn = await captureState(runtime, test, capturedStates);
-	assertSlots(
-		afterTurn,
-		{
-			lastTurn: null,
-			currentRun: {
-				startedAtMs: 10_000,
-				endedAtMs: 11_250,
-				elapsedMs: 1_250,
-				tokensPerSecond: 32,
-				usage: {
-					input: 0,
-					output: 40,
-					cacheRead: 0,
-					cacheWrite: 0,
-					totalTokens: 40,
-					assistantMessages: 1,
-				},
-			},
+function expectedTurn(startedAtMs: number, endedAtMs: number, elapsedMs: number, output: number, options: Partial<ModelSpeedExpectation["usage"]> = {}): ModelSpeedExpectation {
+	return {
+		startedAtMs,
+		endedAtMs,
+		elapsedMs,
+		tokensPerSecond: output / (elapsedMs / 1000),
+		usage: {
+			input: options.input ?? 0,
+			output,
+			cacheRead: options.cacheRead ?? 0,
+			cacheWrite: options.cacheWrite ?? 0,
+			totalTokens: options.totalTokens ?? output,
+			assistantMessages: options.assistantMessages ?? 1,
 		},
-		"valid assistant turn_end should create a provisional currentRun measurement using agent_start -> turn_end wall time",
-	);
+	};
 }
 
 {
 	const test = createContext();
-	const { runtime, capturedStates } = createRuntime([5_000, 6_000, 7_000]);
-	runtime.events.sessionStart({}, test.ctx);
+	const { runtime, capturedStates, getRemainingNowReads } = createRuntime([1_000, 2_250]);
+	runtime.events.sessionStart({ type: "session_start" }, test.ctx);
+	runtime.events.agentStart({ type: "agent_start" }, test.ctx);
+	runtime.events.messageUpdate(messageUpdate(assistant(40), "text_delta"), test.ctx);
+	runtime.events.messageUpdate(messageUpdate(assistant(40), "text_delta"), test.ctx);
+	await runtime.events.messageEnd(messageEnd(assistant(40, {}, "stop", "basic")), test.ctx);
+	const expected = expectedTurn(1_000, 2_250, 1_250, 40);
+	assert.deepEqual(slots(await captureState(runtime, test, capturedStates)), { lastRun: null, currentRun: expected }, "message_end should expose provisional model speed with the current-run slot");
 
-	runtime.events.agentStart({}, test.ctx);
-	await runtime.events.turnEnd(turnEnd(0, assistant(30)), test.ctx);
-	assertSlots(
-		await captureState(runtime, test, capturedStates),
-		{
-			lastTurn: null,
-			currentRun: {
-				startedAtMs: 5_000,
-				endedAtMs: 6_000,
-				elapsedMs: 1_000,
-				tokensPerSecond: 30,
-				usage: {
-					input: 0,
-					output: 30,
-					cacheRead: 0,
-					cacheWrite: 0,
-					totalTokens: 30,
-					assistantMessages: 1,
-				},
-			},
-		},
-		"explicit stale edge setup should create a provisional currentRun before agent_end",
-	);
-	const renderBeforeNextStart = test.getRenderRequests();
-	runtime.events.agentStart({}, test.ctx);
-	assertSlots(await captureState(runtime, test, capturedStates), { lastTurn: null, currentRun: null }, "new agentStart should clear stale provisional currentRun before any new checkpoint");
-	assert.equal(test.getRenderRequests(), renderBeforeNextStart + 1, "agentStart clearing a stale currentRun should request one render");
+	await runtime.events.agentEnd({ type: "agent_end", messages: [] }, test.ctx);
+	assert.deepEqual(slots(await captureState(runtime, test, capturedStates)), { lastRun: null, currentRun: expected }, "agent_end should remain provisional because retry or continuation may still follow");
+
+	runtime.events.agentSettled({ type: "agent_settled" }, test.ctx);
+	assert.deepEqual(slots(await captureState(runtime, test, capturedStates)), { lastRun: expected, currentRun: null }, "agent_settled should be the only final model-speed boundary");
+	assert.equal(getRemainingNowReads(), 0, "settlement should not add task wall time to model speed");
 }
 
 {
 	const test = createContext();
-	const { runtime, capturedStates } = createRuntime([1_000, 3_500, 5_000, 6_000, 7_000]);
-	runtime.events.sessionStart({}, test.ctx);
-
-	runtime.events.agentStart({}, test.ctx);
-	await runtime.events.agentEnd({ messages: [assistant(50)] }, test.ctx);
-	runtime.events.agentStart({}, test.ctx);
-	await runtime.events.turnEnd(turnEnd(0, assistant(30)), test.ctx);
-	assertSlots(
-		await captureState(runtime, test, capturedStates),
-		{
-			lastTurn: firstFinal,
-			currentRun: {
-				startedAtMs: 5_000,
-				endedAtMs: 6_000,
-				elapsedMs: 1_000,
-				tokensPerSecond: 30,
-				usage: {
-					input: 0,
-					output: 30,
-					cacheRead: 0,
-					cacheWrite: 0,
-					totalTokens: 30,
-					assistantMessages: 1,
-				},
-			},
-		},
-		"stale currentRun setup should preserve previous final while showing provisional throughput",
-	);
-	const renderBeforeClear = test.getRenderRequests();
-	runtime.events.agentStart({}, test.ctx);
-	assertSlots(await captureState(runtime, test, capturedStates), { lastTurn: firstFinal, currentRun: null }, "agentStart should clear stale currentRun and preserve previous trusted lastTurn");
-	assert.equal(test.getRenderRequests(), renderBeforeClear + 1, "agentStart clearing stale currentRun should request exactly one render when UI is installed");
-}
-
-{
-	const test = createContext();
-	const { runtime, capturedStates } = createRuntime([1_000, 2_000, 4_000]);
-	runtime.events.sessionStart({}, test.ctx);
-
-	runtime.events.agentStart({}, test.ctx);
-	await runtime.events.turnEnd(turnEnd(0, assistant(20, { input: 3, cacheRead: 2 })), test.ctx);
-	await runtime.events.turnEnd(turnEnd(1, assistant(60, { input: 7, cacheWrite: 5 })), test.ctx);
-	const afterSecondTurn = await captureState(runtime, test, capturedStates);
-	assertSlots(
-		afterSecondTurn,
-		{
-			lastTurn: null,
-			currentRun: {
-				startedAtMs: 1_000,
-				endedAtMs: 4_000,
-				elapsedMs: 3_000,
-				tokensPerSecond: 80 / 3,
-				usage: {
-					input: 10,
-					output: 80,
-					cacheRead: 2,
-					cacheWrite: 5,
-					totalTokens: 80,
-					assistantMessages: 2,
-				},
-			},
-		},
-		"multi-turn provisional Reply speed should sum assistant outputs/messages and use agent_start -> latest turn_end denominator",
-	);
-}
-
-{
-	const test = createContext();
-	const { runtime, capturedStates, getRemainingNowReads } = createRuntime([1_000, 2_000]);
-	runtime.events.sessionStart({}, test.ctx);
-
-	runtime.events.agentStart({}, test.ctx);
-	await runtime.events.turnEnd(turnEnd(7, assistant(20)), test.ctx);
-	assert.equal(getRemainingNowReads(), 0, "accepted assistant checkpoint should consume the only turn_end clock read");
-	await runtime.events.turnEnd(turnEnd(7, assistant(20)), test.ctx);
-	assert.equal(getRemainingNowReads(), 0, "duplicate finite turnIndex should not consume an extra clock read");
-	const afterDuplicate = await captureState(runtime, test, capturedStates);
-	assertSlots(
-		afterDuplicate,
-		{
-			lastTurn: null,
-			currentRun: {
-				startedAtMs: 1_000,
-				endedAtMs: 2_000,
-				elapsedMs: 1_000,
-				tokensPerSecond: 20,
-				usage: {
-					input: 0,
-					output: 20,
-					cacheRead: 0,
-					cacheWrite: 0,
-					totalTokens: 20,
-					assistantMessages: 1,
-				},
-			},
-		},
-		"duplicate finite turnIndex should not double-count assistant usage in currentRun",
-	);
-}
-
-{
-	const test = createContext();
-	const { runtime, capturedStates } = createRuntime([1_000, 2_000, 3_000]);
-	runtime.events.sessionStart({}, test.ctx);
-
-	runtime.events.agentStart({}, test.ctx);
-	await runtime.events.turnEnd(turnEnd(undefined, assistant(20)), test.ctx);
-	await runtime.events.turnEnd(turnEnd(undefined, assistant(30)), test.ctx);
-	const afterUndefinedDuplicates = await captureState(runtime, test, capturedStates);
-	assertSlots(
-		afterUndefinedDuplicates,
-		{
-			lastTurn: null,
-			currentRun: {
-				startedAtMs: 1_000,
-				endedAtMs: 3_000,
-				elapsedMs: 2_000,
-				tokensPerSecond: 25,
-				usage: {
-					input: 0,
-					output: 50,
-					cacheRead: 0,
-					cacheWrite: 0,
-					totalTokens: 50,
-					assistantMessages: 2,
-				},
-			},
-		},
-		"undefined turnIndex checkpoints should not be duplicate-guarded",
-	);
-}
-
-{
-	const noStart = createContext();
-	const noStartRuntime = createRuntime([]);
-	noStartRuntime.runtime.events.sessionStart({}, noStart.ctx);
-	await noStartRuntime.runtime.events.turnEnd(turnEnd(0, assistant(40)), noStart.ctx);
-	assert.equal(noStartRuntime.getRemainingNowReads(), 0, "turn_end without matching agent_start should not read the clock");
-	assertSlots(await captureState(noStartRuntime.runtime, noStart, noStartRuntime.capturedStates), { lastTurn: null, currentRun: null }, "turn_end without matching agent_start should not create throughput state");
-
-	const nonAssistant = createContext();
-	const nonAssistantRuntime = createRuntime([1_000, 2_000]);
-	nonAssistantRuntime.runtime.events.sessionStart({}, nonAssistant.ctx);
-	nonAssistantRuntime.runtime.events.agentStart({}, nonAssistant.ctx);
-	await nonAssistantRuntime.runtime.events.turnEnd(turnEnd(0, user(99)), nonAssistant.ctx);
-	assert.equal(nonAssistantRuntime.getRemainingNowReads(), 1, "non-assistant turn_end should not read the checkpoint clock");
-	assertSlots(await captureState(nonAssistantRuntime.runtime, nonAssistant, nonAssistantRuntime.capturedStates), { lastTurn: null, currentRun: null }, "non-assistant turn_end should not create throughput state");
-	await nonAssistantRuntime.runtime.events.turnEnd(turnEnd(0, assistant(20)), nonAssistant.ctx);
-	assert.equal(nonAssistantRuntime.getRemainingNowReads(), 0, "assistant checkpoint after same-index non-assistant should consume the remaining clock read");
-	assertSlots(
-		await captureState(nonAssistantRuntime.runtime, nonAssistant, nonAssistantRuntime.capturedStates),
-		{
-			lastTurn: null,
-			currentRun: {
-				startedAtMs: 1_000,
-				endedAtMs: 2_000,
-				elapsedMs: 1_000,
-				tokensPerSecond: 20,
-				usage: {
-					input: 0,
-					output: 20,
-					cacheRead: 0,
-					cacheWrite: 0,
-					totalTokens: 20,
-					assistantMessages: 1,
-				},
-			},
-		},
-		"non-assistant turn_end should not consume duplicate guard semantics for its turnIndex",
-	);
-}
-
-{
-	const test = createContext();
-	const { runtime, capturedStates } = createRuntime([1_000, 2_000, 3_000]);
-	runtime.events.sessionStart({}, test.ctx);
-
-	runtime.events.agentStart({}, test.ctx);
-	await runtime.events.turnEnd(turnEnd(0, assistant(20)), test.ctx);
-	await runtime.events.agentEnd({ messages: [assistant(90)] }, test.ctx);
-	const afterFinal = await captureState(runtime, test, capturedStates);
-	assertSlots(
-		afterFinal,
-		{
-			lastTurn: {
-				startedAtMs: 1_000,
-				endedAtMs: 3_000,
-				elapsedMs: 2_000,
-				tokensPerSecond: 45,
-				usage: {
-					input: 0,
-					output: 90,
-					cacheRead: 0,
-					cacheWrite: 0,
-					totalTokens: 90,
-					assistantMessages: 1,
-				},
-			},
-			currentRun: null,
-		},
-		"valid agentEnd should compute final from event.messages, replace provisional display, and clear currentRun",
-	);
+	const { runtime, capturedStates, getRemainingNowReads } = createRuntime([1_000, 1_500, 2_000, 2_500]);
+	runtime.events.sessionStart({ type: "session_start" }, test.ctx);
+	runtime.events.agentStart({ type: "agent_start" }, test.ctx);
+	const partial = assistant(100);
+	runtime.events.messageUpdate(messageUpdate(partial, "text_delta"), test.ctx);
+	runtime.events.messageUpdate(messageUpdate(partial, "text_delta"), test.ctx);
+	runtime.events.messageUpdate(messageUpdate(partial, "text_end"), test.ctx);
+	runtime.events.messageUpdate(messageUpdate(partial, "toolcall_start"), test.ctx);
+	runtime.events.messageUpdate(messageUpdate(partial, "toolcall_delta"), test.ctx);
+	runtime.events.messageUpdate(messageUpdate(partial, "toolcall_delta"), test.ctx);
+	await runtime.events.messageEnd(messageEnd(assistant(100, { reasoning: 20, totalTokens: 100 }, "toolUse", "mixed")), test.ctx);
+	const expected = expectedTurn(1_000, 2_500, 1_500, 80, { totalTokens: 100 });
+	assert.deepEqual(slots(await captureState(runtime, test, capturedStates)), { lastRun: null, currentRun: expected }, "mixed text/tool-call output should use one aligned non-reasoning numerator and output-stream denominator");
+	assert.equal(getRemainingNowReads(), 0, "text/tool-call boundary events should not read timing clocks");
 }
 
 {
 	const test = createContext();
 	const { runtime, capturedStates } = createRuntime([1_000, 2_000, 3_000, 4_000]);
-	runtime.events.sessionStart({}, test.ctx);
+	runtime.events.sessionStart({ type: "session_start" }, test.ctx);
+	runtime.events.agentStart({ type: "agent_start" }, test.ctx);
+	runtime.events.messageUpdate(messageUpdate(assistant(5), "text_delta"), test.ctx);
+	runtime.events.messageUpdate(messageUpdate(assistant(5), "text_delta"), test.ctx);
+	await runtime.events.messageEnd(messageEnd(assistant(5, { input: 10, cost: { total: 1 } }, "error", "failed")), test.ctx);
+	await runtime.events.agentEnd({ type: "agent_end", messages: [] }, test.ctx);
+	assert.deepEqual(slots(await captureState(runtime, test, capturedStates)), { lastRun: null, currentRun: null }, "failed attempt should not create trusted or provisional speed");
 
-	runtime.events.agentStart({}, test.ctx);
-	await runtime.events.turnEnd(turnEnd(0, assistant(0)), test.ctx);
-	assertSlots(
-		await captureState(runtime, test, capturedStates),
-		{ lastTurn: null, currentRun: null },
-		"invalid accepted checkpoint should clear currentRun instead of leaving a stale provisional value",
-	);
-	await runtime.events.turnEnd(turnEnd(1, assistant(20)), test.ctx);
-	assertSlots(
-		await captureState(runtime, test, capturedStates),
+	runtime.events.agentStart({ type: "agent_start" }, test.ctx);
+	runtime.events.messageUpdate(messageUpdate(assistant(40), "text_delta"), test.ctx);
+	runtime.events.messageUpdate(messageUpdate(assistant(40), "text_delta"), test.ctx);
+	await runtime.events.messageEnd(messageEnd(assistant(40, { input: 20, cost: { total: 2 } }, "stop", "retry-success")), test.ctx);
+	await runtime.events.agentEnd({ type: "agent_end", messages: [] }, test.ctx);
+	runtime.events.agentSettled({ type: "agent_settled" }, test.ctx);
+	const state = await captureState(runtime, test, capturedStates);
+	assert.deepEqual(slots(state), { lastRun: expectedTurn(3_000, 4_000, 1_000, 40, { input: 20 }), currentRun: null }, "successful retry should finalize only its measurable successful response");
+	assert.deepEqual(state.usage, { input: 30, output: 45, cacheRead: 0, cacheWrite: 0, cost: 3 }, "billed-session usage should still include both failed and successful provider calls");
+}
+
+{
+	const test = createContext();
+	const { runtime, capturedStates } = createRuntime([1_000, 2_000, 3_000, 4_000]);
+	runtime.events.sessionStart({ type: "session_start" }, test.ctx);
+	runtime.events.agentStart({ type: "agent_start" }, test.ctx);
+	runtime.events.messageUpdate(messageUpdate(assistant(100), "text_delta"), test.ctx);
+	runtime.events.messageUpdate(messageUpdate(assistant(100), "text_delta"), test.ctx);
+	await runtime.events.messageEnd(messageEnd(assistant(100, { input: 1, cost: { total: 1 } }, "length", "truncated")), test.ctx);
+	await runtime.events.agentEnd({ type: "agent_end", messages: [] }, test.ctx);
+	assert.ok(slots(await captureState(runtime, test, capturedStates)).currentRun, "recoverable length response should be provisional until Pi announces compaction retry");
+
+	await runtime.events.sessionCompact(
 		{
-			lastTurn: null,
-			currentRun: {
-				startedAtMs: 1_000,
-				endedAtMs: 3_000,
-				elapsedMs: 2_000,
-				tokensPerSecond: 10,
-				usage: {
-					input: 0,
-					output: 20,
-					cacheRead: 0,
-					cacheWrite: 0,
-					totalTokens: 20,
-					assistantMessages: 2,
-				},
-			},
+			type: "session_compact",
+			compactionEntry: { type: "compaction", id: "compact-1", usage: { input: 7, output: 8, cost: { total: 0.5 } } },
+			fromExtension: false,
+			reason: "overflow",
+			willRetry: true,
 		},
-		"valid checkpoint after an invalid accepted checkpoint should reuse the accumulated assistant messages",
+		test.ctx,
 	);
-	await runtime.events.agentEnd({ messages: [assistant(0)] }, test.ctx);
-	assertSlots(
-		await captureState(runtime, test, capturedStates),
-		{ lastTurn: null, currentRun: null },
-		"invalid final should clear currentRun even after a valid provisional checkpoint",
-	);
+	assert.deepEqual(slots(await captureState(runtime, test, capturedStates)), { lastRun: null, currentRun: null }, "compaction retry should retract the truncated response speed before replacement");
+
+	runtime.events.agentStart({ type: "agent_start" }, test.ctx);
+	runtime.events.messageUpdate(messageUpdate(assistant(30), "text_delta"), test.ctx);
+	runtime.events.messageUpdate(messageUpdate(assistant(30), "text_delta"), test.ctx);
+	await runtime.events.messageEnd(messageEnd(assistant(30, { input: 2, cost: { total: 0.3 } }, "stop", "replacement")), test.ctx);
+	await runtime.events.agentEnd({ type: "agent_end", messages: [] }, test.ctx);
+	runtime.events.agentSettled({ type: "agent_settled" }, test.ctx);
+	const state = await captureState(runtime, test, capturedStates);
+	assert.deepEqual(slots(state), { lastRun: expectedTurn(3_000, 4_000, 1_000, 30, { input: 2 }), currentRun: null }, "settled speed should contain the replacement response, not the recoverable truncated response");
+	assert.deepEqual(state.usage, { input: 10, output: 138, cacheRead: 0, cacheWrite: 0, cost: 1.8 }, "complete session usage should retain truncated response, compaction, and replacement billing");
 }
 
 {
 	const test = createContext();
-	const { runtime, capturedStates, getRemainingNowReads } = createRuntime([1_000, 3_500]);
-	runtime.events.sessionStart({}, test.ctx);
+	const { runtime, capturedStates } = createRuntime([1_000, 2_000, 5_000, 6_000]);
+	runtime.events.sessionStart({ type: "session_start" }, test.ctx);
+	runtime.events.agentStart({ type: "agent_start" }, test.ctx);
+	runtime.events.messageUpdate(messageUpdate(assistant(20), "text_delta"), test.ctx);
+	runtime.events.messageUpdate(messageUpdate(assistant(20), "text_delta"), test.ctx);
+	await runtime.events.messageEnd(messageEnd(assistant(20, {}, "toolUse", "first")), test.ctx);
+	await runtime.events.agentEnd({ type: "agent_end", messages: [] }, test.ctx);
+	const first = expectedTurn(1_000, 2_000, 1_000, 20);
+	assert.deepEqual(slots(await captureState(runtime, test, capturedStates)), { lastRun: null, currentRun: first }, "first core run should remain provisional while a continuation can be queued");
 
-	runtime.events.agentStart({}, test.ctx);
-	await runtime.events.agentEnd({ messages: [assistant(50)] }, test.ctx);
-	assert.deepEqual(throughputSlots(await captureState(runtime, test, capturedStates)).lastTurn, firstFinal, "no-start final setup should create an initial trusted final");
-	assert.equal(getRemainingNowReads(), 0, "setup should consume only agent_start and matching agent_end clock reads");
-
-	await runtime.events.agentEnd({ messages: [assistant(1)] }, test.ctx);
-	assert.equal(getRemainingNowReads(), 0, "agent_end without matching agent_start should not read the clock");
-	assertSlots(await captureState(runtime, test, capturedStates), { lastTurn: firstFinal, currentRun: null }, "agent_end without matching agent_start should preserve previous trusted lastTurn and keep currentRun clear");
-}
-
-{
-	const test = createContext();
-	const { runtime, capturedStates } = createRuntime([1_000, 3_500, 5_000, 6_000]);
-	runtime.events.sessionStart({}, test.ctx);
-
-	runtime.events.agentStart({}, test.ctx);
-	await runtime.events.agentEnd({ messages: [assistant(50)] }, test.ctx);
-	assert.deepEqual(throughputSlots(await captureState(runtime, test, capturedStates)).lastTurn, firstFinal, "non-array final setup should create an initial trusted final");
-
-	runtime.events.agentStart({}, test.ctx);
-	await runtime.events.agentEnd({ messages: { role: "assistant", usage: { output: 20, totalTokens: 20 } } }, test.ctx);
-	assertSlots(await captureState(runtime, test, capturedStates), { lastTurn: firstFinal, currentRun: null }, "non-array agent_end messages should clear currentRun and preserve previous trusted lastTurn");
-}
-
-for (const [name, event] of [
-	["zero-output final", { messages: [assistant(0)] }],
-	["error final", { messages: [assistant(20, {}, "error")] }],
-	["aborted final", { messages: [assistant(20, {}, "aborted")] }],
-	["non-array final", { messages: { role: "assistant", usage: { output: 20, totalTokens: 20 } } }],
-] as const) {
-	const test = createContext();
-	const { runtime, capturedStates } = createRuntime([1_000, 3_500, 5_000, 6_000, 7_000]);
-	runtime.events.sessionStart({}, test.ctx);
-
-	runtime.events.agentStart({}, test.ctx);
-	await runtime.events.agentEnd({ messages: [assistant(50)] }, test.ctx);
-	const finalBeforeInvalid = throughputSlots(await captureState(runtime, test, capturedStates)).lastTurn;
-	assert.deepEqual(finalBeforeInvalid, firstFinal, `${name}: setup should create an initial trusted final`);
-
-	runtime.events.agentStart({}, test.ctx);
-	await runtime.events.turnEnd(turnEnd(99, assistant(25)), test.ctx);
-	await runtime.events.agentEnd(event, test.ctx);
-	const afterInvalid = await captureState(runtime, test, capturedStates);
-	assertSlots(afterInvalid, { lastTurn: firstFinal, currentRun: null }, `${name} should clear currentRun but preserve previous trusted lastTurn`);
+	runtime.events.agentStart({ type: "agent_start" }, test.ctx);
+	assert.deepEqual(slots(await captureState(runtime, test, capturedStates)), { lastRun: null, currentRun: first }, "queued continuation agent_start should preserve prior model calls");
+	runtime.events.messageUpdate(messageUpdate(assistant(60), "text_delta"), test.ctx);
+	runtime.events.messageUpdate(messageUpdate(assistant(60), "text_delta"), test.ctx);
+	await runtime.events.messageEnd(messageEnd(assistant(60, {}, "stop", "second")), test.ctx);
+	await runtime.events.agentEnd({ type: "agent_end", messages: [] }, test.ctx);
+	runtime.events.agentSettled({ type: "agent_settled" }, test.ctx);
+	assert.deepEqual(
+		slots(await captureState(runtime, test, capturedStates)),
+		{ lastRun: expectedTurn(1_000, 6_000, 2_000, 80, { totalTokens: 80, assistantMessages: 2 }), currentRun: null },
+		"queued follow-up calls should aggregate under one settled-run measurement while excluding their gap",
+	);
 }
 
 {
 	const test = createContext();
 	const { runtime, capturedStates, getRemainingNowReads } = createRuntime([1_000]);
-	runtime.events.sessionStart({}, test.ctx);
-	runtime.events.agentStart({}, test.ctx);
-	runtime.events.sessionStart({}, test.ctx);
-	await runtime.events.turnEnd(turnEnd(0, assistant(20)), test.ctx);
-	assert.equal(getRemainingNowReads(), 0, "sessionStart should reset tracker internals so a stale active run cannot consume a turn_end clock read");
-	assertSlots(await captureState(runtime, test, capturedStates), { lastTurn: null, currentRun: null }, "sessionStart should preserve existing fresh-session visible throughput semantics");
+	runtime.events.sessionStart({ type: "session_start" }, test.ctx);
+	runtime.events.agentStart({ type: "agent_start" }, test.ctx);
+	await runtime.events.messageEnd(
+		messageEnd(toolResult("nested-1", { input: 4, output: 5, cacheRead: 6, cacheWrite: 7, totalTokens: 22, cost: { total: 0.8 } })),
+		test.ctx,
+	);
+	await runtime.events.turnEnd({ type: "turn_end", turnIndex: 0, message: assistant(0), toolResults: [] }, test.ctx);
+	await runtime.events.agentEnd({ type: "agent_end", messages: [] }, test.ctx);
+	runtime.events.agentSettled({ type: "agent_settled" }, test.ctx);
+	const state = await captureState(runtime, test, capturedStates);
+	assert.deepEqual(slots(state), { lastRun: null, currentRun: null }, "toolResult usage and turn lifecycle alone should not synthesize model speed without assistant stream timing");
+	assert.deepEqual(state.usage, { input: 4, output: 5, cacheRead: 6, cacheWrite: 7, cost: 0.8 }, "usage-bearing tools should still enter the complete billed-session ledger");
+	assert.equal(getRemainingNowReads(), 1, "non-assistant and lifecycle events should not consume model-stream clocks");
 }
 
-{
-	const test = createContext();
-	const { runtime, capturedStates, getRemainingNowReads } = createRuntime([1_000, 2_000]);
-	runtime.events.sessionStart({}, test.ctx);
-	runtime.events.agentStart({}, test.ctx);
-	await runtime.events.turnEnd(turnEnd(0, assistant(20)), test.ctx);
-	const beforeShutdown = await captureState(runtime, test, capturedStates);
-	assertSlots(
-		beforeShutdown,
-		{
-			lastTurn: null,
-			currentRun: {
-				startedAtMs: 1_000,
-				endedAtMs: 2_000,
-				elapsedMs: 1_000,
-				tokensPerSecond: 20,
-				usage: {
-					input: 0,
-					output: 20,
-					cacheRead: 0,
-					cacheWrite: 0,
-					totalTokens: 20,
-					assistantMessages: 1,
-				},
-			},
-		},
-		"sessionShutdown setup should create a visible provisional currentRun",
-	);
-	await runtime.events.sessionShutdown({}, test.ctx);
-	await runtime.events.turnEnd(turnEnd(1, assistant(20)), test.ctx);
-	assert.equal(getRemainingNowReads(), 0, "sessionShutdown should reset tracker internals so stale turn_end cannot consume a clock read");
-	assert.deepEqual(
-		throughputSlots(await captureState(runtime, test, capturedStates)),
-		throughputSlots(beforeShutdown),
-		"sessionShutdown should not clear existing visible throughput state outside existing UI teardown semantics",
-	);
-}
-
-assert.equal(
-	createContext().notifications.filter((notification) => !notification.message.includes("configuration cancelled")).length,
-	0,
-	"test harness sanity: no Reply speed lifecycle path should require ctx.ui.notify",
-);
-
-console.log("✓ throughput runtime checks passed");
+console.log("✓ runtime model-speed checks passed");

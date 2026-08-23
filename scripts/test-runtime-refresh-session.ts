@@ -23,6 +23,10 @@ function eventMessage(role: string, options: { usage?: Record<string, unknown>; 
 	};
 }
 
+function messageEnd(message: ReturnType<typeof eventMessage>) {
+	return { type: "message_end" as const, message };
+}
+
 function createSessionHarness(initialConfig: GlanceConfig = cloneConfig()): SessionHarness {
 	let config = initialConfig;
 	let renderCount = 0;
@@ -193,15 +197,15 @@ function createSessionHarness(initialConfig: GlanceConfig = cloneConfig()): Sess
 		usage: { input: 3, output: 4, cacheRead: 5, cacheWrite: 6, totalTokens: 18, cost: { total: 0.9 } },
 	});
 
-	await harness.session.messageEnd(assistant, ctx.ctx);
+	await harness.session.messageEnd(messageEnd(assistant), ctx.ctx);
 	assert.deepEqual(state.usage, { input: 3, output: 4, cacheRead: 5, cacheWrite: 6, cost: 0.9 }, "assistant messageEnd should apply responseId usage delta once");
-	await harness.session.messageEnd({ ...assistant }, ctx.ctx);
+	await harness.session.messageEnd(messageEnd({ ...assistant }), ctx.ctx);
 	assert.deepEqual(state.usage, { input: 3, output: 4, cacheRead: 5, cacheWrite: 6, cost: 0.9 }, "assistant messageEnd should dedupe cloned messages by responseId");
 	assert.equal(ctx.getEntryReads(), entryBaseline, "assistant messageEnd should not scan entries");
 	assert.equal(ctx.getBranchReads(), branchBaseline, "assistant messageEnd should not scan branch");
 
 	harness.session.resetAccumulators();
-	await harness.session.messageEnd({ ...assistant }, ctx.ctx);
+	await harness.session.messageEnd(messageEnd({ ...assistant }), ctx.ctx);
 	assert.deepEqual(state.usage, { input: 6, output: 8, cacheRead: 10, cacheWrite: 12, cost: 1.8 }, "resetAccumulators should clear responseId usage dedupe");
 }
 
@@ -213,9 +217,9 @@ function createSessionHarness(initialConfig: GlanceConfig = cloneConfig()): Sess
 		usage: { input: 2, output: 3, cacheRead: 4, cacheWrite: 5, totalTokens: 14, cost: { total: 0.7 } },
 	});
 
-	await harness.session.messageEnd(assistant, ctx.ctx);
+	await harness.session.messageEnd(messageEnd(assistant), ctx.ctx);
 	assert.deepEqual(state.usage, { input: 2, output: 3, cacheRead: 4, cacheWrite: 5, cost: 0.7 }, "assistant messageEnd should apply no-responseId usage delta once");
-	await harness.session.messageEnd(assistant, ctx.ctx);
+	await harness.session.messageEnd(messageEnd(assistant), ctx.ctx);
 	assert.deepEqual(state.usage, { input: 2, output: 3, cacheRead: 4, cacheWrite: 5, cost: 0.7 }, "assistant messageEnd should dedupe no-responseId messages by object identity");
 }
 
@@ -230,9 +234,9 @@ function createSessionHarness(initialConfig: GlanceConfig = cloneConfig()): Sess
 		usage: { input: 11, output: 12, cacheRead: 13, cacheWrite: 14, totalTokens: 50, cost: { total: 1.1 } },
 	});
 
-	await harness.session.messageEnd(toolResult, ctx.ctx);
+	await harness.session.messageEnd(messageEnd(toolResult), ctx.ctx);
 	assert.deepEqual(state.usage, { input: 11, output: 12, cacheRead: 13, cacheWrite: 14, cost: 1.1 }, "usage-bearing toolResult messageEnd should update complete session totals incrementally");
-	await harness.session.messageEnd({ ...toolResult }, ctx.ctx);
+	await harness.session.messageEnd(messageEnd({ ...toolResult }), ctx.ctx);
 	assert.deepEqual(state.usage, { input: 11, output: 12, cacheRead: 13, cacheWrite: 14, cost: 1.1 }, "toolResult messageEnd should dedupe cloned events by toolCallId");
 	assert.equal(ctx.getEntryReads(), entryBaseline, "toolResult messageEnd should not scan entries");
 	assert.equal(ctx.getBranchReads(), branchBaseline, "toolResult messageEnd should not scan branch");
@@ -246,8 +250,8 @@ function createSessionHarness(initialConfig: GlanceConfig = cloneConfig()): Sess
 		usage: { input: 2, output: 3, cacheRead: 4, cacheWrite: 5, totalTokens: 14, cost: { total: 0.7 } },
 	});
 
-	await harness.session.messageEnd(toolResult, ctx.ctx);
-	await harness.session.messageEnd(toolResult, ctx.ctx);
+	await harness.session.messageEnd(messageEnd(toolResult), ctx.ctx);
+	await harness.session.messageEnd(messageEnd(toolResult), ctx.ctx);
 	assert.deepEqual(state.usage, { input: 2, output: 3, cacheRead: 4, cacheWrite: 5, cost: 0.7 }, "toolResult without toolCallId should dedupe by object identity");
 }
 
@@ -263,7 +267,7 @@ function createSessionHarness(initialConfig: GlanceConfig = cloneConfig()): Sess
 	const branchBaseline = ctx.getBranchReads();
 	const renderBaseline = harness.getRenderCount();
 
-	await harness.session.messageEnd(eventMessage("user", { usage: { input: 100, output: 200, totalTokens: 300, cost: { total: 99 } } }), ctx.ctx);
+	await harness.session.messageEnd(messageEnd(eventMessage("user", { usage: { input: 100, output: 200, totalTokens: 300, cost: { total: 99 } } })), ctx.ctx);
 	assert.deepEqual(state.usage, { input: 9, output: 9, cacheRead: 0, cacheWrite: 0, cost: 0.9 }, "non-assistant messageEnd should not apply usage deltas");
 	assert.equal(harness.getRenderCount(), renderBaseline, "non-assistant messageEnd should not render");
 	assert.equal(ctx.getEntryReads(), entryBaseline, "non-assistant messageEnd should not scan entries");
@@ -282,7 +286,7 @@ function createSessionHarness(initialConfig: GlanceConfig = cloneConfig()): Sess
 	assert.equal(state.context.tokens, null, "public context null after compact should be reflected directly");
 
 	ctx.setContextUsage({ tokens: 64_000, contextWindow: 200_000, percent: 32 });
-	await harness.session.messageEnd(eventMessage("assistant", { responseId: "known-context", usage: { input: 1, output: 2, totalTokens: 3, cost: { total: 0.1 } } }), ctx.ctx);
+	await harness.session.messageEnd(messageEnd(eventMessage("assistant", { responseId: "known-context", usage: { input: 1, output: 2, totalTokens: 3, cost: { total: 0.1 } } })), ctx.ctx);
 	assert.equal(state.context.tokens, 64_000, "known assistant messageEnd should refresh directly from public context truth");
 	assert.equal(state.context.percent, 32, "known assistant messageEnd should refresh public context percent");
 }
@@ -300,20 +304,40 @@ function createSessionHarness(initialConfig: GlanceConfig = cloneConfig()): Sess
 	const branchBaseline = ctx.getBranchReads();
 	harness.session.agentStart();
 	assert.equal(harness.getRenderCount(), 0, "agentStart with no visible throughput change should not render");
+	harness.setNowMs(1000);
+	harness.session.messageUpdate({ message: eventMessage("assistant", { usage: { output: 10, totalTokens: 10 } }), assistantMessageEvent: { type: "text_delta" } });
 	harness.setNowMs(1500);
+	harness.session.messageUpdate({ message: eventMessage("assistant", { usage: { output: 10, totalTokens: 10 } }), assistantMessageEvent: { type: "text_delta" } });
 	harness.setOnRender(() => {
-		assert.ok(state.throughput.currentRun, "turnEnd should set current-run throughput before render");
+		assert.ok(state.throughput.currentRun, "messageEnd should set current-run model speed before render");
 	});
-	await harness.session.turnEnd({ turnIndex: 1, message: eventMessage("assistant", { usage: { output: 10, totalTokens: 10 } }) }, ctx.ctx);
+	await harness.session.messageEnd(messageEnd(eventMessage("assistant", { usage: { output: 10, totalTokens: 10 } })), ctx.ctx);
 	harness.setOnRender(undefined);
-	assert.ok(state.throughput.currentRun, "turnEnd should leave current-run throughput visible after render");
-	assert.equal(ctx.getEntryReads(), entryBaseline, "turnEnd should not scan entries after baseline");
-	assert.equal(ctx.getBranchReads(), branchBaseline, "turnEnd should not scan branch after baseline");
+	assert.ok(state.throughput.currentRun, "completed message stream should leave current-run model speed visible");
+	assert.equal(state.throughput.currentRun?.elapsedMs, 500, "model speed should use active stream time rather than task wall time");
+	assert.equal(ctx.getEntryReads(), entryBaseline, "message stream events should not scan entries after baseline");
+	assert.equal(ctx.getBranchReads(), branchBaseline, "message stream events should not scan branch after baseline");
 
-	const renderAfterTurnEnd = harness.getRenderCount();
+	const renderAfterMessageEnd = harness.getRenderCount();
 	harness.session.agentStart();
-	assert.equal(state.throughput.currentRun, null, "agentStart should clear a previous visible current-run throughput");
-	assert.equal(harness.getRenderCount(), renderAfterTurnEnd + 1, "agentStart should render when it clears visible current-run throughput");
+	assert.ok(state.throughput.currentRun, "continuation agentStart should preserve the provisional settled-run aggregate");
+	assert.equal(harness.getRenderCount(), renderAfterMessageEnd, "continuation agentStart should not render when visible model speed is unchanged");
+	await harness.session.agentEnd({ messages: [eventMessage("assistant", { usage: { output: 10, totalTokens: 10 } })] }, ctx.ctx);
+	assert.equal(state.throughput.lastRun, null, "agentEnd should not finalize while retry or queued continuation may still follow");
+	assert.ok(state.throughput.currentRun, "agentEnd should leave model speed provisional");
+	harness.setOnRender(() => {
+		assert.ok(state.throughput.lastRun, "agentSettled should set final model speed before render");
+		assert.equal(state.throughput.currentRun, null, "agentSettled should clear provisional model speed before render");
+	});
+	harness.session.agentSettled();
+	harness.setOnRender(undefined);
+	const settledSpeed = state.throughput.lastRun as { elapsedMs: number } | null;
+	assert.equal(settledSpeed?.elapsedMs, 500, "agentSettled should preserve active model stream duration");
+	const renderAfterSettled = harness.getRenderCount();
+	harness.session.agentStart();
+	assert.ok(state.throughput.lastRun, "a new logical run should preserve the previous trusted model speed");
+	assert.equal(state.throughput.currentRun, null, "a new logical run should begin without a provisional measurement");
+	assert.equal(harness.getRenderCount(), renderAfterSettled, "new agentStart should not render when currentRun is already clear");
 }
 
 {
@@ -323,20 +347,32 @@ function createSessionHarness(initialConfig: GlanceConfig = cloneConfig()): Sess
 	const entryBaseline = ctx.getEntryReads();
 	const branchBaseline = ctx.getBranchReads();
 	harness.session.agentStart();
+	harness.setNowMs(1000);
+	harness.session.messageUpdate({ message: eventMessage("assistant", { usage: { output: 4, totalTokens: 4 } }), assistantMessageEvent: { type: "text_delta" } });
 	harness.setNowMs(1400);
-	await harness.session.turnEnd({ turnIndex: 1, message: eventMessage("assistant", { usage: { output: 4, totalTokens: 4 } }) }, ctx.ctx);
-	assert.ok(state.throughput.currentRun, "setup turnEnd should set current-run throughput");
-	harness.setNowMs(1800);
+	harness.session.messageUpdate({ message: eventMessage("assistant", { usage: { output: 4, totalTokens: 4 } }), assistantMessageEvent: { type: "text_delta" } });
+	await harness.session.messageEnd(messageEnd(eventMessage("assistant", { usage: { output: 4, totalTokens: 4 } })), ctx.ctx);
+	assert.ok(state.throughput.currentRun, "setup message stream should set current-run model speed");
 	harness.setOnRender(() => {
-		assert.ok(state.throughput.lastTurn, "agentEnd should set last-turn throughput before render");
-		assert.equal(state.throughput.currentRun, null, "agentEnd should clear current-run throughput before render");
+		assert.equal(state.throughput.lastRun, null, "agentEnd render should keep final model speed unchanged");
+		assert.ok(state.throughput.currentRun, "agentEnd render should keep current-run model speed provisional");
 	});
-	await harness.session.agentEnd({ messages: [eventMessage("assistant", { usage: { output: 8, totalTokens: 8 } })] }, ctx.ctx);
+	await harness.session.agentEnd({ messages: [eventMessage("assistant", { usage: { output: 4, totalTokens: 4 } })] }, ctx.ctx);
 	harness.setOnRender(undefined);
-	assert.ok(state.throughput.lastTurn, "agentEnd should leave last-turn throughput visible after render");
-	assert.equal(state.throughput.currentRun, null, "agentEnd should leave current-run throughput cleared");
-	assert.equal(ctx.getEntryReads(), entryBaseline, "agentEnd should not scan entries after baseline");
-	assert.equal(ctx.getBranchReads(), branchBaseline, "agentEnd should not scan branch after baseline");
+	assert.equal(state.throughput.lastRun, null, "agentEnd should not finalize model speed");
+	assert.ok(state.throughput.currentRun, "agentEnd should leave current-run model speed visible");
+	harness.setOnRender(() => {
+		assert.ok(state.throughput.lastRun, "agentSettled should set last-run model speed before render");
+		assert.equal(state.throughput.currentRun, null, "agentSettled should clear current-run model speed before render");
+	});
+	harness.session.agentSettled();
+	harness.setOnRender(undefined);
+	assert.ok(state.throughput.lastRun, "agentSettled should leave final model speed visible");
+	assert.equal(state.throughput.currentRun, null, "agentSettled should leave provisional model speed cleared");
+	const settledSpeed = state.throughput.lastRun as { elapsedMs: number } | null;
+	assert.equal(settledSpeed?.elapsedMs, 400, "agentSettled should preserve active model stream duration");
+	assert.equal(ctx.getEntryReads(), entryBaseline, "agentEnd/agentSettled should not scan entries after baseline");
+	assert.equal(ctx.getBranchReads(), branchBaseline, "agentEnd/agentSettled should not scan branch after baseline");
 }
 
 {
@@ -344,19 +380,20 @@ function createSessionHarness(initialConfig: GlanceConfig = cloneConfig()): Sess
 	const harness = createSessionHarness();
 	const state = harness.session.ensureState(ctx.ctx);
 	const assistant = eventMessage("assistant", { responseId: "reset-me", usage: { input: 1, output: 1, totalTokens: 2, cost: { total: 0.1 } } });
-	await harness.session.messageEnd(assistant, ctx.ctx);
-	await harness.session.messageEnd({ ...assistant }, ctx.ctx);
+	await harness.session.messageEnd(messageEnd(assistant), ctx.ctx);
+	await harness.session.messageEnd(messageEnd({ ...assistant }), ctx.ctx);
 	assert.deepEqual(state.usage, { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, cost: 0.1 }, "setup should confirm assistant responseId dedupe is active");
 
 	harness.session.resetAccumulators();
-	await harness.session.messageEnd({ ...assistant }, ctx.ctx);
+	await harness.session.messageEnd(messageEnd({ ...assistant }), ctx.ctx);
 	assert.deepEqual(state.usage, { input: 2, output: 2, cacheRead: 0, cacheWrite: 0, cost: 0.2 }, "resetAccumulators should clear assistant responseId dedupe");
 
 	harness.session.agentStart();
 	harness.setNowMs(2000);
 	harness.session.sessionShutdown();
 	await harness.session.agentEnd({ messages: [eventMessage("assistant", { usage: { output: 10, totalTokens: 10 } })] }, ctx.ctx);
-	assert.equal(state.throughput.lastTurn, null, "sessionShutdown should reset throughput tracker so a later agentEnd cannot create last-turn throughput");
+	harness.session.agentSettled();
+	assert.equal(state.throughput.lastRun, null, "sessionShutdown should reset the tracker so later end/settled events cannot create final model speed");
 }
 
 console.log("✓ runtime refresh session checks passed");

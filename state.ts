@@ -1,7 +1,7 @@
 import { displayDirectory, shortenModel } from "./format.js";
 import { emptyGitSnapshot } from "./git.js";
 import type { StateInputs } from "./runtime-snapshot.js";
-import type { GitSnapshot, GlanceConfig, GlanceState, TurnThroughput, UsageTotals } from "./types.js";
+import type { GitSnapshot, GlanceConfig, GlanceState, ModelSpeedMeasurement, UsageTotals } from "./types.js";
 
 export function createInitialState(inputs: StateInputs, config: GlanceConfig): GlanceState {
 	const state: GlanceState = {
@@ -26,7 +26,7 @@ export function createInitialState(inputs: StateInputs, config: GlanceConfig): G
 		},
 		usage: inputs.usage,
 		throughput: {
-			lastTurn: null,
+			lastRun: null,
 			currentRun: null,
 		},
 		version: 0,
@@ -43,7 +43,7 @@ function usageTotalsEqual(a: UsageTotals, b: UsageTotals): boolean {
 	return a.input === b.input && a.output === b.output && a.cacheRead === b.cacheRead && a.cacheWrite === b.cacheWrite && a.cost === b.cost;
 }
 
-function turnThroughputEqual(a: TurnThroughput | null, b: TurnThroughput | null): boolean {
+function modelSpeedEqual(a: ModelSpeedMeasurement | null, b: ModelSpeedMeasurement | null): boolean {
 	if (a === b) return true;
 	if (!a || !b) return false;
 	return (
@@ -60,26 +60,26 @@ function turnThroughputEqual(a: TurnThroughput | null, b: TurnThroughput | null)
 	);
 }
 
-export function setLastTurnThroughput(state: GlanceState, next: TurnThroughput | null): boolean {
-	if (turnThroughputEqual(state.throughput.lastTurn, next)) return false;
-	state.throughput.lastTurn = next;
+export function setLastRunModelSpeed(state: GlanceState, next: ModelSpeedMeasurement | null): boolean {
+	if (modelSpeedEqual(state.throughput.lastRun, next)) return false;
+	state.throughput.lastRun = next;
 	touch(state);
 	return true;
 }
 
-export function clearLastTurnThroughput(state: GlanceState): boolean {
-	return setLastTurnThroughput(state, null);
+export function clearLastRunModelSpeed(state: GlanceState): boolean {
+	return setLastRunModelSpeed(state, null);
 }
 
-export function setCurrentRunThroughput(state: GlanceState, next: TurnThroughput | null): boolean {
-	if (turnThroughputEqual(state.throughput.currentRun, next)) return false;
+export function setCurrentRunModelSpeed(state: GlanceState, next: ModelSpeedMeasurement | null): boolean {
+	if (modelSpeedEqual(state.throughput.currentRun, next)) return false;
 	state.throughput.currentRun = next;
 	touch(state);
 	return true;
 }
 
-export function clearCurrentRunThroughput(state: GlanceState): boolean {
-	return setCurrentRunThroughput(state, null);
+export function clearCurrentRunModelSpeed(state: GlanceState): boolean {
+	return setCurrentRunModelSpeed(state, null);
 }
 
 export function setUsageTotals(state: GlanceState, usage: UsageTotals): boolean {

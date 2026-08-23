@@ -1,9 +1,18 @@
-import type { TurnThroughput, TurnThroughputUsage } from "./types.js";
+import type { ModelSpeedMeasurement, ModelSpeedUsage } from "./types.js";
 
-export interface CalculateTurnThroughputInput {
+export interface ModelStreamSample {
+	/** First observed non-reasoning output delta timestamp. */
 	startedAtMs: number;
+	/** Last observed non-reasoning output delta timestamp. */
 	endedAtMs: number;
-	messages: readonly unknown[];
+	/** Sum of measured non-reasoning output-stream intervals. */
+	elapsedMs: number;
+	/** Final authoritative assistant message for provider usage. */
+	message: unknown;
+}
+
+export interface CalculateModelSpeedInput {
+	streams: readonly ModelStreamSample[];
 }
 
 interface AssistantLikeMessage {
@@ -15,6 +24,7 @@ interface AssistantLikeMessage {
 interface NormalizedUsageParts {
 	input: number;
 	output: number;
+	reasoning: number;
 	cacheRead: number;
 	cacheWrite: number;
 	totalTokens: number;
@@ -36,19 +46,20 @@ function normalizeUsage(value: unknown): NormalizedUsageParts {
 	const usage = isRecord(value) ? value : {};
 	const input = normalizeNonNegativeNumber(usage.input);
 	const output = normalizeNonNegativeNumber(usage.output);
+	const reasoning = Math.min(output, normalizeNonNegativeNumber(usage.reasoning));
 	const cacheRead = normalizeNonNegativeNumber(usage.cacheRead);
 	const cacheWrite = normalizeNonNegativeNumber(usage.cacheWrite);
 	const totalTokens = Object.hasOwn(usage, "totalTokens")
 		? normalizeNonNegativeNumber(usage.totalTokens)
 		: input + output + cacheRead + cacheWrite;
-	return { input, output, cacheRead, cacheWrite, totalTokens };
+	return { input, output, reasoning, cacheRead, cacheWrite, totalTokens };
 }
 
 function invalidStopReason(stopReason: unknown): boolean {
 	return stopReason === "error" || stopReason === "aborted";
 }
 
-function emptyUsage(): TurnThroughputUsage {
+function emptyUsage(): ModelSpeedUsage {
 	return {
 		input: 0,
 		output: 0,
@@ -59,32 +70,55 @@ function emptyUsage(): TurnThroughputUsage {
 	};
 }
 
-export function calculateTurnThroughput(input: CalculateTurnThroughputInput): TurnThroughput | undefined {
-	const elapsedMs = input.endedAtMs - input.startedAtMs;
-	if (!Number.isFinite(elapsedMs) || elapsedMs <= 0) return undefined;
-
+/**
+ * Calculate observed model generation speed from completed assistant output
+ * streams. The numerator is provider-reported output minus its reported
+ * reasoning subset. The denominator is measured non-reasoning output-stream
+ * time across text and tool-call deltas. No message or delta content is
+ * tokenized.
+ */
+export function calculateModelSpeed(input: CalculateModelSpeedInput): ModelSpeedMeasurement | undefined {
 	const usage = emptyUsage();
-	let lastAssistant: AssistantLikeMessage | undefined;
+	let startedAtMs = Number.POSITIVE_INFINITY;
+	let endedAtMs = Number.NEGATIVE_INFINITY;
+	let elapsedMs = 0;
 
-	for (const message of input.messages) {
-		if (!isAssistantMessage(message)) continue;
-		lastAssistant = message;
+	for (const stream of input.streams) {
+		if (!isAssistantMessage(stream.message)) continue;
+		if (invalidStopReason(stream.message.stopReason)) return undefined;
+
+		const parts = normalizeUsage(stream.message.usage);
+		const measuredOutput = Math.max(0, parts.output - parts.reasoning);
+		if (measuredOutput <= 0) continue;
+
+		const spanMs = stream.endedAtMs - stream.startedAtMs;
+		if (
+			!Number.isFinite(stream.startedAtMs)
+			|| !Number.isFinite(stream.endedAtMs)
+			|| !Number.isFinite(stream.elapsedMs)
+			|| spanMs <= 0
+			|| stream.elapsedMs <= 0
+			|| stream.elapsedMs > spanMs
+		) {
+			return undefined;
+		}
+
+		startedAtMs = Math.min(startedAtMs, stream.startedAtMs);
+		endedAtMs = Math.max(endedAtMs, stream.endedAtMs);
+		elapsedMs += stream.elapsedMs;
 		usage.assistantMessages++;
-		const parts = normalizeUsage(message.usage);
 		usage.input += parts.input;
-		usage.output += parts.output;
+		usage.output += measuredOutput;
 		usage.cacheRead += parts.cacheRead;
 		usage.cacheWrite += parts.cacheWrite;
 		usage.totalTokens += parts.totalTokens;
 	}
 
-	if (!lastAssistant) return undefined;
-	if (invalidStopReason(lastAssistant.stopReason)) return undefined;
-	if (usage.output <= 0) return undefined;
+	if (usage.output <= 0 || elapsedMs <= 0) return undefined;
 
 	return {
-		startedAtMs: input.startedAtMs,
-		endedAtMs: input.endedAtMs,
+		startedAtMs,
+		endedAtMs,
 		elapsedMs,
 		tokensPerSecond: usage.output / (elapsedMs / 1000),
 		usage,

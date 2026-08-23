@@ -1,6 +1,6 @@
 import { THROUGHPUT_PRECISION_DESCRIPTOR } from "./config-schema.js";
 import type { SegmentFeature } from "./segment-feature.js";
-import type { GlanceConfig, SegmentData, SegmentRenderContext, ThroughputPrecision, TurnThroughput } from "./types.js";
+import type { GlanceConfig, SegmentData, SegmentRenderContext, ThroughputPrecision, ModelSpeedMeasurement } from "./types.js";
 
 function fixedPrecision(value: number, precision: 0 | 1): string {
 	return precision === 0 ? `${Math.round(value)}` : value.toFixed(1);
@@ -24,15 +24,15 @@ function formatThroughputRate(rate: number, precision: ThroughputPrecision): str
 	return `${Math.round(rate / 1_000_000)}M`;
 }
 
-function validThroughput(turn: TurnThroughput | null | undefined): turn is TurnThroughput {
+function validThroughput(turn: ModelSpeedMeasurement | null | undefined): turn is ModelSpeedMeasurement {
 	const rate = turn?.tokensPerSecond;
 	return typeof rate === "number" && Number.isFinite(rate) && rate > 0;
 }
 
 function collectThroughput(ctx: SegmentRenderContext): SegmentData | undefined {
 	const currentRun = ctx.state.throughput.currentRun;
-	const lastTurn = ctx.state.throughput.lastTurn;
-	const turn = validThroughput(currentRun) ? currentRun : validThroughput(lastTurn) ? lastTurn : undefined;
+	const lastRun = ctx.state.throughput.lastRun;
+	const turn = validThroughput(currentRun) ? currentRun : validThroughput(lastRun) ? lastRun : undefined;
 	if (!turn) {
 		return {
 			primary: "? tok/s",
@@ -57,13 +57,13 @@ function collectThroughput(ctx: SegmentRenderContext): SegmentData | undefined {
 
 export const throughputSegmentFeature = {
 	id: "throughput",
-	label: "Reply speed",
+	label: "Model speed",
 	defaultEnabled: true,
 	settings: [
 		{
 			id: "throughput.precision",
 			label: "Precision",
-			hint: "Decimals for tok/s; wall time, not a benchmark.",
+			hint: "Decimals for active text/tool-call tok/s.",
 			kind: "cycle",
 			value: (config: GlanceConfig) => THROUGHPUT_PRECISION_DESCRIPTOR.label(config.throughput.precision),
 			mutate: (config: GlanceConfig) => {

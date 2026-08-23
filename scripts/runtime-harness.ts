@@ -1,5 +1,5 @@
 import { strict as assert } from "node:assert";
-import type { ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
+import type { ExtensionCommandContext, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { defaultConfig } from "../config.js";
 import { createGlanceRuntime, type CreateGitRefresherOptions, type GlancePaneResult, type GlanceRuntimeAdapters, type RuntimeGitRefresher, type RuntimeShowPaneOptions } from "../runtime.js";
 import type { StateSessionEntry } from "../runtime-snapshot.js";
@@ -76,8 +76,17 @@ export interface RuntimeHarnessOptions {
 	getThinkingLevel?: () => string;
 }
 
+type ProductionRuntime = ReturnType<typeof createGlanceRuntime>;
+type RuntimeHarnessEvents = {
+	[K in keyof ProductionRuntime["events"]]: (event: unknown, ctx: ExtensionContext) => ReturnType<ProductionRuntime["events"][K]>;
+};
+
+export type RuntimeHarnessRuntime = Omit<ProductionRuntime, "events"> & {
+	events: RuntimeHarnessEvents;
+};
+
 export interface RuntimeHarness {
-	runtime: ReturnType<typeof createGlanceRuntime>;
+	runtime: RuntimeHarnessRuntime;
 	showPaneInitials: GlanceConfig[];
 	showPaneContexts: ExtensionCommandContext[];
 	showPanePreviewStates: Array<GlanceState | undefined>;
@@ -350,7 +359,7 @@ export function createRuntimeHarness(options: RuntimeHarnessOptions = {}): Runti
 		createGitRefresher: options.git?.create,
 	};
 	return {
-		runtime: createGlanceRuntime(adapters),
+		runtime: createGlanceRuntime(adapters) as RuntimeHarnessRuntime,
 		showPaneInitials,
 		showPaneContexts,
 		showPanePreviewStates,

@@ -30,7 +30,7 @@ const EXPECTED_LABELS: Record<ExpectedSegmentId, string> = {
 	cost: "Cost",
 	tokens: "Tokens",
 	model: "Model",
-	throughput: "Reply speed",
+	throughput: "Model speed",
 };
 
 const EXPECTED_SEGMENT_SETTING_IDS: Record<ExpectedSegmentId, string[]> = {

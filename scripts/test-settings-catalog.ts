@@ -148,7 +148,7 @@ assert.deepEqual(
 		{ id: "general", label: "General" },
 		{ id: "git", label: "Git", enabled: true },
 		{ id: "cost", label: "Cost", enabled: true },
-		{ id: "throughput", label: "Reply speed", enabled: true },
+		{ id: "throughput", label: "Model speed", enabled: true },
 		{ id: "context", label: "Context", enabled: true },
 		{ id: "tokens", label: "Tokens", enabled: false },
 		{ id: "model", label: "Model", enabled: true },
@@ -176,7 +176,7 @@ assert.deepEqual(
 		{ id: "cost", label: "Cost", enabled: false },
 		{ id: "context", label: "Context", enabled: true },
 		{ id: "git", label: "Git", enabled: false },
-		{ id: "throughput", label: "Reply speed", enabled: true },
+		{ id: "throughput", label: "Model speed", enabled: true },
 	],
 	"categories should preserve arbitrary config.segments order",
 );
@@ -383,7 +383,7 @@ const throughputRows = assertRows(config, "throughput", [
 		id: "throughput.precision",
 		label: "Precision",
 		value: "auto",
-		hint: "Decimals for tok/s; wall time, not a benchmark.",
+		hint: "Decimals for active text/tool-call tok/s.",
 		kind: "cycle",
 	},
 ]);
@@ -563,7 +563,7 @@ assertCycleUsesValues(
 	THROUGHPUT_PRECISION_VALUES,
 	"throughput",
 	"throughput.precision",
-	"Reply speed Precision",
+	"Model speed Precision",
 	(base, precision) => withTestConfig(base, (next) => {
 		(next as unknown as { throughput: { precision: typeof precision } }).throughput.precision = precision;
 	}),

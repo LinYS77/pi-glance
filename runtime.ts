@@ -1,9 +1,10 @@
-import type { ExtensionCommandContext, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { performance } from "node:perf_hooks";
+import type { AgentEndEvent, AgentSettledEvent, AgentStartEvent, ExtensionCommandContext, ExtensionContext, MessageEndEvent, MessageUpdateEvent, SessionCompactEvent, TurnEndEvent } from "@earendil-works/pi-coding-agent";
 import { GlanceEditor } from "./editor.js";
 import { GlanceFooter } from "./footer.js";
 import { GitRefresher } from "./git.js";
 import { resolveRuntimeRenderStyleContext } from "./render-style-context.js";
-import { RuntimeRefreshSession, type RuntimeAgentEndInput, type RuntimeMessageEndInput, type RuntimeSessionCompactInput, type RuntimeTurnEndInput } from "./runtime-refresh-session.js";
+import { RuntimeRefreshSession } from "./runtime-refresh-session.js";
 import type { GlanceRenderStyleContext } from "./theme-adapter.js";
 import { readPiAmbientTone } from "./theme-tone.js";
 import type { GitSnapshot, GlanceConfig, GlanceState } from "./types.js";
@@ -35,13 +36,6 @@ export interface GlanceRuntimeAdapters {
 	nowMs?: () => number;
 }
 
-interface MessageEndLikeEvent {
-	message: RuntimeMessageEndInput;
-}
-
-type TurnEndLikeEvent = RuntimeTurnEndInput;
-type AgentEndLikeEvent = RuntimeAgentEndInput;
-
 interface RuntimeModeContext {
 	mode?: string;
 }
@@ -58,11 +52,13 @@ export interface GlanceRuntime {
 		turnStart(event: unknown, ctx: ExtensionContext): Promise<void>;
 		toolExecutionEnd(event: unknown, ctx: ExtensionContext): Promise<void>;
 		sessionTree(event: unknown, ctx: ExtensionContext): Promise<void>;
-		sessionCompact(event: RuntimeSessionCompactInput, ctx: ExtensionContext): Promise<void>;
-		messageEnd(event: MessageEndLikeEvent, ctx: ExtensionContext): Promise<void>;
-		turnEnd(event: TurnEndLikeEvent, ctx: ExtensionContext): Promise<void>;
-		agentStart(event: unknown, ctx: ExtensionContext): void;
-		agentEnd(event: AgentEndLikeEvent, ctx: ExtensionContext): Promise<void>;
+		sessionCompact(event: SessionCompactEvent, ctx: ExtensionContext): Promise<void>;
+		messageUpdate(event: MessageUpdateEvent, ctx: ExtensionContext): void;
+		messageEnd(event: MessageEndEvent, ctx: ExtensionContext): Promise<void>;
+		turnEnd(event: TurnEndEvent, ctx: ExtensionContext): Promise<void>;
+		agentStart(event: AgentStartEvent, ctx: ExtensionContext): void;
+		agentEnd(event: AgentEndEvent, ctx: ExtensionContext): Promise<void>;
+		agentSettled(event: AgentSettledEvent, ctx: ExtensionContext): void;
 	};
 }
 
@@ -80,7 +76,7 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 	let gitRefresher: RuntimeGitRefresher | undefined;
 	let requestRender: (() => void) | undefined;
 	let uiGeneration = 0;
-	const nowMs = adapters.nowMs ?? Date.now;
+	const nowMs = adapters.nowMs ?? (() => performance.now());
 
 	async function ensureConfig(): Promise<GlanceConfig> {
 		config ??= await adapters.loadConfig();
@@ -256,8 +252,11 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 			sessionCompact: async (event, ctx) => {
 				await refreshSession.sessionCompact(event, ctx);
 			},
+			messageUpdate: (event, _ctx) => {
+				refreshSession.messageUpdate(event);
+			},
 			messageEnd: async (event, ctx) => {
-				await refreshSession.messageEnd(event.message, ctx);
+				await refreshSession.messageEnd(event, ctx);
 			},
 			turnEnd: async (event, ctx) => {
 				await refreshSession.turnEnd(event, ctx);
@@ -267,6 +266,9 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 			},
 			agentEnd: async (event, ctx) => {
 				await refreshSession.agentEnd(event, ctx);
+			},
+			agentSettled: (_event, _ctx) => {
+				refreshSession.agentSettled();
 			},
 		},
 	};

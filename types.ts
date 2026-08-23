@@ -95,8 +95,9 @@ export interface UsageTotals {
 	cost: number;
 }
 
-export interface TurnThroughputUsage {
+export interface ModelSpeedUsage {
 	input: number;
+	/** Provider output tokens with the reported reasoning subset removed when available. */
 	output: number;
 	cacheRead: number;
 	cacheWrite: number;
@@ -104,12 +105,15 @@ export interface TurnThroughputUsage {
 	assistantMessages: number;
 }
 
-export interface TurnThroughput {
+export interface ModelSpeedMeasurement {
+	/** First measured non-reasoning text or tool-call output delta timestamp. */
 	startedAtMs: number;
+	/** Last measured non-reasoning text or tool-call output delta timestamp. */
 	endedAtMs: number;
+	/** Sum of active non-reasoning output-stream intervals across the settled run. */
 	elapsedMs: number;
 	tokensPerSecond: number;
-	usage: TurnThroughputUsage;
+	usage: ModelSpeedUsage;
 }
 
 export interface GitSnapshot {
@@ -151,8 +155,8 @@ export interface GlanceState {
 	};
 	usage: UsageTotals;
 	throughput: {
-		lastTurn: TurnThroughput | null;
-		currentRun: TurnThroughput | null;
+		lastRun: ModelSpeedMeasurement | null;
+		currentRun: ModelSpeedMeasurement | null;
 	};
 	version: number;
 }

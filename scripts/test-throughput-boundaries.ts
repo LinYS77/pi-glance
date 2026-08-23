@@ -57,6 +57,8 @@ const throughputRunTracker = files.find((file) => basename(file.path) === THROUG
 assert.ok(throughputRunTracker, "throughput-run-tracker.ts pure lifecycle boundary should exist");
 const throughputSegmentFeature = files.find((file) => basename(file.path) === THROUGHPUT_SEGMENT_FEATURE_MODULE);
 assert.ok(throughputSegmentFeature, "throughput-segment-feature.ts SegmentFeature boundary should exist");
+const index = byPath.get("index.ts");
+assert.ok(index, "index.ts event wiring boundary should exist");
 
 const importPattern = /(?:import|export)\s+(type\s+)?(?:[^"'`]*?\s+from\s+)?["']([^"']+)["']/g;
 const forbiddenThroughputLocalModules = new Set(["./runtime.js", "./renderer.js", "./status-line.js", "./pane.js", "./editor.js", "./config.js", "./settings-catalog.js", "./state.js"]);
@@ -130,7 +132,7 @@ if (/THROUGHPUT_PRECISION_VALUES/.test(throughputSegmentFeature.text)) {
 
 for (const file of [throughput, throughputRunTracker, throughputSegmentFeature]) {
 	if (/\bDate\.now\s*\(/.test(file.text)) fail(`${file.path}: throughput boundary must use injected timestamps/state, not Date.now()`);
-	if (/\b(?:setInterval|setTimeout|setImmediate|requestAnimationFrame)\s*\(/.test(file.text)) fail(`${file.path}: Reply speed UX v2 must not use timers/tickers for provisional or unknown status`);
+	if (/\b(?:setInterval|setTimeout|setImmediate|requestAnimationFrame)\s*\(/.test(file.text)) fail(`${file.path}: Model speed UX v2 must not use timers/tickers for provisional or unknown status`);
 	if (/\.notify\s*\(/.test(file.text)) fail(`${file.path}: throughput boundary must never notify`);
 	if (/(?:\.\s*(?:content|delta|text_delta|thinking_delta)\b|\[\s*["'](?:content|delta|text_delta|thinking_delta)["']\s*\])/.test(file.text)) {
 		fail(`${file.path}: throughput boundary must not read message content/delta text as a token fallback`);
@@ -141,8 +143,8 @@ for (const file of [throughput, throughputRunTracker, throughputSegmentFeature])
 }
 
 for (const file of files) {
-	if (/\.notify\s*\([^;\n]*(?:throughput|reply speed|TPS|tok\/s|spd)/i.test(file.text)) {
-		fail(`${file.path}: throughput/Reply speed copy should not be sent through ctx.ui.notify`);
+	if (/\.notify\s*\([^;\n]*(?:throughput|model speed|TPS|tok\/s|spd)/i.test(file.text)) {
+		fail(`${file.path}: throughput/Model speed copy should not be sent through ctx.ui.notify`);
 	}
 }
 
@@ -150,7 +152,7 @@ for (const fileName of ["throughput.ts", "throughput-run-tracker.ts", "throughpu
 	const file = byPath.get(fileName);
 	assert.ok(file, `${fileName} should exist for throughput boundary checks`);
 	if (/\b(?:setInterval|setTimeout|setImmediate|requestAnimationFrame)\s*\(/.test(file.text)) {
-		fail(`${file.path}: Reply speed UX v2 must not use timers/tickers for provisional or unknown status`);
+		fail(`${file.path}: Model speed UX v2 must not use timers/tickers for provisional or unknown status`);
 	}
 }
 
@@ -158,8 +160,21 @@ for (const fileName of ["throughput.ts", "throughput-run-tracker.ts", "throughpu
 	const file = byPath.get(fileName);
 	assert.ok(file, `${fileName} should exist for throughput estimation boundary checks`);
 	if (/(?:\.\s*(?:content|delta|text_delta|thinking_delta)\b|\[\s*["'](?:content|delta|text_delta|thinking_delta)["']\s*\])/.test(file.text)) {
-		fail(`${file.path}: Reply speed must not inspect content/delta text for token estimation`);
+		fail(`${file.path}: Model speed must not inspect content/delta text for token estimation`);
 	}
+}
+
+for (const eventName of ["message_update", "message_end", "agent_start", "agent_end", "agent_settled"] as const) {
+	if (!index.text.includes(`pi.on("${eventName}"`)) fail(`${index.path}: Model speed should wire Pi public ${eventName} events`);
+}
+for (const trackerMember of ["messageUpdate", "messageEnd", "compactionRetry", "settle"] as const) {
+	if (!throughputRunTracker.text.includes(trackerMember)) fail(`${throughputRunTracker.path}: settled model-speed tracker should expose ${trackerMember}`);
+}
+if (/\b(?:checkpoint|finish)\s*\(/.test(throughputRunTracker.text)) {
+	fail(`${throughputRunTracker.path}: Model speed must not retain wall-time turn checkpoints or agent_end finalization`);
+}
+if (!throughputRunTracker.text.includes('type === "text_delta" || type === "toolcall_delta"')) {
+	fail(`${throughputRunTracker.path}: Model speed should align mixed text/tool-call output timing`);
 }
 
 console.log("✓ throughput boundary checks passed");

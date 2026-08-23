@@ -1,5 +1,5 @@
 import { strict as assert } from "node:assert";
-import type { ThroughputClock, ThroughputRunStateIntent as ExportedThroughputRunStateIntent } from "../throughput-run-tracker.js";
+import type { ModelSpeedClock, ModelSpeedStateIntent as ExportedModelSpeedStateIntent } from "../throughput-run-tracker.js";
 
 interface ThroughputUsageExpectation {
 	input: number;
@@ -10,7 +10,7 @@ interface ThroughputUsageExpectation {
 	assistantMessages: number;
 }
 
-interface TurnThroughputExpectation {
+interface ModelSpeedExpectation {
 	startedAtMs: number;
 	endedAtMs: number;
 	elapsedMs: number;
@@ -18,313 +18,267 @@ interface TurnThroughputExpectation {
 	usage: ThroughputUsageExpectation;
 }
 
-type ThroughputRunStateIntent =
+type ModelSpeedStateIntent =
 	| { kind: "none" }
-	| { kind: "set-current-run"; currentRun: TurnThroughputExpectation }
+	| { kind: "set-current-run"; currentRun: ModelSpeedExpectation }
 	| { kind: "clear-current-run" }
-	| { kind: "set-last-turn-and-clear-current-run"; lastTurn: TurnThroughputExpectation };
+	| { kind: "set-last-run-and-clear-current-run"; lastRun: ModelSpeedExpectation };
 
-interface ThroughputRunTrackerInstance {
-	start(startedAtMs: number): ThroughputRunStateIntent;
-	checkpoint(turnIndex: unknown, message: unknown, nowMs: ThroughputClock): ThroughputRunStateIntent;
-	finish(messages: unknown, nowMs: ThroughputClock): ThroughputRunStateIntent;
-	reset(): ThroughputRunStateIntent;
+interface ModelSpeedRunTrackerInstance {
+	start(): ModelSpeedStateIntent;
+	messageUpdate(message: unknown, assistantMessageEvent: unknown, nowMs: ModelSpeedClock): ModelSpeedStateIntent;
+	messageEnd(message: unknown): ModelSpeedStateIntent;
+	compactionRetry(willRetry: boolean): ModelSpeedStateIntent;
+	settle(): ModelSpeedStateIntent;
+	reset(): ModelSpeedStateIntent;
 }
 
-const _typeExportCheck: ExportedThroughputRunStateIntent = { kind: "none" };
-assert.equal(_typeExportCheck.kind, "none", "ThroughputRunStateIntent type export should accept the none intent shape");
+const _typeExportCheck: ExportedModelSpeedStateIntent = { kind: "none" };
+assert.equal(_typeExportCheck.kind, "none", "ModelSpeedStateIntent should remain a type-only export");
 
-type ThroughputRunTrackerConstructor = new () => ThroughputRunTrackerInstance;
+const trackerModule = (await import("../throughput-run-tracker.js")) as Record<string, unknown>;
+assert.equal(typeof trackerModule.ModelSpeedRunTracker, "function", "throughput-run-tracker.ts should export ModelSpeedRunTracker");
+const ModelSpeedRunTracker = trackerModule.ModelSpeedRunTracker as new () => ModelSpeedRunTrackerInstance;
 
-const modulePath = "../throughput-run-tracker.js";
-let trackerModule: Record<string, unknown>;
-try {
-	trackerModule = (await import(modulePath)) as Record<string, unknown>;
-} catch (error) {
-	assert.fail(`throughput-run-tracker.ts should exist as a pure lifecycle module exporting ThroughputRunTracker; import failed: ${(error as Error).message}`);
+function tracker(): ModelSpeedRunTrackerInstance {
+	return new ModelSpeedRunTracker();
 }
 
-assert.equal(typeof trackerModule.ThroughputRunTracker, "function", "throughput-run-tracker.ts should export ThroughputRunTracker");
-assert.equal("ThroughputRunStateIntent" in trackerModule, false, "ThroughputRunStateIntent should stay a compile-time-only type export");
-assert.equal("ThroughputClock" in trackerModule, false, "ThroughputClock should stay a compile-time-only type export");
-
-const ThroughputRunTracker = trackerModule.ThroughputRunTracker as ThroughputRunTrackerConstructor;
-
-function tracker(): ThroughputRunTrackerInstance {
-	return new ThroughputRunTracker();
-}
-
-function assistant(output: number, extras: Record<string, unknown> = {}, stopReason = "stop"): unknown {
+function assistant(output: number, extras: Record<string, unknown> = {}, stopReason = "stop", responseId?: string): unknown {
 	return {
 		role: "assistant",
+		responseId,
 		stopReason,
 		usage: { output, totalTokens: output, ...extras },
 	};
 }
 
-function user(output: number): unknown {
-	return { role: "user", usage: { output, totalTokens: output } };
+function user(): unknown {
+	return { role: "user" };
 }
 
-function clock(value: number): ThroughputClock {
+function textDelta(): unknown {
+	return { type: "text_delta" };
+}
+
+function toolCallDelta(): unknown {
+	return { type: "toolcall_delta" };
+}
+
+function thinkingDelta(): unknown {
+	return { type: "thinking_delta" };
+}
+
+function event(type: string): unknown {
+	return { type };
+}
+
+function clock(value: number): ModelSpeedClock {
 	return () => value;
 }
 
-function throwingClock(message = "tracker should not read the clock on this path"): ThroughputClock {
+function throwingClock(message = "tracker should not read the clock on this path"): ModelSpeedClock {
 	return () => {
 		throw new Error(message);
 	};
 }
 
-function expectTurn(actual: TurnThroughputExpectation, expected: TurnThroughputExpectation, message: string): void {
-	assert.deepEqual(actual, expected, message);
+function measurement(startedAtMs: number, endedAtMs: number, elapsedMs: number, output: number, options: Partial<ThroughputUsageExpectation> = {}): ModelSpeedExpectation {
+	return {
+		startedAtMs,
+		endedAtMs,
+		elapsedMs,
+		tokensPerSecond: output / (elapsedMs / 1000),
+		usage: {
+			input: options.input ?? 0,
+			output,
+			cacheRead: options.cacheRead ?? 0,
+			cacheWrite: options.cacheWrite ?? 0,
+			totalTokens: options.totalTokens ?? output,
+			assistantMessages: options.assistantMessages ?? 1,
+		},
+	};
 }
 
-function expectCurrent(intent: ThroughputRunStateIntent, expected: TurnThroughputExpectation, message: string): void {
+function expectCurrent(intent: ModelSpeedStateIntent, expected: ModelSpeedExpectation, message: string): void {
 	assert.equal(intent.kind, "set-current-run", message);
-	expectTurn((intent as Extract<ThroughputRunStateIntent, { kind: "set-current-run" }>).currentRun, expected, message);
+	assert.deepEqual((intent as Extract<ModelSpeedStateIntent, { kind: "set-current-run" }>).currentRun, expected, message);
 }
 
-function expectFinal(intent: ThroughputRunStateIntent, expected: TurnThroughputExpectation, message: string): void {
-	assert.equal(intent.kind, "set-last-turn-and-clear-current-run", message);
-	expectTurn((intent as Extract<ThroughputRunStateIntent, { kind: "set-last-turn-and-clear-current-run" }>).lastTurn, expected, message);
-}
-
-{
-	const run = tracker();
-	assert.deepEqual(run.start(1_000), { kind: "clear-current-run" }, "start should reset local lifecycle state and request stale currentRun clearing");
+function expectFinal(intent: ModelSpeedStateIntent, expected: ModelSpeedExpectation, message: string): void {
+	assert.equal(intent.kind, "set-last-run-and-clear-current-run", message);
+	assert.deepEqual((intent as Extract<ModelSpeedStateIntent, { kind: "set-last-run-and-clear-current-run" }>).lastRun, expected, message);
 }
 
 {
 	const run = tracker();
-	run.start(1_000);
+	assert.deepEqual(run.start(), { kind: "clear-current-run" }, "first agent_start should begin one logical settled run");
+	assert.deepEqual(run.start(), { kind: "none" }, "retry or queued-continuation agent_start should resume rather than reset the logical run");
+}
+
+{
+	const run = tracker();
+	assert.deepEqual(run.messageUpdate(assistant(40), textDelta(), throwingClock()), { kind: "none" }, "updates before agent_start should be ignored without clock reads");
+	assert.deepEqual(run.messageUpdate(user(), textDelta(), throwingClock()), { kind: "none" }, "non-assistant updates should be ignored without clock reads");
+}
+
+{
+	const run = tracker();
+	run.start();
+	run.messageUpdate(assistant(40), textDelta(), clock(1_000));
+	run.messageUpdate(assistant(40), textDelta(), clock(2_250));
+	const expected = measurement(1_000, 2_250, 1_250, 40);
+	expectCurrent(run.messageEnd(assistant(40, {}, "stop", "basic")), expected, "message_end should publish a provisional model-speed checkpoint");
+	expectFinal(run.settle(), expected, "agent_settled should promote the checkpoint to the trusted final value");
+	assert.deepEqual(run.settle(), { kind: "clear-current-run" }, "duplicate settle after reset should only clear provisional state");
+}
+
+{
+	const run = tracker();
+	run.start();
+	run.messageUpdate(assistant(100), textDelta(), clock(1_000));
+	run.messageUpdate(assistant(100), textDelta(), clock(1_500));
+	assert.deepEqual(run.messageUpdate(assistant(100), event("text_end"), throwingClock()), { kind: "none" }, "text boundaries should not require clock reads");
+	assert.deepEqual(run.messageUpdate(assistant(100), event("toolcall_start"), throwingClock()), { kind: "none" }, "tool-call boundaries should not require clock reads");
+	run.messageUpdate(assistant(100), toolCallDelta(), clock(2_000));
+	run.messageUpdate(assistant(100), toolCallDelta(), clock(2_500));
 	expectCurrent(
-		run.checkpoint(0, assistant(40), clock(2_250)),
-		{
-			startedAtMs: 1_000,
-			endedAtMs: 2_250,
-			elapsedMs: 1_250,
-			tokensPerSecond: 32,
-			usage: {
-				input: 0,
-				output: 40,
-				cacheRead: 0,
-				cacheWrite: 0,
-				totalTokens: 40,
-				assistantMessages: 1,
-			},
-		},
-		"accepted assistant checkpoint should set a provisional currentRun",
+		run.messageEnd(assistant(100, { reasoning: 20, totalTokens: 100 }, "toolUse", "mixed")),
+		measurement(1_000, 2_500, 1_500, 80, { totalTokens: 100 }),
+		"mixed text/tool-call responses should time both non-reasoning output forms and subtract reported reasoning",
 	);
 }
 
 {
 	const run = tracker();
-	assert.deepEqual(
-		run.checkpoint(0, assistant(40), throwingClock()),
-		{ kind: "none" },
-		"checkpoint without start should be a no-op and must not read the clock",
-	);
-}
-
-{
-	const run = tracker();
-	run.start(1_000);
-	run.checkpoint(7, assistant(20), clock(2_000));
-	assert.deepEqual(
-		run.checkpoint(7, assistant(20), throwingClock()),
-		{ kind: "none" },
-		"duplicate finite turnIndex should be ignored after first accepted assistant checkpoint and must not read the clock",
-	);
-}
-
-{
-	const run = tracker();
-	run.start(1_000);
-	assert.deepEqual(
-		run.checkpoint(7, user(99), throwingClock()),
-		{ kind: "none" },
-		"non-assistant checkpoint should be ignored and must not read the clock",
-	);
+	run.start();
+	run.messageUpdate(assistant(50), textDelta(), clock(1_000));
+	run.messageUpdate(assistant(50), textDelta(), clock(2_000));
+	assert.deepEqual(run.messageUpdate(assistant(50), thinkingDelta(), throwingClock()), { kind: "none" }, "thinking events should close output timing without reading their content or a clock");
+	run.messageUpdate(assistant(50), textDelta(), clock(5_000));
+	run.messageUpdate(assistant(50), textDelta(), clock(6_000));
 	expectCurrent(
-		run.checkpoint(7, assistant(20), clock(2_000)),
-		{
-			startedAtMs: 1_000,
-			endedAtMs: 2_000,
-			elapsedMs: 1_000,
-			tokensPerSecond: 20,
-			usage: {
-				input: 0,
-				output: 20,
-				cacheRead: 0,
-				cacheWrite: 0,
-				totalTokens: 20,
-				assistantMessages: 1,
-			},
-		},
-		"non-assistant checkpoint should not mark a finite turnIndex as seen",
+		run.messageEnd(assistant(50, {}, "stop", "split")),
+		measurement(1_000, 6_000, 2_000, 50),
+		"reasoning intervals between visible output spans should be excluded from active output time",
 	);
 }
 
 {
 	const run = tracker();
-	run.start(1_000);
-	run.checkpoint(0, assistant(20, { input: 3, cacheRead: 2 }), clock(2_000));
+	run.start();
+	run.messageUpdate(assistant(30), toolCallDelta(), clock(1_000));
+	run.messageUpdate(assistant(30), toolCallDelta(), clock(2_000));
 	expectCurrent(
-		run.checkpoint(1, assistant(60, { input: 7, cacheWrite: 5 }), clock(4_000)),
-		{
-			startedAtMs: 1_000,
-			endedAtMs: 4_000,
-			elapsedMs: 3_000,
-			tokensPerSecond: 80 / 3,
-			usage: {
-				input: 10,
-				output: 80,
-				cacheRead: 2,
-				cacheWrite: 5,
-				totalTokens: 80,
-				assistantMessages: 2,
-			},
-		},
-		"accepted assistant checkpoints should accumulate into the provisional currentRun",
+		run.messageEnd(assistant(30, {}, "toolUse", "tool-only")),
+		measurement(1_000, 2_000, 1_000, 30),
+		"tool-call-only responses should have defined model speed when tool-call deltas are measurable",
 	);
 }
 
 {
 	const run = tracker();
-	run.start(1_000);
-	assert.deepEqual(
-		run.checkpoint(0, assistant(0), clock(2_000)),
-		{ kind: "clear-current-run" },
-		"accepted assistant checkpoint with invalid measurement should clear currentRun",
-	);
+	run.start();
+	run.messageUpdate(assistant(20), textDelta(), clock(1_000));
+	run.messageUpdate(assistant(20), textDelta(), clock(2_000));
+	run.messageEnd(assistant(20, {}, "toolUse", "first-call"));
+	assert.deepEqual(run.start(), { kind: "none" }, "queued continuation should not reset completed model calls");
+	run.messageUpdate(assistant(60), textDelta(), clock(5_000));
+	run.messageUpdate(assistant(60), textDelta(), clock(6_000));
+	const expected = measurement(1_000, 6_000, 2_000, 80, { totalTokens: 80, assistantMessages: 2 });
+	expectCurrent(run.messageEnd(assistant(60, {}, "stop", "second-call")), expected, "continuations should aggregate calls but exclude inter-call waiting");
+	expectFinal(run.settle(), expected, "queued follow-ups should finalize only at the one agent_settled boundary");
+}
+
+{
+	const run = tracker();
+	run.start();
+	run.messageUpdate(assistant(20), textDelta(), clock(1_000));
+	run.messageUpdate(assistant(20), textDelta(), clock(2_000));
+	run.messageEnd(assistant(20, {}, "toolUse", "pre-retry"));
+	run.messageUpdate(assistant(5), textDelta(), clock(3_000));
+	run.messageUpdate(assistant(5), textDelta(), clock(4_000));
+	assert.deepEqual(run.messageEnd(assistant(5, {}, "error", "failed")), { kind: "clear-current-run" }, "a failed attempt should clear the provisional aggregate while retry status is unresolved");
+	assert.deepEqual(run.start(), { kind: "none" }, "automatic retry agent_start should resume accumulated successful calls");
+	run.messageUpdate(assistant(60), textDelta(), clock(5_000));
+	run.messageUpdate(assistant(60), textDelta(), clock(6_000));
+	const expected = measurement(1_000, 6_000, 2_000, 80, { totalTokens: 80, assistantMessages: 2 });
+	expectCurrent(run.messageEnd(assistant(60, {}, "stop", "retry-success")), expected, "successful retry should exclude the failed stream but retain earlier successful calls");
+	expectFinal(run.settle(), expected, "a recovered retry should become trusted only when Pi settles");
+}
+
+{
+	const run = tracker();
+	run.start();
+	run.messageUpdate(assistant(10), textDelta(), clock(1_000));
+	run.messageUpdate(assistant(10), textDelta(), clock(2_000));
+	run.messageEnd(assistant(10, {}, "toolUse", "before-length"));
+	run.messageUpdate(assistant(100), textDelta(), clock(3_000));
+	run.messageUpdate(assistant(100), textDelta(), clock(4_000));
+	run.messageEnd(assistant(100, {}, "length", "truncated"));
 	expectCurrent(
-		run.checkpoint(1, assistant(20), clock(3_000)),
-		{
-			startedAtMs: 1_000,
-			endedAtMs: 3_000,
-			elapsedMs: 2_000,
-			tokensPerSecond: 10,
-			usage: {
-				input: 0,
-				output: 20,
-				cacheRead: 0,
-				cacheWrite: 0,
-				totalTokens: 20,
-				assistantMessages: 2,
-			},
-		},
-		"invalid accepted checkpoints should remain in the accumulator for later valid provisional measurements",
+		run.compactionRetry(true),
+		measurement(1_000, 2_000, 1_000, 10),
+		"overflow compaction retry should remove the truncated length response from provisional speed",
 	);
+	run.start();
+	run.messageUpdate(assistant(30), textDelta(), clock(5_000));
+	run.messageUpdate(assistant(30), textDelta(), clock(6_000));
+	const expected = measurement(1_000, 6_000, 2_000, 40, { totalTokens: 40, assistantMessages: 2 });
+	run.messageEnd(assistant(30, {}, "stop", "after-compact"));
+	expectFinal(run.settle(), expected, "compaction retry should finalize the replacement response, not the discarded truncated one");
 }
 
 {
 	const run = tracker();
-	run.start(1_000);
-	run.checkpoint(0, assistant(20), clock(2_000));
-	expectFinal(
-		run.finish([assistant(90)], clock(3_000)),
-		{
-			startedAtMs: 1_000,
-			endedAtMs: 3_000,
-			elapsedMs: 2_000,
-			tokensPerSecond: 45,
-			usage: {
-				input: 0,
-				output: 90,
-				cacheRead: 0,
-				cacheWrite: 0,
-				totalTokens: 90,
-				assistantMessages: 1,
-			},
-		},
-		"finish should calculate final lastTurn from event.messages rather than the checkpoint accumulator",
-	);
-	assert.deepEqual(
-		run.finish([assistant(1)], throwingClock()),
-		{ kind: "clear-current-run" },
-		"finish should reset internals after a valid final and no-start finish must not read the clock",
-	);
+	run.start();
+	run.messageUpdate(assistant(20), textDelta(), clock(1_000));
+	run.messageUpdate(assistant(20), textDelta(), clock(2_000));
+	assert.deepEqual(run.messageEnd(assistant(20, {}, "aborted", "abort")), { kind: "clear-current-run" }, "aborted output should not remain provisional");
+	assert.deepEqual(run.settle(), { kind: "clear-current-run" }, "an unrecovered failure should never replace the previous trusted final value");
 }
 
 {
 	const run = tracker();
-	assert.deepEqual(
-		run.finish([assistant(50)], throwingClock()),
-		{ kind: "clear-current-run" },
-		"finish without start should clear currentRun only and must not read the clock",
-	);
+	run.start();
+	assert.deepEqual(run.messageEnd(assistant(20, {}, "stop", "unmeasured")), { kind: "clear-current-run" }, "provider output without measurable output deltas should remain unknown");
+	assert.deepEqual(run.settle(), { kind: "clear-current-run" }, "unmeasured positive output should not become a final rate");
 }
 
 {
 	const run = tracker();
-	run.start(1_000);
-	assert.deepEqual(
-		run.finish([assistant(0)], clock(2_000)),
-		{ kind: "clear-current-run" },
-		"invalid final should clear currentRun only, preserving lastTurn by intent shape",
-	);
-	assert.deepEqual(
-		run.finish([assistant(20)], throwingClock()),
-		{ kind: "clear-current-run" },
-		"invalid final should reset internals after finish",
-	);
+	run.start();
+	run.messageUpdate(assistant(20), textDelta(), clock(1_000));
+	assert.deepEqual(run.messageEnd(assistant(20, {}, "stop", "single-delta")), { kind: "clear-current-run" }, "one output timestamp cannot define a duration");
 }
 
 {
 	const run = tracker();
-	run.start(1_000);
-	assert.deepEqual(
-		run.finish({ messages: [assistant(20)] }, clock(2_000)),
-		{ kind: "clear-current-run" },
-		"non-array final messages should clear currentRun only, preserving lastTurn by intent shape",
-	);
-	assert.deepEqual(
-		run.finish([assistant(20)], throwingClock()),
-		{ kind: "clear-current-run" },
-		"non-array final should reset internals after finish",
-	);
+	run.start();
+	run.messageUpdate(assistant(20), textDelta(), clock(1_000));
+	run.messageUpdate(assistant(20), textDelta(), clock(2_000));
+	const finalMessage = assistant(20, {}, "stop", "dedupe");
+	const expected = measurement(1_000, 2_000, 1_000, 20);
+	expectCurrent(run.messageEnd(finalMessage), expected, "first final responseId should be accepted");
+	assert.deepEqual(run.messageEnd(assistant(999, {}, "stop", "dedupe")), { kind: "none" }, "duplicate responseId should not add an unmeasured duplicate sample");
+	expectFinal(run.settle(), expected, "duplicate message_end should leave the original measurement intact");
 }
 
 {
 	const run = tracker();
-	run.start(1_000);
-	run.checkpoint(0, assistant(20), clock(2_000));
-	assert.deepEqual(run.reset(), { kind: "none" }, "reset should clear internals only and return no visible intent");
-	assert.deepEqual(
-		run.checkpoint(1, assistant(20), throwingClock()),
-		{ kind: "none" },
-		"checkpoint after reset should see no active start and must not read the clock",
-	);
-	assert.deepEqual(
-		run.finish([assistant(20)], throwingClock()),
-		{ kind: "clear-current-run" },
-		"finish after reset should clear currentRun only and must not read the clock",
-	);
+	run.start();
+	run.messageUpdate(assistant(20), textDelta(), clock(2_000));
+	run.messageUpdate(assistant(20), textDelta(), clock(1_000));
+	assert.deepEqual(run.messageEnd(assistant(20, {}, "stop", "clock-regression")), { kind: "clear-current-run" }, "non-monotonic output timestamps should invalidate the response");
 }
 
 {
 	const run = tracker();
-	run.start(1_000);
-	run.checkpoint(undefined, assistant(20), clock(2_000));
-	expectCurrent(
-		run.checkpoint(undefined, assistant(30), clock(3_000)),
-		{
-			startedAtMs: 1_000,
-			endedAtMs: 3_000,
-			elapsedMs: 2_000,
-			tokensPerSecond: 25,
-			usage: {
-				input: 0,
-				output: 50,
-				cacheRead: 0,
-				cacheWrite: 0,
-				totalTokens: 50,
-				assistantMessages: 2,
-			},
-		},
-		"undefined turnIndex checkpoints should not be duplicate-guarded",
-	);
+	run.start();
+	run.messageUpdate(assistant(20), textDelta(), clock(1_000));
+	assert.deepEqual(run.reset(), { kind: "none" }, "reset should clear lifecycle facts without a visible intent");
+	assert.deepEqual(run.messageEnd(assistant(20, {}, "stop", "after-reset")), { kind: "none" }, "message_end after reset should be ignored");
+	assert.deepEqual(run.settle(), { kind: "clear-current-run" }, "settle after reset should only clear provisional state");
 }
 
-console.log("✓ throughput run tracker checks passed");
+console.log("✓ model-speed run tracker checks passed");

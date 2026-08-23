@@ -1,15 +1,26 @@
-import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { ExtensionContext, MessageEndEvent, MessageUpdateEvent, SessionCompactEvent } from "@earendil-works/pi-coding-agent";
 import { applyRuntimeRefreshPlan } from "./runtime-plan-executor.js";
 import { runtimePlanFor, type RuntimeEventFacts, type RuntimeEventKind } from "./runtime-policy.js";
 import { stateInputsFromContext, usageTotalsFromEntry, usageTotalsFromMessage, type StateInputs, type StateMessageInputs, type StateSessionEntry } from "./runtime-snapshot.js";
-import { addUsageTotals, clearCurrentRunThroughput, createInitialState, setCurrentRunThroughput, setGitSnapshot, setLastTurnThroughput } from "./state.js";
-import { ThroughputRunTracker, type ThroughputRunStateIntent } from "./throughput-run-tracker.js";
+import { addUsageTotals, clearCurrentRunModelSpeed, createInitialState, setCurrentRunModelSpeed, setGitSnapshot, setLastRunModelSpeed } from "./state.js";
+import { ModelSpeedRunTracker, type ModelSpeedStateIntent } from "./throughput-run-tracker.js";
 import type { GitSnapshot, GlanceConfig, GlanceState, UsageTotals } from "./types.js";
 
-export type RuntimeMessageEndInput = StateMessageInputs;
+export interface RuntimeMessageUpdateInput {
+	type?: MessageUpdateEvent["type"];
+	message: StateMessageInputs;
+	assistantMessageEvent: { type: MessageUpdateEvent["assistantMessageEvent"]["type"] };
+}
+
+export interface RuntimeMessageEndInput {
+	type?: MessageEndEvent["type"];
+	message: StateMessageInputs;
+}
 
 export interface RuntimeSessionCompactInput {
+	type?: SessionCompactEvent["type"];
 	compactionEntry: StateSessionEntry;
+	willRetry?: boolean;
 }
 
 export interface RuntimeTurnEndInput {
@@ -35,18 +46,18 @@ export interface RuntimeRefreshExecuteOptions {
 	beforeRender?: () => void;
 }
 
-function applyThroughputIntent(state: GlanceState, intent: ThroughputRunStateIntent): boolean {
+function applyModelSpeedIntent(state: GlanceState, intent: ModelSpeedStateIntent): boolean {
 	switch (intent.kind) {
 		case "none":
 			return false;
 		case "set-current-run":
-			return setCurrentRunThroughput(state, intent.currentRun);
+			return setCurrentRunModelSpeed(state, intent.currentRun);
 		case "clear-current-run":
-			return clearCurrentRunThroughput(state);
-		case "set-last-turn-and-clear-current-run": {
-			const lastTurnChanged = setLastTurnThroughput(state, intent.lastTurn);
-			const currentRunChanged = clearCurrentRunThroughput(state);
-			return lastTurnChanged || currentRunChanged;
+			return clearCurrentRunModelSpeed(state);
+		case "set-last-run-and-clear-current-run": {
+			const lastRunChanged = setLastRunModelSpeed(state, intent.lastRun);
+			const currentRunChanged = clearCurrentRunModelSpeed(state);
+			return lastRunChanged || currentRunChanged;
 		}
 	}
 }
@@ -55,7 +66,7 @@ export class RuntimeRefreshSession {
 	private state?: GlanceState;
 	private appliedUsageObjects = new WeakSet<object>();
 	private appliedUsageKeys = new Set<string>();
-	private readonly throughputTracker = new ThroughputRunTracker();
+	private readonly modelSpeedTracker = new ModelSpeedRunTracker();
 
 	constructor(private readonly host: RuntimeRefreshSessionHost) {}
 
@@ -70,7 +81,7 @@ export class RuntimeRefreshSession {
 	resetAccumulators(): void {
 		this.appliedUsageObjects = new WeakSet<object>();
 		this.appliedUsageKeys = new Set<string>();
-		this.throughputTracker.reset();
+		this.modelSpeedTracker.reset();
 	}
 
 	resetState(ctx: ExtensionContext): GlanceState {
@@ -112,7 +123,7 @@ export class RuntimeRefreshSession {
 		return addUsageTotals(this.state, delta);
 	}
 
-	private messageUsageKey(message: RuntimeMessageEndInput): string | undefined {
+	private messageUsageKey(message: StateMessageInputs): string | undefined {
 		if (message.role === "assistant" && typeof message.responseId === "string" && message.responseId) {
 			return `assistant:${message.responseId}`;
 		}
@@ -144,50 +155,53 @@ export class RuntimeRefreshSession {
 		if (plan.render) this.host.requestRender();
 	}
 
-	async messageEnd(message: RuntimeMessageEndInput, ctx: ExtensionContext): Promise<void> {
+	messageUpdate(event: RuntimeMessageUpdateInput): void {
+		this.modelSpeedTracker.messageUpdate(event.message, event.assistantMessageEvent, () => this.host.nowMs());
+	}
+
+	async messageEnd(event: RuntimeMessageEndInput, ctx: ExtensionContext): Promise<void> {
+		const message = event.message;
 		const hadState = this.state !== undefined;
 		const delta = usageTotalsFromMessage(message);
+		const modelSpeedIntent = this.modelSpeedTracker.messageEnd(event.message);
 		await this.execute("message_end", ctx, {
 			facts: { messageRole: message.role, messageHasUsage: !this.usageTotalsAreZero(delta) },
 			beforeRender: () => {
-				if (hadState) this.applyUsageDelta(message, delta, this.messageUsageKey(message));
+				if (hadState) this.applyUsageDelta(event.message, delta, this.messageUsageKey(message));
+				if (this.state) applyModelSpeedIntent(this.state, modelSpeedIntent);
 			},
 		});
 	}
 
 	async sessionCompact(event: RuntimeSessionCompactInput, ctx: ExtensionContext): Promise<void> {
 		const hadState = this.state !== undefined;
-		const entry = event.compactionEntry;
+		const entry = event.compactionEntry as StateSessionEntry;
 		const delta = usageTotalsFromEntry(entry);
+		const modelSpeedIntent = this.modelSpeedTracker.compactionRetry(event.willRetry === true);
 		await this.execute("session_compact", ctx, {
 			beforeRender: () => {
-				if (hadState) this.applyUsageDelta(entry, delta, this.entryUsageKey(entry));
+				if (hadState) this.applyUsageDelta(event.compactionEntry, delta, this.entryUsageKey(entry));
+				if (this.state) applyModelSpeedIntent(this.state, modelSpeedIntent);
 			},
 		});
 	}
 
-	async turnEnd(event: RuntimeTurnEndInput, ctx: ExtensionContext): Promise<void> {
-		await this.execute("turn_end", ctx, {
-			beforeRender: () => {
-				if (!this.state) return;
-				applyThroughputIntent(this.state, this.throughputTracker.checkpoint(event.turnIndex, event.message, () => this.host.nowMs()));
-			},
-		});
+	async turnEnd(_event: RuntimeTurnEndInput, ctx: ExtensionContext): Promise<void> {
+		await this.execute("turn_end", ctx);
 	}
 
 	agentStart(): void {
-		const intent = this.throughputTracker.start(this.host.nowMs());
-		if (this.state && applyThroughputIntent(this.state, intent)) this.host.requestRender();
+		const intent = this.modelSpeedTracker.start();
+		if (this.state && applyModelSpeedIntent(this.state, intent)) this.host.requestRender();
 	}
 
-	async agentEnd(event: RuntimeAgentEndInput, ctx: ExtensionContext): Promise<void> {
-		const intent = this.throughputTracker.finish(event.messages, () => this.host.nowMs());
-		await this.execute("agent_end", ctx, {
-			beforeRender: () => {
-				if (!this.state) return;
-				applyThroughputIntent(this.state, intent);
-			},
-		});
+	async agentEnd(_event: RuntimeAgentEndInput, ctx: ExtensionContext): Promise<void> {
+		await this.execute("agent_end", ctx);
+	}
+
+	agentSettled(): void {
+		const intent = this.modelSpeedTracker.settle();
+		if (this.state && applyModelSpeedIntent(this.state, intent)) this.host.requestRender();
 	}
 
 	applyGitSnapshot(cwd: string, snapshot: GitSnapshot): boolean {

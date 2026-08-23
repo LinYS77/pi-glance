@@ -5,7 +5,7 @@
 **A calm input surface for [pi](https://github.com/earendil-works/pi)**
 
 Replace the default prompt with a rounded multiline editor
-and an inline glance at Git, cost, Reply speed, context, optional tokens, and model.
+and an inline glance at Git, cost, Model speed, context, optional tokens, and model.
 
 [![npm](https://img.shields.io/npm/v/pi-glance?style=flat-square&color=blue)](https://www.npmjs.com/package/pi-glance)
 [![CI](https://github.com/LinYS77/pi-glance/actions/workflows/ci.yml/badge.svg)](https://github.com/LinYS77/pi-glance/actions/workflows/ci.yml)
@@ -71,7 +71,7 @@ That's the only command — opens a calm settings pane with a real input-surface
 |---|---|---|
 | 🖊️ | **Rounded editor** | Configurable 2 / 3 / 4 min rows and 0 / 1 / 2 top spacing rows, preserves all pi defaults |
 | 🏷️ | **Project title** | Current folder name, or a safe `~/...` path when enabled |
-| 📊 | **Inline status** | Git · cost · Reply speed · context · optional tokens · model — top-right |
+| 📊 | **Inline status** | Git · cost · Model speed · context · optional tokens · model — top-right |
 | ⚙️ | **`/glance` pane** | General settings, segment order, and per-segment detail settings in a calm grid |
 | 💤 | **Dim unfocused** | Surface quiets down when you scroll the chat |
 | 🎨 | **Themes** | 22 built-in palettes, from Light/Dark to Catppuccin, Solarized, Gruvbox, Rosé Pine, One, Kanagawa, Everforest, and High Contrast |
@@ -84,9 +84,11 @@ That's the only command — opens a calm settings pane with a real input-surface
 - `nerd` icons are opt-in: open `/glance` → **General** → `Icons` and choose `nerd` for richer symbols.
 - Nerd icons need a Nerd Font or Symbols Nerd Font fallback. If icons look like boxes, choose `plain`.
 - pi-glance does not auto-detect, install, or bundle terminal fonts.
-- Reply speed is enabled by default and appears between cost and context. It shows output tokens per wall time: `?` means no trusted measurement yet, `~42 tok/s` is a provisional current-run checkpoint from completed turns, and `42 tok/s` is the finalized agent-end measurement.
+- Model speed is enabled by default and appears between cost and context. It divides provider-reported output minus the reported reasoning subset (when available) by active assistant output-stream time: `?` means no trusted measurement yet, `~42 tok/s` is provisional after a completed model call, and `42 tok/s` is finalized only when Pi emits `agent_settled` after all retries, compactions, and queued continuations finish.
+- Text and tool-call deltas both count as model output. Timing begins at the first output delta and sums measured non-reasoning output intervals across the settled run; pre-output waiting, reasoning spans, tool execution, and gaps between model calls are excluded. Provider-reported reasoning tokens are subtracted when available. Failed, aborted, and compaction-replaced truncated responses do not enter the final speed.
+- Model speed is intentionally narrower than the billed-session ledger used by Tokens and Cost: usage-bearing tool results, compactions, and branch summaries remain billed session facts, but they have no matching public assistant stream timing and therefore do not enter Model speed.
 - The optional Tokens segment can set Cache to `auto`, `show`, `hide`, or `rate`. `rate` shows a rounded session aggregate cache hit percentage such as `CH42%`, calculated as `cacheRead / (input + cacheRead + cacheWrite)`. The session ledger includes billed assistant responses, usage-bearing tool results, compactions, and branch summaries. A known cache miss appears as `CH0%`. No `CH%` is shown until prompt-token usage exists.
-- Configure `/glance` → **Reply speed** → `Precision`: `auto`, `1 digit`, or `0 digits`. Wall time includes tools, waiting, network, and thinking, so it is not a benchmark. Reply speed uses no notifications, no timers/tickers, no token estimation from text/deltas, and adds no command, footer, dashboard, history, or average view.
+- Configure `/glance` → **Model speed** → `Precision`: `auto`, `1 digit`, or `0 digits`. Model speed uses no notifications, no timers/tickers, and no token estimation from message or delta content. Observed inter-delta timing can still include provider/network buffering, so it is not a benchmark.
 
 ## Themes and config
 
@@ -117,7 +119,7 @@ At render time, pi-glance reads only Pi's public UI theme name to choose a slot:
 
 - **Git** — dirty marker, upstream counts, SHA, and polling.
 - **Cost** — hide zero cost.
-- **Reply speed** — enabled by default; shows unknown `?`, provisional `~`, or finalized output tokens per wall time in the status line. Precision can be `auto`, `1 digit`, or `0 digits`. It sends no notifications, uses no timers, and does not estimate tokens from text or deltas.
+- **Model speed** — enabled by default; shows unknown `?`, provisional `~`, or settled `(provider output - reported reasoning) / active text+tool-call output time`. Precision can be `auto`, `1 digit`, or `0 digits`. It finalizes at `agent_settled`, sends no notifications, uses no timers, and never tokenizes message or delta content.
 - **Context** — percent / tokens, or hide unknown usage.
 - **Tokens** — input / output or total; Cache can be `auto`, `show`, `hide`, or `rate`. Rate mode shows the rounded aggregate `CH%`. Tokens stay off by default.
 - **Model** — provider and thinking labels. Model stays last by default.
@@ -160,7 +162,7 @@ npm run debug:git
 
 - No pi core patches — public extension APIs only
 - Context facts come from Pi's public `ctx.getContextUsage()` result; `null` remains unknown after compaction until Pi reports a known value.
-- Tokens and Cost use Pi's billed-session semantics across assistant, tool, compaction, and branch-summary usage.
+- Tokens and Cost use Pi's billed-session semantics across assistant, tool, compaction, and branch-summary usage; Model speed uses only final assistant usage with matching public output-stream timing.
 - No render-time IO — Git is collected asynchronously and cached
 - Global config at `~/.pi/agent/pi-glance/config.json`
 

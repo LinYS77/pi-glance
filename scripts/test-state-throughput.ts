@@ -4,7 +4,7 @@ import { createInitialState } from "../state.js";
 import type { StateInputs } from "../runtime-snapshot.js";
 import { testState } from "./helpers.js";
 
-interface TurnThroughputFixture {
+interface ModelSpeedFixture {
 	startedAtMs: number;
 	endedAtMs: number;
 	elapsedMs: number;
@@ -20,11 +20,11 @@ interface TurnThroughputFixture {
 }
 
 type GlanceStateRecord = ReturnType<typeof testState> & Record<string, unknown>;
-type ThroughputStateMutation = (state: GlanceStateRecord, turn: TurnThroughputFixture | null) => boolean;
+type ThroughputStateMutation = (state: GlanceStateRecord, turn: ModelSpeedFixture | null) => boolean;
 type ThroughputStateClear = (state: GlanceStateRecord) => boolean;
 
-function throughput(state: unknown): { lastTurn?: unknown; currentRun?: unknown } {
-	return ((state as { throughput?: { lastTurn?: unknown; currentRun?: unknown } }).throughput ?? {}) as { lastTurn?: unknown; currentRun?: unknown };
+function throughput(state: unknown): { lastRun?: unknown; currentRun?: unknown } {
+	return ((state as { throughput?: { lastRun?: unknown; currentRun?: unknown } }).throughput ?? {}) as { lastRun?: unknown; currentRun?: unknown };
 }
 
 const inputs: StateInputs = {
@@ -39,22 +39,22 @@ const inputs: StateInputs = {
 const initial = createInitialState(inputs, defaultConfig()) as GlanceStateRecord;
 assert.deepEqual(
 	throughput(initial),
-	{ lastTurn: null, currentRun: null },
-	"createInitialState should initialize throughput.lastTurn and throughput.currentRun to null so unknown/provisional/final render states are explicit",
+	{ lastRun: null, currentRun: null },
+	"createInitialState should initialize throughput.lastRun and throughput.currentRun to null so unknown/provisional/final render states are explicit",
 );
 
 const stateModule = (await import("../state.js")) as Record<string, unknown>;
-const setLastTurnThroughput = stateModule.setLastTurnThroughput as ThroughputStateMutation | undefined;
-const clearLastTurnThroughput = stateModule.clearLastTurnThroughput as ThroughputStateClear | undefined;
-const setCurrentRunThroughput = stateModule.setCurrentRunThroughput as ThroughputStateMutation | undefined;
-const clearCurrentRunThroughput = stateModule.clearCurrentRunThroughput as ThroughputStateClear | undefined;
+const setLastRunModelSpeed = stateModule.setLastRunModelSpeed as ThroughputStateMutation | undefined;
+const clearLastRunModelSpeed = stateModule.clearLastRunModelSpeed as ThroughputStateClear | undefined;
+const setCurrentRunModelSpeed = stateModule.setCurrentRunModelSpeed as ThroughputStateMutation | undefined;
+const clearCurrentRunModelSpeed = stateModule.clearCurrentRunModelSpeed as ThroughputStateClear | undefined;
 
-assert.equal(typeof setLastTurnThroughput, "function", "state.ts should export setLastTurnThroughput(state, turn)");
-assert.equal(typeof clearLastTurnThroughput, "function", "state.ts should export clearLastTurnThroughput(state)");
-assert.equal(typeof setCurrentRunThroughput, "function", "state.ts should export setCurrentRunThroughput(state, turn) for provisional Reply speed");
-assert.equal(typeof clearCurrentRunThroughput, "function", "state.ts should export clearCurrentRunThroughput(state)");
+assert.equal(typeof setLastRunModelSpeed, "function", "state.ts should export setLastRunModelSpeed(state, turn)");
+assert.equal(typeof clearLastRunModelSpeed, "function", "state.ts should export clearLastRunModelSpeed(state)");
+assert.equal(typeof setCurrentRunModelSpeed, "function", "state.ts should export setCurrentRunModelSpeed(state, turn) for provisional Model speed");
+assert.equal(typeof clearCurrentRunModelSpeed, "function", "state.ts should export clearCurrentRunModelSpeed(state)");
 
-const finalSample: TurnThroughputFixture = {
+const finalSample: ModelSpeedFixture = {
 	startedAtMs: 1_000,
 	endedAtMs: 3_500,
 	elapsedMs: 2_500,
@@ -69,7 +69,7 @@ const finalSample: TurnThroughputFixture = {
 	},
 };
 
-const currentSample: TurnThroughputFixture = {
+const currentSample: ModelSpeedFixture = {
 	startedAtMs: 5_000,
 	endedAtMs: 6_250,
 	elapsedMs: 1_250,
@@ -85,44 +85,44 @@ const currentSample: TurnThroughputFixture = {
 };
 
 const state = testState({ version: 7 }) as GlanceStateRecord;
-(state as unknown as { throughput: { lastTurn: unknown; currentRun: unknown } }).throughput = { lastTurn: null, currentRun: null };
+(state as unknown as { throughput: { lastRun: unknown; currentRun: unknown } }).throughput = { lastRun: null, currentRun: null };
 
-assert.equal(setLastTurnThroughput!(state, finalSample), true, "setting final throughput from null should report a state change");
-assert.deepEqual(throughput(state).lastTurn, finalSample, "setLastTurnThroughput should store the latest finalized turn throughput snapshot");
+assert.equal(setLastRunModelSpeed!(state, finalSample), true, "setting final throughput from null should report a state change");
+assert.deepEqual(throughput(state).lastRun, finalSample, "setLastRunModelSpeed should store the latest finalized settled-run model-speed snapshot");
 assert.deepEqual(throughput(state).currentRun, null, "setting final throughput should not implicitly mutate currentRun; runtime clears currentRun explicitly");
 assert.equal(state.version, 8, "setting a changed final throughput snapshot should increment state.version exactly once");
 
-assert.equal(setLastTurnThroughput!(state, { ...finalSample }), false, "setting an equivalent final throughput snapshot should be a no-op");
+assert.equal(setLastRunModelSpeed!(state, { ...finalSample }), false, "setting an equivalent final throughput snapshot should be a no-op");
 assert.equal(state.version, 8, "equivalent final throughput snapshots should not increment version");
 
-const changedFinal: TurnThroughputFixture = { ...finalSample, endedAtMs: 4_000, elapsedMs: 3_000, tokensPerSecond: 16.6666666667 };
-assert.equal(setLastTurnThroughput!(state, changedFinal), true, "setting a different final throughput snapshot should report a change");
-assert.deepEqual(throughput(state).lastTurn, changedFinal, "different final throughput snapshot should replace the previous final");
+const changedFinal: ModelSpeedFixture = { ...finalSample, endedAtMs: 4_000, elapsedMs: 3_000, tokensPerSecond: 16.6666666667 };
+assert.equal(setLastRunModelSpeed!(state, changedFinal), true, "setting a different final throughput snapshot should report a change");
+assert.deepEqual(throughput(state).lastRun, changedFinal, "different final throughput snapshot should replace the previous final");
 assert.equal(state.version, 9, "different final throughput snapshot should increment state.version");
 
-assert.equal(setCurrentRunThroughput!(state, currentSample), true, "setting currentRun from null should report a state change");
-assert.deepEqual(throughput(state).currentRun, currentSample, "setCurrentRunThroughput should store the latest provisional current run snapshot");
-assert.deepEqual(throughput(state).lastTurn, changedFinal, "setting currentRun should preserve the last finalized throughput snapshot");
+assert.equal(setCurrentRunModelSpeed!(state, currentSample), true, "setting currentRun from null should report a state change");
+assert.deepEqual(throughput(state).currentRun, currentSample, "setCurrentRunModelSpeed should store the latest provisional current run snapshot");
+assert.deepEqual(throughput(state).lastRun, changedFinal, "setting currentRun should preserve the last finalized throughput snapshot");
 assert.equal(state.version, 10, "setting changed currentRun should increment state.version exactly once");
 
-assert.equal(setCurrentRunThroughput!(state, { ...currentSample }), false, "setting an equivalent currentRun snapshot should be a no-op");
+assert.equal(setCurrentRunModelSpeed!(state, { ...currentSample }), false, "setting an equivalent currentRun snapshot should be a no-op");
 assert.equal(state.version, 10, "equivalent currentRun snapshots should not increment version");
 
-const changedCurrent: TurnThroughputFixture = { ...currentSample, endedAtMs: 7_000, elapsedMs: 2_000, tokensPerSecond: 20 };
-assert.equal(setCurrentRunThroughput!(state, changedCurrent), true, "setting a different currentRun snapshot should report a change");
+const changedCurrent: ModelSpeedFixture = { ...currentSample, endedAtMs: 7_000, elapsedMs: 2_000, tokensPerSecond: 20 };
+assert.equal(setCurrentRunModelSpeed!(state, changedCurrent), true, "setting a different currentRun snapshot should report a change");
 assert.deepEqual(throughput(state).currentRun, changedCurrent, "different currentRun snapshot should replace the previous provisional snapshot");
-assert.deepEqual(throughput(state).lastTurn, changedFinal, "changing currentRun should still preserve lastTurn");
+assert.deepEqual(throughput(state).lastRun, changedFinal, "changing currentRun should still preserve lastRun");
 assert.equal(state.version, 11, "different currentRun snapshot should increment state.version");
 
-assert.equal(clearCurrentRunThroughput!(state), true, "clearing a present currentRun snapshot should report a state change");
-assert.deepEqual(throughput(state), { lastTurn: changedFinal, currentRun: null }, "clearCurrentRunThroughput should leave lastTurn intact and only clear currentRun");
+assert.equal(clearCurrentRunModelSpeed!(state), true, "clearing a present currentRun snapshot should report a state change");
+assert.deepEqual(throughput(state), { lastRun: changedFinal, currentRun: null }, "clearCurrentRunModelSpeed should leave lastRun intact and only clear currentRun");
 assert.equal(state.version, 12, "clearing present currentRun should increment state.version");
 
-assert.equal(clearCurrentRunThroughput!(state), false, "clearing an already-null currentRun should be a no-op");
+assert.equal(clearCurrentRunModelSpeed!(state), false, "clearing an already-null currentRun should be a no-op");
 assert.equal(state.version, 12, "clearing an already-null currentRun should not increment version");
 
-assert.equal(clearLastTurnThroughput!(state), true, "clearing a present final throughput snapshot should report a state change");
-assert.deepEqual(throughput(state), { lastTurn: null, currentRun: null }, "clearLastTurnThroughput should leave throughput slots null when currentRun is already null");
-assert.equal(state.version, 13, "clearing present lastTurn should increment state.version");
+assert.equal(clearLastRunModelSpeed!(state), true, "clearing a present final throughput snapshot should report a state change");
+assert.deepEqual(throughput(state), { lastRun: null, currentRun: null }, "clearLastRunModelSpeed should leave throughput slots null when currentRun is already null");
+assert.equal(state.version, 13, "clearing present lastRun should increment state.version");
 
 console.log("✓ throughput state checks passed");

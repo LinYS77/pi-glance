@@ -218,7 +218,7 @@ assert.deepEqual(
 		{ id: "general", label: "General", enabled: undefined, selected: true },
 		{ id: "git", label: "Git", enabled: true, selected: false },
 		{ id: "cost", label: "Cost", enabled: true, selected: false },
-		{ id: "throughput", label: "Reply speed", enabled: true, selected: false },
+		{ id: "throughput", label: "Model speed", enabled: true, selected: false },
 		{ id: "context", label: "Context", enabled: true, selected: false },
 		{ id: "tokens", label: "Tokens", enabled: false, selected: false },
 		{ id: "model", label: "Model", enabled: true, selected: false },

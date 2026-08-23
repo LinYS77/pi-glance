@@ -155,6 +155,10 @@ for (const matrixCase of [
 		invoke: (harness, test) => harness.runtime.events.toolExecutionEnd({}, test.ctx as ExtensionContext),
 	},
 	{
+		name: "message_update",
+		invoke: (harness, test) => harness.runtime.events.messageUpdate({ message: assistantMessage({ usage: { output: 4, totalTokens: 4 } }), assistantMessageEvent: { type: "text_delta" } }, test.ctx as ExtensionContext),
+	},
+	{
 		name: "assistant message_end",
 		invoke: (harness, test) => harness.runtime.events.messageEnd({ message: assistantMessage({ usage: { input: 2, output: 3, totalTokens: 5, cost: { total: 0.1 } } }) }, test.ctx as ExtensionContext),
 	},
@@ -175,6 +179,10 @@ for (const matrixCase of [
 		name: "agent_end",
 		prepare: (harness, test) => harness.runtime.events.agentStart({}, test.ctx as ExtensionContext),
 		invoke: (harness, test) => harness.runtime.events.agentEnd({ messages: [assistantMessage({ usage: { output: 4, totalTokens: 4 } })] }, test.ctx as ExtensionContext),
+	},
+	{
+		name: "agent_settled",
+		invoke: (harness, test) => harness.runtime.events.agentSettled({}, test.ctx as ExtensionContext),
 	},
 	{
 		name: "session_shutdown",
