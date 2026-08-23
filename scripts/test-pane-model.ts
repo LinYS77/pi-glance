@@ -257,6 +257,7 @@ assertHelp(
 		{ key: "←→↑↓", label: "move" },
 		{ key: "S", label: "save" },
 		{ key: "R", label: "reset" },
+		{ key: "Enter", label: "open" },
 		{ key: "J/K", label: "reorder" },
 		{ key: "Esc", label: "cancel" },
 	],
@@ -289,36 +290,37 @@ const upFromGeneral = move(model, "up");
 assert.equal(upFromGeneral.requestRender, true, "category up should request render");
 assert.equal(upFromGeneral.model.focus, "categories", "category up should stay in categories");
 assert.equal(upFromGeneral.model.categoryIndex, categories.length - 1, "category up from General should wrap to the last category");
-assert.equal(upFromGeneral.model.settingIndex, 2, "category up should sync setting index to the selected visual row bounded by row count");
+assert.equal(upFromGeneral.model.settingIndex, 0, "category movement should reset the child setting selection");
 assert.equal(view(upFromGeneral.model).selectedCategory?.id, "model", "category up wrap should select Model, the default final segment");
-assert.equal(selectedSetting(view(upFromGeneral.model)).id, "model.thinkingLabel", "category up sync should select Model's visible row");
+assert.equal(selectedSetting(view(upFromGeneral.model)).id, "model.enabled", "entering a different category should start at its first setting");
 
 const downToGit = move(model, "down");
 assert.equal(downToGit.requestRender, true, "category down should request render");
 assert.equal(downToGit.model.categoryIndex, 1, "category down from General should select Git");
-assert.equal(downToGit.model.settingIndex, 1, "category down should sync to the same visual row");
+assert.equal(downToGit.model.settingIndex, 0, "category movement should reset Git to its first child setting");
 assert.equal(view(downToGit.model).selectedCategory?.id, "git", "category down should select Git");
-assert.equal(selectedSetting(view(downToGit.model)).id, "git.dirtyMarker", "category down should sync to Git dirty marker row");
+assert.equal(selectedSetting(view(downToGit.model)).id, "git.enabled", "newly selected Git category should start on Enabled");
 
 const gitSettings = move(downToGit.model, "right");
 assert.equal(gitSettings.requestRender, true, "right from categories should request render");
 assert.equal(gitSettings.model.focus, "settings", "right from categories should focus settings");
-assert.equal(gitSettings.model.settingIndex, 1, "right from categories should keep the selected visual row");
-assert.equal(selectedSetting(view(gitSettings.model)).id, "git.dirtyMarker", "right from Git should select Dirty marker in settings");
+assert.equal(gitSettings.model.settingIndex, 0, "right from categories should preserve the category's child selection");
+assert.equal(selectedSetting(view(gitSettings.model)).id, "git.enabled", "right from Git should enter its first child setting");
 assert.equal(selectedSetting(view(gitSettings.model)).labelHasFocus, true, "settings focus should mark the selected label as focused");
 assert.equal(selectedSetting(view(gitSettings.model)).valueHasFocus, false, "settings focus should not mark the selected value as focused");
 
 const settingsDown = move(gitSettings.model, "down");
 assert.equal(settingsDown.model.focus, "settings", "down in settings should stay in settings");
 assert.equal(settingsDown.model.categoryIndex, 1, "down in settings should not change category index");
-assert.equal(settingsDown.model.settingIndex, 2, "down in settings should move to the next setting row");
-assert.equal(selectedSetting(view(settingsDown.model)).id, "git.aheadBehind", "down in settings should select Ahead / behind");
+assert.equal(settingsDown.model.settingIndex, 1, "down in settings should move to the next setting row");
+assert.equal(selectedSetting(view(settingsDown.model)).id, "git.dirtyMarker", "down in settings should select Dirty marker");
 
 const leftToCategories = move(settingsDown.model, "left");
 assert.equal(leftToCategories.requestRender, true, "left from settings should request render");
 assert.equal(leftToCategories.model.focus, "categories", "left from settings should focus categories");
-assert.equal(leftToCategories.model.categoryIndex, 2, "left from settings should sync the category to the same visual row");
-assert.equal(view(leftToCategories.model).selectedCategory?.id, "cost", "left from settings visual row 2 should select Cost");
+assert.equal(leftToCategories.model.categoryIndex, 1, "left from settings should preserve the parent category");
+assert.equal(leftToCategories.model.settingIndex, 1, "left from settings should preserve the selected child for re-entry");
+assert.equal(view(leftToCategories.model).selectedCategory?.id, "git", "left from settings should return to the Git parent category");
 
 const gitSettingsTop = withFocus(model, "settings", 1, 0);
 const settingsWrapUp = move(gitSettingsTop, "up");
@@ -493,10 +495,12 @@ const dirtyBrowserPreview = move(dirtyBrowserOpened.model, "down");
 const dirtyBrowserRestored = updatePaneModel(dirtyBrowserPreview.model, { type: "back" });
 assert.equal(lightTheme(dirtyBrowserRestored.model.draft), "tokyo-night", "restore should use the dirty draft theme active when browser opened");
 assert.equal(paneIsDirty(dirtyBrowserRestored.model), false, "restoring to a non-default initial draft should preserve existing dirty comparison semantics");
-const dirtyBrowserBackToCategories = updatePaneModel(dirtyBrowserRestored.model, { type: "back" });
-assert.equal(dirtyBrowserBackToCategories.requestRender, true, "Esc/q after returning from theme browser should use existing values-column back behavior");
-assert.equal(dirtyBrowserBackToCategories.completion, undefined, "values-column back after browser restore should not cancel immediately");
-assert.equal(dirtyBrowserBackToCategories.model.focus, "categories", "values-column back after browser restore should return to categories");
+const dirtyBrowserBackToSettings = updatePaneModel(dirtyBrowserRestored.model, { type: "back" });
+assert.equal(dirtyBrowserBackToSettings.requestRender, true, "Esc/q after returning from theme browser should step from values to settings");
+assert.equal(dirtyBrowserBackToSettings.completion, undefined, "values-column back after browser restore should not cancel immediately");
+assert.equal(dirtyBrowserBackToSettings.model.focus, "settings", "values-column back after browser restore should return to the setting label");
+const dirtyBrowserBackToCategories = updatePaneModel(dirtyBrowserBackToSettings.model, { type: "back" });
+assert.equal(dirtyBrowserBackToCategories.model.focus, "categories", "a second back should return from the setting label to its parent category");
 assertCancel(updatePaneModel(dirtyBrowserBackToCategories.model, { type: "back" }), "Esc/q from categories after returning from theme browser");
 
 let preDirtyThemeModel = withFocus(createPaneModel(config), "values", 0, 1);
@@ -526,14 +530,18 @@ assert.equal(lightTheme(preDirtyBrowserRestored.model.draft), "tokyo-night", "re
 assert.equal(paneIsDirty(preDirtyBrowserRestored.model), true, "restoring to a pre-existing dirty draft theme should keep the pane dirty");
 
 const enterInCategories = updatePaneModel(model, { type: "activate" });
-assert.equal(enterInCategories.requestRender, false, "Enter in categories should be a no-op without render");
+assert.equal(enterInCategories.requestRender, true, "Enter in categories should descend into the selected category");
 assert.equal(enterInCategories.completion, undefined, "Enter in categories should not complete the pane");
-assert.deepEqual(enterInCategories.model, model, "Enter in categories should not change model state");
+assert.equal(enterInCategories.model.focus, "settings", "Enter in categories should focus the first child setting");
+assert.equal(enterInCategories.model.categoryIndex, 0, "descending should preserve the selected category");
+assert.equal(enterInCategories.model.settingIndex, 0, "descending should preserve the selected child setting");
 
-const enterInSettings = updatePaneModel(withFocus(model, "settings"), { type: "activate" });
-assert.equal(enterInSettings.requestRender, false, "Enter in settings should be a no-op without render");
+const enterInSettings = updatePaneModel(enterInCategories.model, { type: "activate" });
+assert.equal(enterInSettings.requestRender, true, "Enter in settings should descend into the value column");
 assert.equal(enterInSettings.completion, undefined, "Enter in settings should not complete the pane");
-assert.deepEqual(enterInSettings.model, withFocus(model, "settings"), "Enter in settings should not change model state");
+assert.equal(enterInSettings.model.focus, "values", "Enter in settings should focus the selected value");
+assert.equal(enterInSettings.model.categoryIndex, 0, "settings descent should preserve the parent category");
+assert.equal(enterInSettings.model.settingIndex, 0, "settings descent should preserve the selected row");
 
 const valuesEnabled = withFocus(model, "values", 0, 0);
 const valuesEnabledBefore = clone(valuesEnabled);
@@ -587,7 +595,12 @@ const valuesFocus = withFocus(model, "values", 1, 2);
 const backFromValues = updatePaneModel(valuesFocus, { type: "back" });
 assert.equal(backFromValues.requestRender, true, "Esc/q back from values should request render");
 assert.equal(backFromValues.completion, undefined, "Esc/q back from values should not complete");
-assert.equal(backFromValues.model.focus, "categories", "Esc/q from values should return to categories");
+assert.equal(backFromValues.model.focus, "settings", "Esc/q from values should return to the owning setting label");
+assert.equal(backFromValues.model.categoryIndex, 1, "back from values should preserve the parent category");
+assert.equal(backFromValues.model.settingIndex, 2, "back from values should preserve the selected setting");
+const backFromSettings = updatePaneModel(backFromValues.model, { type: "back" });
+assert.equal(backFromSettings.model.focus, "categories", "Esc/q from settings should return to the parent category");
+assert.equal(backFromSettings.model.categoryIndex, 1, "back from settings should not jump to a category sharing its visual row");
 assertCancel(updatePaneModel(model, { type: "back" }), "Esc/q from categories");
 assertCancel(updatePaneModel(valuesFocus, { type: "cancel" }), "Ctrl-C from values");
 
@@ -629,7 +642,7 @@ assert.equal(reorderOutsideCategories.requestRender, false, "J/K outside categor
 assert.equal(reorderOutsideCategories.completion, undefined, "J/K outside categories should not complete");
 assert.deepEqual(reorderOutsideCategories.model, withFocus(gitCategoryModel, "settings"), "J/K outside categories should not change model state");
 
-const settingsFocusView = view(gitSettings.model, 120);
+const settingsFocusView = view(settingsDown.model, 120);
 assert.equal(settingsFocusView.selectedCategory?.id, "git", "settings focus view should retain selected category");
 assert.equal(categoryById(settingsFocusView, "git").selected, true, "settings focus view should keep Git selected");
 assert.equal(categoryById(settingsFocusView, "git").hasFocus, false, "settings focus should remove active focus from the category column");
@@ -643,12 +656,13 @@ assertHelp(
 		{ key: "←→↑↓", label: "move" },
 		{ key: "S", label: "save" },
 		{ key: "R", label: "reset" },
+		{ key: "Enter", label: "edit" },
 		{ key: "Esc", label: "back" },
 	],
 	"wide settings help should include back but no segment reorder or Enter change",
 );
 
-const gitValuesView = view(move(gitSettings.model, "right").model, 120);
+const gitValuesView = view(move(settingsDown.model, "right").model, 120);
 assert.equal(selectedSetting(gitValuesView).id, "git.dirtyMarker", "values focus should retain selected row");
 assert.equal(selectedSetting(gitValuesView).labelHasFocus, false, "values focus should not mark selected row label focus");
 assert.equal(selectedSetting(gitValuesView).valueHasFocus, true, "values focus should mark selected row value focus");
@@ -667,28 +681,30 @@ assertHelp(
 assertHelp(
 	view(model, 56).help,
 	[
+		{ key: "Enter", label: "open" },
 		{ key: "S", label: "save" },
 		{ key: "J/K", label: "reorder" },
 		{ key: "Esc", label: "cancel" },
 	],
-	"narrow category help should collapse to save/reorder/cancel",
+	"narrow category help should collapse to open/save/reorder/cancel",
 );
 assertHelp(
 	view(gitSettings.model, 56).help,
 	[
+		{ key: "Enter", label: "edit" },
 		{ key: "S", label: "save" },
 		{ key: "Esc", label: "back" },
 	],
-	"narrow settings help should collapse to save/back",
+	"narrow settings help should collapse to edit/save/back",
 );
 assertHelp(
 	view(move(gitSettings.model, "right").model, 56).help,
 	[
-		{ key: "S", label: "save" },
 		{ key: "Enter", label: "change" },
+		{ key: "S", label: "save" },
 		{ key: "Esc", label: "back" },
 	],
-	"narrow values help should collapse to save/change/back",
+	"narrow values help should collapse to change/save/back",
 );
 
 console.log("✓ glance pane model checks passed");

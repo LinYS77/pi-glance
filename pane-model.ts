@@ -123,8 +123,6 @@ export interface GlancePaneViewModel {
 	help: HelpShortcut[];
 }
 
-const PANE_FOCUS_ORDER: PaneFocus[] = ["categories", "settings", "values"];
-
 function sameConfig(a: GlanceConfig, b: GlanceConfig): boolean {
 	return JSON.stringify(a) === JSON.stringify(b);
 }
@@ -183,25 +181,27 @@ function helpShortcuts(focus: PaneFocus, width: number): HelpShortcut[] {
 		case "categories":
 			if (isNarrow) {
 				return [
+					{ key: "Enter", label: "open" },
 					{ key: "S", label: "save" },
 					{ key: "J/K", label: "reorder" },
 					{ key: "Esc", label: "cancel" },
 				];
 			}
-			return [...stable, { key: "J/K", label: "reorder" }, { key: "Esc", label: "cancel" }];
+			return [...stable, { key: "Enter", label: "open" }, { key: "J/K", label: "reorder" }, { key: "Esc", label: "cancel" }];
 		case "settings":
 			if (isNarrow) {
 				return [
+					{ key: "Enter", label: "edit" },
 					{ key: "S", label: "save" },
 					{ key: "Esc", label: "back" },
 				];
 			}
-			return [...stable, { key: "Esc", label: "back" }];
+			return [...stable, { key: "Enter", label: "edit" }, { key: "Esc", label: "back" }];
 		case "values":
 			if (isNarrow) {
 				return [
-					{ key: "S", label: "save" },
 					{ key: "Enter", label: "change" },
+					{ key: "S", label: "save" },
 					{ key: "Esc", label: "back" },
 				];
 			}
@@ -257,69 +257,35 @@ function moveFocus(model: PaneModelState, direction: PaneMoveDirection): PaneMod
 	if (model.subview === "themeBrowser") return moveThemeBrowserHighlight(model, direction);
 
 	const categories = categoriesFor(model);
-	let next = model;
 
 	switch (direction) {
-		case "left": {
-			const index = PANE_FOCUS_ORDER.indexOf(model.focus);
-			let categoryIndex = model.categoryIndex;
-			if (model.focus === "settings") {
-				categoryIndex = categories.length === 0 ? 0 : Math.min(model.settingIndex, categories.length - 1);
-			}
-			return withModel(model, {
-				categoryIndex,
-				focus: PANE_FOCUS_ORDER[Math.max(0, index - 1)] ?? "categories",
-			});
-		}
+		case "left":
+			if (model.focus === "values") return withModel(model, { focus: "settings" });
+			if (model.focus === "settings") return withModel(model, { focus: "categories" });
+			return model;
 		case "right": {
-			const index = PANE_FOCUS_ORDER.indexOf(model.focus);
-			let settingIndex = model.settingIndex;
-			if (model.focus === "categories") {
-				const category = categories[model.categoryIndex];
-				const rowCount = category ? rowsFor(model, category.id).length : 0;
-				settingIndex = rowCount === 0 ? 0 : Math.min(model.categoryIndex, rowCount - 1);
-			}
-			return withModel(model, {
-				settingIndex,
-				focus: PANE_FOCUS_ORDER[Math.min(PANE_FOCUS_ORDER.length - 1, index + 1)] ?? "values",
-			});
+			const category = categories[model.categoryIndex];
+			const hasRows = Boolean(category && rowsFor(model, category.id).length > 0);
+			if (!hasRows) return model;
+			if (model.focus === "categories") return withModel(model, { focus: "settings" });
+			if (model.focus === "settings") return withModel(model, { focus: "values" });
+			return model;
 		}
 		case "up":
+		case "down": {
+			const step = direction === "up" ? -1 : 1;
 			if (model.focus === "categories") {
 				const count = categories.length;
-				const categoryIndex = count === 0 ? 0 : (model.categoryIndex - 1 + count) % count;
-				const category = categories[categoryIndex];
-				const rowCount = category ? rowsFor(withModel(model, { categoryIndex }), category.id).length : 0;
-				next = withModel(model, {
-					categoryIndex,
-					settingIndex: rowCount === 0 ? 0 : Math.min(categoryIndex, rowCount - 1),
-				});
-			} else {
-				const category = categories[model.categoryIndex];
-				const count = category ? rowsFor(model, category.id).length : 0;
-				next = withModel(model, {
-					settingIndex: count === 0 ? 0 : (model.settingIndex - 1 + count) % count,
-				});
+				const categoryIndex = count === 0 ? 0 : (model.categoryIndex + step + count) % count;
+				return withModel(model, { categoryIndex, settingIndex: 0 });
 			}
-			return next;
-		case "down":
-			if (model.focus === "categories") {
-				const count = categories.length;
-				const categoryIndex = count === 0 ? 0 : (model.categoryIndex + 1) % count;
-				const category = categories[categoryIndex];
-				const rowCount = category ? rowsFor(withModel(model, { categoryIndex }), category.id).length : 0;
-				next = withModel(model, {
-					categoryIndex,
-					settingIndex: rowCount === 0 ? 0 : Math.min(categoryIndex, rowCount - 1),
-				});
-			} else {
-				const category = categories[model.categoryIndex];
-				const count = category ? rowsFor(model, category.id).length : 0;
-				next = withModel(model, {
-					settingIndex: count === 0 ? 0 : (model.settingIndex + 1) % count,
-				});
-			}
-			return next;
+
+			const category = categories[model.categoryIndex];
+			const count = category ? rowsFor(model, category.id).length : 0;
+			return withModel(model, {
+				settingIndex: count === 0 ? 0 : (model.settingIndex + step + count) % count,
+			});
+		}
 	}
 }
 
@@ -346,11 +312,15 @@ function openThemeBrowser(model: PaneModelState, row: SettingsRow): PaneModelSta
 }
 
 function activateCurrent(model: PaneModelState): PaneModelState {
+	if (model.subview === "themeBrowser") return acceptThemeBrowser(model);
+
 	const category = selectedCategory(model);
 	if (!category) return model;
-
 	const row = selectedRow(model);
 	if (!row) return model;
+
+	if (model.focus === "categories") return withModel(model, { focus: "settings" });
+	if (model.focus === "settings") return withModel(model, { focus: "values" });
 
 	if (row.opensSubview === "themeBrowser") return openThemeBrowser(model, row);
 
@@ -476,12 +446,10 @@ export function updatePaneModel(model: PaneModelState, intent: PaneIntent): Pane
 		case "back":
 			if (model.subview === "themeBrowser") return result(restoreThemeBrowser(model), true);
 			if (model.focus === "categories") return result(model, false, { action: "cancel" });
-			return result(withModel(model, { focus: "categories" }), true);
+			return result(withModel(model, { focus: model.focus === "values" ? "settings" : "categories" }), true);
 		case "move":
 			return result(moveFocus(model, intent.direction), true);
 		case "activate":
-			if (model.subview === "themeBrowser") return result(acceptThemeBrowser(model), true);
-			if (model.focus !== "values") return result(model, false);
 			return result(activateCurrent(model), true);
 		case "save":
 			return result(model, false, { action: "save", config: cloneConfig(model.draft) });

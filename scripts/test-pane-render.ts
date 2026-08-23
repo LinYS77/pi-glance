@@ -443,9 +443,13 @@ for (const width of [56, 64, 80, 120, 160]) {
 const gridPane = await makePane();
 press(gridPane.component, "\x1b[B");
 press(gridPane.component, "\x1b[C");
-assertContains(plainText(gridPane.component), "» Dirty marker", "right arrow should move to the same visual row in the setting column");
+assertContains(plainText(gridPane.component), "» Enabled", "right arrow should enter the first child setting of the selected category");
+press(gridPane.component, "\x1b[B");
+assertContains(plainText(gridPane.component), "» Dirty marker", "down arrow should navigate within the selected category's child settings");
 press(gridPane.component, "\x1b[D");
-assertContains(plainText(gridPane.component), "» Git", "left arrow should return to the same visual row in the category column");
+const gridParentText = plainText(gridPane.component);
+assertContains(gridParentText, "» Git", "left arrow should return to the parent category");
+assertContains(gridParentText, "› Dirty marker", "returning to the parent should preserve the selected child for re-entry");
 
 const gridSettingPane = await makePane();
 press(gridSettingPane.component, "\x1b[C");
@@ -456,7 +460,9 @@ const iconsSelectedText = plainText(gridSettingPane.component);
 assertContains(iconsSelectedText, "» Icons", "down arrow should move within the setting column");
 assertContains(iconsSelectedText, "Plain text or Nerd Font icons with fallback.", "Icons row hint should mention plain and Nerd Font fallback guidance");
 press(gridSettingPane.component, "\x1b[D");
-assertContains(plainText(gridSettingPane.component), "» Model speed", "left arrow should move to the category on the same visual row");
+const generalParentText = plainText(gridSettingPane.component);
+assertContains(generalParentText, "» General", "left arrow should return to the owning General category rather than a category on the same visual row");
+assertContains(generalParentText, "› Icons", "returning to General should retain the Icons child selection");
 
 const reorderPane = await makePane();
 press(reorderPane.component, "\x1b[B");
@@ -495,11 +501,12 @@ assertLineContainsAll(contextCategory, ["Display", "percent / tokens"], "context
 assertLineContainsAll(contextCategory, ["Unknown", "show"], "context unknown setting should render");
 
 press(contextPane.component, "\x1b[C");
-press(contextPane.component, "\x1b[A");
+press(contextPane.component, "\x1b[B");
 const contextDisplay = plainText(contextPane.component);
 assertContains(contextDisplay, "Choose percent, tokens, or both.", "context display hint should render");
 press(contextPane.component, "\r");
-assertLineContainsAll(plainText(contextPane.component), ["Display", "percent / tokens"], "enter should not cycle before value column");
+assertLineContainsAll(plainText(contextPane.component), ["Display", "[ percent /"], "enter should descend into the value column without cycling the setting");
+assertContains(plainText(contextPane.component), "✓ Saved", "descending into a value should not dirty the draft");
 press(contextPane.component, "\x1b[C");
 press(contextPane.component, "\r");
 const contextDisplayChanged = plainText(contextPane.component);
@@ -519,7 +526,7 @@ assertLineContainsAll(costCategory, ["Hide zero", "off"], "cost hide zero settin
 assertLineContainsAll(costCategory, ["Display", "compact USD"], "cost display info should render");
 
 press(costPane.component, "\x1b[C");
-press(costPane.component, "\x1b[A");
+press(costPane.component, "\x1b[B");
 press(costPane.component, "\x1b[C");
 press(costPane.component, "\r");
 const costChanged = plainText(costPane.component);
@@ -530,6 +537,8 @@ const costInfoPane = await makePane();
 press(costInfoPane.component, "\x1b[B");
 press(costInfoPane.component, "\x1b[B");
 press(costInfoPane.component, "\x1b[C");
+press(costInfoPane.component, "\x1b[B");
+press(costInfoPane.component, "\x1b[B");
 press(costInfoPane.component, "\x1b[C");
 press(costInfoPane.component, "\r");
 const costInfoLines = plainRender(costInfoPane.component);
@@ -549,7 +558,7 @@ assertLineContainsAll(tokensCategory, ["Display", "input / output"], "tokens dis
 assertLineContainsAll(tokensCategory, ["Cache", "rate"], "tokens cache setting should default to hit rate");
 
 press(tokensPane.component, "\x1b[C");
-press(tokensPane.component, "\x1b[A");
+press(tokensPane.component, "\x1b[B");
 press(tokensPane.component, "\x1b[C");
 press(tokensPane.component, "\r");
 const tokensDisplayChanged = plainText(tokensPane.component);
@@ -573,7 +582,7 @@ assertLineContainsAll(modelCategory, ["Provider label", "auto"], "model provider
 assertLineContainsAll(modelCategory, ["Thinking label", "auto"], "model thinking setting should render");
 
 press(modelPane.component, "\x1b[C");
-press(modelPane.component, "\x1b[A");
+press(modelPane.component, "\x1b[B");
 press(modelPane.component, "\x1b[C");
 press(modelPane.component, "\r");
 const providerChanged = plainText(modelPane.component);
@@ -616,7 +625,6 @@ assertLineContainsAll(plainText(generalHintPane.component), ["Workspace label", 
 const gitEnabledPane = await makePane();
 press(gitEnabledPane.component, "\x1b[B");
 press(gitEnabledPane.component, "\x1b[C");
-press(gitEnabledPane.component, "\x1b[A");
 press(gitEnabledPane.component, "\x1b[C");
 press(gitEnabledPane.component, "\r");
 const gitEnabledChanged = plainText(gitEnabledPane.component);
@@ -639,6 +647,7 @@ assertContains(gitSettings, "[←→↑↓] move  ·  [S] save  ·  [R] reset", 
 assertContains(gitSettings, "[Esc] back", "settings help should describe returning to categories");
 assertNotContains(gitSettings, "[J/K] reorder", "category segment reorder help should be hidden outside category column");
 assertNotContains(gitSettings, "[J/K] switch", "old category segment switching help should stay removed outside category column");
+press(gitPane.component, "\x1b[B");
 press(gitPane.component, "\x1b[C");
 const gitValues = plainText(gitPane.component);
 assertContains(gitValues, "[←→↑↓] move  ·  [S] save  ·  [R] reset", "stable help shortcuts should stay first in value column");
