@@ -776,9 +776,11 @@ for (const matrixCase of [
 	assert.equal(harness.showPaneContexts[0], test.ctx, "showPane should receive the command context passed to /glance");
 	assert.equal(harness.showPanePreviewStates[0]?.workspace.path, "/repo", "showPane should receive the current runtime state for preview rendering");
 	assertAmbientPaneOptions(harness.showPaneOptions[0], "default pane open");
-	assert.deepEqual(test.surfaceCalls.slice(surfaceBaseline), ["setFooter:install", "setEditorComponent:install"], "save success should reinstall the enabled TUI input surface");
+	assert.deepEqual(test.surfaceCalls.slice(surfaceBaseline), [], "enabled->enabled save success should keep the existing TUI input surface installed");
+	assert.equal(test.footerFactories.length, 1, "enabled->enabled save success should not register a replacement footer factory");
+	assert.equal(test.editorFactories.length, 1, "enabled->enabled save success should not register a replacement editor factory");
 	assert.ok(git.schedules.length > scheduleBaseline, "enabled->enabled save success should schedule git refreshes only after disk save succeeds");
-	assert.ok(test.getRenderRequests() > renderBaseline, "save success should request a render after reinstalling the surface");
+	assert.ok(test.getRenderRequests() > renderBaseline, "save success should render the updated config through the existing input surface");
 	assert.deepEqual(git.options?.getConfig(), nextConfig.git, "existing git refresher should read the updated active git config after save success");
 
 	await harness.runtime.commands.openPane("", test.ctx);
@@ -917,21 +919,16 @@ for (const startingEnabled of [true, false] as const) {
 
 	harness.runtime.events.sessionStart({}, test.ctx);
 	assert.equal(test.footerFactories.length, 1, "initial install should register one footer factory");
-	let staleFooterRenders = 0;
-	let currentFooterRenders = 0;
-	invokeFooterFactory(test, 0, () => staleFooterRenders++);
-	git.options?.onSnapshot("/repo", gitSnapshot("before-footer-reinstall"));
-	assert.equal(staleFooterRenders, 1, "initial footer factory should own render before reinstall");
+	let footerRenders = 0;
+	invokeFooterFactory(test, 0, () => footerRenders++);
+	git.options?.onSnapshot("/repo", gitSnapshot("before-enabled-save"));
+	assert.equal(footerRenders, 1, "initial footer factory should own render before enabled save");
 
 	await harness.runtime.commands.openPane("", test.ctx);
-	assert.equal(test.footerFactories.length, 2, "enabled save should register a replacement footer factory");
-	assert.equal(staleFooterRenders, 1, "enabled reinstall should clear the previous render callback before post-save render");
-
-	invokeFooterFactory(test, 1, () => currentFooterRenders++);
-	invokeFooterFactory(test, 0, () => staleFooterRenders++);
-	git.options?.onSnapshot("/repo", gitSnapshot("after-footer-reinstall"));
-	assert.equal(staleFooterRenders, 1, "stale footer factory should not regain render ownership after reinstall");
-	assert.equal(currentFooterRenders, 1, "newest footer factory should remain the active render owner after stale factory invocation");
+	assert.equal(test.footerFactories.length, 1, "enabled save should keep the existing footer factory");
+	assert.equal(footerRenders, 2, "enabled save should render updated config through the existing footer owner");
+	git.options?.onSnapshot("/repo", gitSnapshot("after-enabled-save"));
+	assert.equal(footerRenders, 3, "existing footer owner should keep receiving renders after enabled save");
 }
 
 {
@@ -947,21 +944,18 @@ for (const startingEnabled of [true, false] as const) {
 
 	harness.runtime.events.sessionStart({}, test.ctx);
 	assert.equal(test.editorFactories.length, 1, "initial install should register one editor factory");
-	let staleEditorRenders = 0;
-	let currentEditorRenders = 0;
-	invokeEditorFactory(test, 0, () => staleEditorRenders++);
-	git.options?.onSnapshot("/repo", gitSnapshot("before-editor-reinstall"));
-	assert.equal(staleEditorRenders, 1, "initial editor factory should own render before reinstall");
+	let editorRenders = 0;
+	const editor = invokeEditorFactory(test, 0, () => editorRenders++) as { getText(): string; setText(text: string): void };
+	editor.setText("keep cursor history owner");
+	git.options?.onSnapshot("/repo", gitSnapshot("before-enabled-editor-save"));
+	assert.equal(editorRenders, 1, "initial editor factory should own render before enabled save");
 
 	await harness.runtime.commands.openPane("", test.ctx);
-	assert.equal(test.editorFactories.length, 2, "enabled save should register a replacement editor factory");
-	assert.equal(staleEditorRenders, 1, "enabled reinstall should clear the previous editor render callback before post-save render");
-
-	invokeEditorFactory(test, 1, () => currentEditorRenders++);
-	invokeEditorFactory(test, 0, () => staleEditorRenders++);
-	git.options?.onSnapshot("/repo", gitSnapshot("after-editor-reinstall"));
-	assert.equal(staleEditorRenders, 1, "stale editor factory should not regain render ownership after reinstall");
-	assert.equal(currentEditorRenders, 1, "newest editor factory should remain the active render owner after stale factory invocation");
+	assert.equal(test.editorFactories.length, 1, "enabled save should keep the existing editor factory");
+	assert.equal(editor.getText(), "keep cursor history owner", "enabled save should preserve the live editor instance and its text state");
+	assert.equal(editorRenders, 2, "enabled save should render updated config through the existing editor owner");
+	git.options?.onSnapshot("/repo", gitSnapshot("after-enabled-editor-save"));
+	assert.equal(editorRenders, 3, "existing editor owner should keep receiving renders after enabled save");
 }
 
 {

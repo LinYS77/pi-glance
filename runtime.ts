@@ -210,6 +210,7 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 					return;
 				}
 
+				const previousConfig = current;
 				const nextConfig = result.config;
 				try {
 					await adapters.saveConfig(nextConfig);
@@ -219,7 +220,9 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 				}
 
 				config = nextConfig;
-				await refreshSession.execute("config_save_success", ctx, { beforeRender: () => installInputSurface(ctx) });
+				await refreshSession.execute("config_save_success", ctx, {
+					beforeRender: previousConfig.enabled === nextConfig.enabled ? undefined : () => installInputSurface(ctx),
+				});
 				ctx.ui.notify("pi-glance configuration saved", "info");
 			},
 		},
