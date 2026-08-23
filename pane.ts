@@ -1,4 +1,15 @@
-import { Key, matchesKey, truncateToWidth, visibleWidth, type Component, type Keybinding, type KeyId, type TUI } from "@earendil-works/pi-tui";
+import {
+	Key,
+	matchesKey,
+	SelectList,
+	truncateToWidth,
+	visibleWidth,
+	type Component,
+	type Keybinding,
+	type KeyId,
+	type SelectItem,
+	type TUI,
+} from "@earendil-works/pi-tui";
 import type { KeybindingsManager, Theme } from "@earendil-works/pi-coding-agent";
 import {
 	createPaneModel,
@@ -61,6 +72,20 @@ const PANE_SPACING = {
 	minContentWidth: 10,
 	asideSeparator: "│",
 } as const;
+
+const THEME_VIEWPORT = {
+	minRows: 4,
+	maxRows: 8,
+	reservedRows: 16,
+	fallbackTerminalRows: 40,
+} as const;
+
+function themeViewportRows(terminalRows: number | undefined): number {
+	const rows = typeof terminalRows === "number" && Number.isFinite(terminalRows)
+		? Math.floor(terminalRows)
+		: THEME_VIEWPORT.fallbackTerminalRows;
+	return Math.max(THEME_VIEWPORT.minRows, Math.min(THEME_VIEWPORT.maxRows, rows - THEME_VIEWPORT.reservedRows));
+}
 
 function plainLine(parts: string[], width: number): string {
 	return truncateToWidth(parts.join(""), width, "…");
@@ -179,6 +204,7 @@ class GlanceConfigPane implements Component {
 		private readonly done: Done,
 		private readonly requestRender: () => void,
 		private readonly keybindings?: KeybindingsManager,
+		private readonly getTerminalRows: () => number | undefined = () => undefined,
 		private readonly previewState?: GlanceState,
 		private readonly options: GlancePaneOptions = {},
 	) {
@@ -188,7 +214,7 @@ class GlanceConfigPane implements Component {
 	invalidate(): void {}
 
 	handleInput(data: string): void {
-		const pageSize = this.model.subview === "themeBrowser" ? 8 : 5;
+		const pageSize = this.model.subview === "themeBrowser" ? themeViewportRows(this.getTerminalRows()) : 5;
 		const intent = paneIntentFromKey(data, this.keybindings, pageSize);
 		if (!intent) return;
 
@@ -276,16 +302,32 @@ class GlanceConfigPane implements Component {
 		return model.settings.map((row) => this.renderSettingRow(row, layout, colors));
 	}
 
-	private renderThemeBrowserRow(theme: ThemeBrowserThemeViewModel, layout: PaneLayout, colors: PaneColors): string {
-		const cursor = theme.selected ? colors.accent("» ") : "  ";
-		const previewMarker = theme.previewed ? colors.accent("●") : " ";
-		const savedMarker = theme.saved ? colors.success("✓") : " ";
-		const restoreMarker = theme.restored && !theme.saved ? colors.muted("↩") : " ";
-		const labelTone = theme.selected ? colors.accent : theme.previewed ? colors.muted : colors.dim;
-		const markers = `${cursor}${previewMarker} ${savedMarker}${restoreMarker} `;
-		const markerWidth = visibleWidth(markers);
-		const label = truncateToWidth(theme.label, Math.max(8, layout.contentWidth - markerWidth), "…");
-		return paneLine(layout, [`${markers}${labelTone(label)}`]);
+	private themeBrowserItems(browser: NonNullable<GlancePaneViewModel["themeBrowser"]>): SelectItem[] {
+		return browser.themes.map((theme) => {
+			const previewMarker = theme.previewed ? "●" : " ";
+			const savedMarker = theme.saved ? "✓" : " ";
+			const restoreMarker = theme.restored && !theme.saved ? "↩" : " ";
+			return {
+				value: theme.id,
+				label: `${previewMarker} ${savedMarker}${restoreMarker} ${theme.label}`,
+			};
+		});
+	}
+
+	private renderThemeBrowserList(
+		browser: NonNullable<GlancePaneViewModel["themeBrowser"]>,
+		layout: PaneLayout,
+		colors: PaneColors,
+	): string[] {
+		const list = new SelectList(this.themeBrowserItems(browser), themeViewportRows(this.getTerminalRows()), {
+			selectedPrefix: colors.accent,
+			selectedText: colors.accent,
+			description: colors.muted,
+			scrollInfo: colors.dim,
+			noMatch: colors.warn,
+		});
+		list.setSelectedIndex(browser.highlightedThemeIndex);
+		return list.render(layout.contentWidth).map((line) => paneLine(layout, [line]));
 	}
 
 	private renderThemeBrowserDetail(theme: ThemeBrowserThemeViewModel, layout: PaneLayout, colors: PaneColors): string[] {
@@ -301,13 +343,9 @@ class GlanceConfigPane implements Component {
 		const selected = browser.themes[browser.highlightedThemeIndex] ?? browser.themes.find((theme) => theme.selected);
 		const title = `${browser.slotLabel} · preview ${browser.previewLabel}`;
 		const restore = browser.restoreTheme === browser.savedTheme ? `saved ${browser.savedLabel}` : `saved ${browser.savedLabel} · Esc returns ${browser.restoreLabel}`;
-		const position = `${browser.highlightedThemeIndex + 1}/${browser.themes.length}`;
-		lines.push(paneLine(layout, [spreadAnsi(colors.muted(title), colors.dim(position), layout.contentWidth)]));
+		lines.push(paneLine(layout, [colors.muted(title)]));
 		lines.push(paneLine(layout, [colors.dim(restore)]));
-
-		for (const theme of browser.themes) {
-			lines.push(this.renderThemeBrowserRow(theme, layout, colors));
-		}
+		lines.push(...this.renderThemeBrowserList(browser, layout, colors));
 
 		if (selected) {
 			lines.push("");
@@ -395,6 +433,7 @@ export async function showGlancePane(
 			(result) => done(result ? { action: "save", config: result } : { action: "cancel" }),
 			() => tui.requestRender(),
 			keybindings,
+			() => tui.terminal.rows,
 			previewState,
 			options,
 		);

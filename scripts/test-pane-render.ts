@@ -68,6 +68,7 @@ async function makePane(
 	previewState: GlanceState | null = makeState(),
 	options: GlancePaneOptions = {},
 	keybindings?: KeybindingsManager,
+	terminalRows = 40,
 ): Promise<{ component: Component; renders: () => number; done: () => unknown }> {
 	let component: Component | undefined;
 	let renderRequests = 0;
@@ -79,7 +80,7 @@ async function makePane(
 			ui: {
 				custom: async <T>(factory: (tui: TUI, theme: Theme, keybindings: KeybindingsManager, done: (result: T) => void) => Component): Promise<T> => {
 					component = factory(
-						{ requestRender: () => renderRequests++ } as unknown as TUI,
+						{ terminal: { rows: terminalRows }, requestRender: () => renderRequests++ } as unknown as TUI,
 						theme,
 						keybindings as KeybindingsManager,
 						(result: T) => {
@@ -147,7 +148,7 @@ function themeListLabels(text: string): string[] {
 
 function assertThemeMarkerColumns(text: string, message: string): void {
 	for (const line of themeListRows(text)) {
-		const markerStart = line.search(/[»\s][●\s] [✓\s][↩\s] /);
+		const markerStart = line.search(/[→\s] [●\s] [✓\s][↩\s] /);
 		assert.notEqual(markerStart, -1, `${message}: marker columns should align in ${JSON.stringify(line)}`);
 	}
 }
@@ -317,10 +318,10 @@ assertNotContains(themeBrowserText, "[←→↑↓] move", "theme browser should
 assertContains(themeBrowserText, "Selected · Core · default · bright · neutral", "selected detail should show highlighted theme metadata");
 assertContains(themeBrowserText, "Bright neutral palette", "selected detail should show highlighted theme description");
 assertNotContains(themeBrowserText, "Selected · core", "selected detail should not expose raw group ids");
-assertLineContainsAll(themeBrowserText, ["»", "●", "✓", "Light"], "initial browser row should mark the focused saved preview theme");
-assertLineContainsAll(themeBrowserText, ["Dark"], "theme browser should render other friendly labels");
-assert.equal(themeListRows(themeBrowserText).length, GLANCE_THEMES.length, "theme browser should render all theme labels in slot-aware catalog order");
-assert.deepEqual(themeListLabels(themeBrowserText), getThemeCatalogForSlot("light").map((theme) => theme.label), "light theme browser list should preserve light-tone-first catalog order");
+assertLineContainsAll(themeBrowserText, ["→", "●", "✓", "Light"], "initial browser row should mark the focused saved preview theme");
+assertLineContainsAll(themeBrowserText, ["Catppuccin Latte"], "theme browser viewport should render other friendly labels");
+assert.equal(themeListRows(themeBrowserText).length, 8, "theme browser should cap the visible catalog to its SelectList viewport");
+assert.deepEqual(themeListLabels(themeBrowserText), getThemeCatalogForSlot("light").slice(0, 8).map((theme) => theme.label), "light theme browser viewport should preserve light-tone-first catalog order");
 assert.ok(!lineContainingAll(themeBrowserText, ["Dark", "default"]), "ordinary rows should contain labels only without metadata");
 assertNotContains(themeBrowserText, "○", "theme browser should not render hollow markers for non-preview rows");
 assertNotContains(themeBrowserText, "\nCore\n", "theme browser should not render group headers");
@@ -328,6 +329,17 @@ assertNotContains(themeBrowserText, "\nCatppuccin\n", "theme browser should not 
 assertNotContains(themeBrowserText, "\nAccessible\n", "theme browser should not render group headers");
 assertThemeMarkerColumns(themeBrowserText, "initial theme browser");
 assertNoRawThemeIds(themeBrowserText, "Theme browser");
+assert.ok(plainRender(themePane.component, 160).length <= 24, "theme browser viewport should keep the complete pane comfortably below the old 36-line layout");
+
+const shortTerminalThemePane = await makePane(defaultConfig(), makeState(), {}, undefined, 20);
+press(shortTerminalThemePane.component, "\x1b[C");
+press(shortTerminalThemePane.component, "\x1b[B");
+press(shortTerminalThemePane.component, "\x1b[C");
+press(shortTerminalThemePane.component, "\r");
+const shortTerminalThemeLines = plainRender(shortTerminalThemePane.component, 120);
+assert.ok(shortTerminalThemeLines.length <= 20, "theme browser viewport should fit a 20-row terminal without pushing controls off screen");
+assert.equal(themeListRows(shortTerminalThemeLines.join("\n")).length, 4, "short terminals should reduce the SelectList viewport to four theme rows");
+assertContains(shortTerminalThemeLines.join("\n"), "(1/22)", "short theme viewport should retain SelectList position feedback");
 
 const darkThemePane = await makePane();
 press(darkThemePane.component, "\x1b[C");
@@ -337,12 +349,12 @@ press(darkThemePane.component, "\x1b[C");
 press(darkThemePane.component, "\r");
 const darkThemeBrowserText = plainText(darkThemePane.component, 160);
 assertContains(darkThemeBrowserText, "Dark theme · preview Dark", "enter on Dark theme value should open the dark-slot browser");
-assertLineContainsAll(darkThemeBrowserText, ["»", "●", "✓", "Dark"], "initial dark browser row should mark the focused saved preview theme");
-assert.deepEqual(themeListLabels(darkThemeBrowserText), getThemeCatalogForSlot("dark").map((theme) => theme.label), "dark theme browser list should preserve dark-tone-first catalog order");
-assert.equal(themeListRows(darkThemeBrowserText).length, GLANCE_THEMES.length, "dark theme browser should render all theme labels in slot-aware order");
+assertLineContainsAll(darkThemeBrowserText, ["→", "●", "✓", "Dark"], "initial dark browser row should mark the focused saved preview theme");
+assert.deepEqual(themeListLabels(darkThemeBrowserText), getThemeCatalogForSlot("dark").slice(0, 8).map((theme) => theme.label), "dark theme browser viewport should preserve dark-tone-first catalog order");
+assert.equal(themeListRows(darkThemeBrowserText).length, 8, "dark theme browser should cap labels to the SelectList viewport");
 press(darkThemePane.component, "\x1b[B");
 const previewedDarkSlotText = plainText(darkThemePane.component, 160);
-assertLineContainsAll(previewedDarkSlotText, ["»", "●", "Catppuccin Mocha"], "moving dark-slot highlight should preview Catppuccin Mocha");
+assertLineContainsAll(previewedDarkSlotText, ["→", "●", "Catppuccin Mocha"], "moving dark-slot highlight should preview Catppuccin Mocha");
 assertLineContainsAll(previewedDarkSlotText, ["✓", "Dark"], "pre-browser saved marker should remain on Dark while previewing another dark slot theme");
 assertContains(previewedDarkSlotText, "Dark theme · preview Catppuccin Mocha", "dark slot preview movement should show the friendly preview label");
 press(darkThemePane.component, "\r");
@@ -357,7 +369,7 @@ assert.equal((darkThemeSaveResult as { config: GlanceConfig }).config.theme.ligh
 
 press(themePane.component, "\x1b[B");
 const previewedThemeBrowserText = plainText(themePane.component, 160);
-assertLineContainsAll(previewedThemeBrowserText, ["»", "●", "Catppuccin Latte"], "moving highlight should preview and focus Catppuccin Latte in light-slot order");
+assertLineContainsAll(previewedThemeBrowserText, ["→", "●", "Catppuccin Latte"], "moving highlight should preview and focus Catppuccin Latte in light-slot order");
 assertLineContainsAll(previewedThemeBrowserText, ["✓", "Light"], "pre-browser saved marker should remain on Light while previewing another light slot theme");
 assertContains(previewedThemeBrowserText, "● Unsaved changes", "previewing a different theme should dirty the pane");
 assertContains(previewedThemeBrowserText, "Light theme · preview Catppuccin Latte", "preview movement should show the friendly light-slot preview label");
@@ -376,12 +388,14 @@ for (let i = 0; i < 20; i++) press(lowerWindowPane.component, "\x1b[B");
 const lowerWindowText = plainText(lowerWindowPane.component, 160);
 assertContains(lowerWindowText, "21/22", "moving near lower themes should update position/count");
 const lowerExpectedTheme = getThemeCatalogForSlot("light")[20]!;
-assertContains(lowerWindowText, lowerExpectedTheme.label, "full list should render the highlighted lower light-slot theme");
-assertContains(lowerWindowText, "Light", "full list should keep the first theme visible when far down the catalog");
+assertContains(lowerWindowText, lowerExpectedTheme.label, "viewport should render the highlighted lower light-slot theme");
+const lowerVisibleLabels = themeListLabels(lowerWindowText);
+assert.deepEqual(lowerVisibleLabels, getThemeCatalogForSlot("light").slice(-8).map((theme) => theme.label), "lower browser viewport should scroll to the final catalog window");
+assert.equal(lowerVisibleLabels.includes(getThemeCatalogForSlot("light")[0]!.label), false, "lower browser viewport should stop rendering off-screen first rows");
 assertContains(lowerWindowText, `Selected · ${lowerExpectedTheme.groupLabel}`, "selected detail should use display group labels for lower themes");
 assertContains(lowerWindowText, lowerExpectedTheme.detailDescription, "selected detail should update for lower themes");
 assertNotContains(lowerWindowText, `Selected · ${lowerExpectedTheme.group}`, "lower theme detail should not expose raw group ids");
-assert.equal(themeListRows(lowerWindowText).length, GLANCE_THEMES.length, "lower browser should still render the full ungrouped list");
+assert.equal(themeListRows(lowerWindowText).length, 8, "lower browser should keep the SelectList viewport bounded");
 assertThemeMarkerColumns(lowerWindowText, "lower theme browser");
 assertNoRawThemeIds(lowerWindowText, "Lower theme browser");
 
@@ -425,7 +439,7 @@ press(dirtyBeforeBrowserPane.component, "\x1b[B");
 const dirtyBeforeBrowserPreviewText = plainText(dirtyBeforeBrowserPane.component, 160);
 assertLineContainsAll(dirtyBeforeBrowserPreviewText, ["✓", "Light"], "saved marker should remain on initial theme while preview changes from dirty draft");
 assertLineContainsAll(dirtyBeforeBrowserPreviewText, ["↩", "Catppuccin Latte"], "restore marker should remain on pre-browser draft while preview changes");
-assertLineContainsAll(dirtyBeforeBrowserPreviewText, ["»", "●", "One Light"], "preview marker should move independently from restore and saved markers");
+assertLineContainsAll(dirtyBeforeBrowserPreviewText, ["→", "●", "One Light"], "preview marker should move independently from restore and saved markers");
 assertContains(dirtyBeforeBrowserPreviewText, "Selected · Editor", "dirty browser selected detail should update after preview movement");
 assertNotContains(dirtyBeforeBrowserPreviewText, "saved Catppuccin Latte", "preview movement should not create misleading saved draft copy");
 assertNotContains(dirtyBeforeBrowserPreviewText, "○", "dirty preview browser should not render hollow markers");
@@ -480,7 +494,7 @@ for (const width of [56, 64, 80, 120, 160]) {
 	assertContains(widthLines.join("\n"), "Selected", `theme browser should keep selected detail at width ${width}`);
 	assertNotContains(widthLines.join("\n"), "○", `theme browser should not render hollow markers at width ${width}`);
 	if (width >= 120) {
-		assert.equal(themeListRows(widthLines.join("\n")).length, GLANCE_THEMES.length, `theme browser should render all labels at width ${width}`);
+		assert.equal(themeListRows(widthLines.join("\n")).length, 8, `theme browser should keep an eight-row SelectList viewport at width ${width}`);
 	}
 	for (const line of widthLines) {
 		assert.ok(visibleWidth(line) <= width, `theme browser line should fit width ${width}: ${stripAnsi(line)}`);
