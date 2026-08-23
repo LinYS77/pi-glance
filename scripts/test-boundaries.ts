@@ -906,18 +906,10 @@ function assertIndexThinWiring(files: SourceFile[]): void {
 function assertPackageRuntimeRefreshTestWiring(packageJsonFile: SourceFile): void {
 	const packageJson = JSON.parse(packageJsonFile.text) as { scripts?: Record<string, string> };
 	const scripts = packageJson.scripts ?? {};
-	const expectedDedicatedScripts = new Map([
-		["test:runtime:plan-executor", "node .tmp-git-dev/scripts/test-runtime-plan-executor.js"],
-		["test:runtime:refresh-session", "node .tmp-git-dev/scripts/test-runtime-refresh-session.js"],
-	]);
 	const testDev = scripts["test:dev"] ?? "";
-	for (const [scriptName, target] of expectedDedicatedScripts) {
-		const script = scripts[scriptName];
-		if (!script) fail(`package.json: missing ${scriptName} script for runtime refresh seam validation`);
-		if (!script.includes("npm run build:dev --silent")) fail(`package.json: ${scriptName} should build test artifacts before running`);
-		if (!script.includes(target)) fail(`package.json: ${scriptName} should run ${target}`);
-		if (!testDev.includes(target)) fail(`package.json: test:dev should include ${target}`);
-	}
+	if (!testDev.includes("node --test")) fail("package.json: test:dev should use Node's native test runner");
+	if (!testDev.includes("--test-concurrency=4")) fail("package.json: test:dev should cap native test concurrency at four processes");
+	if (!testDev.includes(".tmp-git-dev/scripts/test-*.js")) fail("package.json: test:dev should discover every compiled test script through one glob");
 }
 
 function assertSegmentDisplayPrimitivesPureModule(files: SourceFile[]): void {
