@@ -39,6 +39,8 @@ interface RuntimeModeContext {
 	mode?: string;
 }
 
+type EditorFactory = NonNullable<ReturnType<ExtensionContext["ui"]["getEditorComponent"]>>;
+
 export interface GlanceRuntime {
 	commands: {
 		openPane(args: string, ctx: ExtensionCommandContext): Promise<void>;
@@ -76,6 +78,8 @@ function runtimeRenderStyleContext(ctx: ExtensionContext): GlanceRenderStyleCont
 export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRuntime {
 	let config: GlanceConfig | undefined;
 	let footer: GlanceFooter | undefined;
+	let ownedEditorFactory: EditorFactory | undefined;
+	let previousEditorFactory: EditorFactory | undefined;
 	let gitRefresher: RuntimeGitRefresher | undefined;
 	let requestRender: (() => void) | undefined;
 	let uiGeneration = 0;
@@ -148,11 +152,20 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 		gitRefresher = undefined;
 	}
 
+	function restoreOwnedEditor(ctx: ExtensionContext): void {
+		const ownedFactory = ownedEditorFactory;
+		if (!ownedFactory) return;
+		const restoreFactory = previousEditorFactory;
+		ownedEditorFactory = undefined;
+		previousEditorFactory = undefined;
+		if (ctx.ui.getEditorComponent() === ownedFactory) ctx.ui.setEditorComponent(restoreFactory);
+	}
+
 	function clearUI(ctx: ExtensionContext): void {
 		if (!isTuiMode(ctx)) return;
 		invalidateUiOwnership();
 		clearGitRefresher();
-		ctx.ui.setEditorComponent(undefined);
+		restoreOwnedEditor(ctx);
 		ctx.ui.setFooter(undefined);
 	}
 
@@ -178,7 +191,9 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 			return nextFooter;
 		});
 
-		ctx.ui.setEditorComponent((tui, theme, keybindings) => {
+		const currentEditorFactory = ctx.ui.getEditorComponent();
+		if (currentEditorFactory !== ownedEditorFactory) previousEditorFactory = currentEditorFactory;
+		const nextEditorFactory: EditorFactory = (tui, theme, keybindings) => {
 			setUiRequestRender(generation, () => tui.requestRender());
 			return new GlanceEditor(
 				tui,
@@ -191,7 +206,9 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 				},
 				{ renderStyleContext },
 			);
-		});
+		};
+		ownedEditorFactory = nextEditorFactory;
+		ctx.ui.setEditorComponent(nextEditorFactory);
 	}
 
 	return {

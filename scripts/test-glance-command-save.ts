@@ -59,6 +59,7 @@ function createContext(customResults: PaneResult[]): TestContext {
 	const notifications: Notification[] = [];
 	const surfaceCalls: string[] = [];
 	const renderedPanes: string[][] = [];
+	let currentEditorFactory: unknown;
 	const fakeTui = { requestRender: () => undefined };
 	const fakeTheme = { fg: (_tone: string, text: string) => text };
 
@@ -87,7 +88,11 @@ function createContext(customResults: PaneResult[]): TestContext {
 				return result as T;
 			},
 			setFooter: (factory: unknown) => surfaceCalls.push(factory ? "setFooter:install" : "setFooter:clear"),
-			setEditorComponent: (factory: unknown) => surfaceCalls.push(factory ? "setEditorComponent:install" : "setEditorComponent:clear"),
+			setEditorComponent: (factory: unknown) => {
+				currentEditorFactory = factory;
+				surfaceCalls.push(factory ? "setEditorComponent:install" : "setEditorComponent:clear");
+			},
+			getEditorComponent: () => currentEditorFactory,
 		},
 		getContextUsage: () => ({ tokens: 0, contextWindow: 200_000, percent: 0 }),
 	} as unknown as ExtensionCommandContext;

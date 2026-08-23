@@ -38,6 +38,7 @@ export interface RuntimeTestContextOptions {
 	branch?: StateSessionEntry[];
 	invokeFooterFactory?: boolean;
 	uiTheme?: unknown;
+	initialEditorFactory?: RuntimeCapturedEditorFactory;
 }
 
 export interface RuntimeTestContext {
@@ -50,12 +51,14 @@ export interface RuntimeTestContext {
 	getThemeReads(): number;
 	getEntryReads(): number;
 	getBranchReads(): number;
+	getCurrentEditorFactory(): RuntimeCapturedEditorFactory | undefined;
 	setCwd(cwd: string): void;
 	setAvailableProviders(providers: string[]): void;
 	setModel(model: RuntimeMutableModelInfo | undefined): void;
 	setContextUsage(usage: RuntimeMutableContextUsage | undefined): void;
 	setSessionEntries(entries: StateSessionEntry[]): void;
 	setUiTheme(theme: unknown): void;
+	setCurrentEditorFactory(factory: RuntimeCapturedEditorFactory | undefined): void;
 }
 
 export interface RuntimeGitHarness {
@@ -222,6 +225,7 @@ export function createRuntimeTestContext(options: RuntimeTestContextOptions = {}
 	let entries: StateSessionEntry[] = options.entries ?? [];
 	let branch: StateSessionEntry[] = options.branch ?? [];
 	let uiTheme = options.uiTheme;
+	let currentEditorFactory = options.initialEditorFactory;
 	const mode = options.mode ?? "tui";
 	const hasUI = options.hasUI ?? (mode === "tui" || mode === "rpc");
 	const invokeFooterFactory = options.invokeFooterFactory ?? true;
@@ -266,8 +270,10 @@ export function createRuntimeTestContext(options: RuntimeTestContextOptions = {}
 			},
 			setEditorComponent: (factory: unknown) => {
 				surfaceCalls.push(factory ? "setEditorComponent:install" : "setEditorComponent:clear");
+				currentEditorFactory = factory as RuntimeCapturedEditorFactory | undefined;
 				if (factory) editorFactories.push(factory as RuntimeCapturedEditorFactory);
 			},
+			getEditorComponent: () => currentEditorFactory,
 		},
 		getContextUsage: () => contextUsage,
 	} as unknown as ExtensionCommandContext;
@@ -282,6 +288,7 @@ export function createRuntimeTestContext(options: RuntimeTestContextOptions = {}
 		getThemeReads: () => themeReads,
 		getEntryReads: () => entryReads,
 		getBranchReads: () => branchReads,
+		getCurrentEditorFactory: () => currentEditorFactory,
 		setCwd: (nextCwd: string) => {
 			cwd = nextCwd;
 		},
@@ -299,6 +306,9 @@ export function createRuntimeTestContext(options: RuntimeTestContextOptions = {}
 		},
 		setUiTheme: (theme: unknown) => {
 			uiTheme = theme;
+		},
+		setCurrentEditorFactory: (factory: RuntimeCapturedEditorFactory | undefined) => {
+			currentEditorFactory = factory;
 		},
 	};
 }

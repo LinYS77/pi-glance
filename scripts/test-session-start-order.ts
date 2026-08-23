@@ -34,6 +34,7 @@ function getHandler(pi: CapturedPi, event: string): CapturedHandler {
 }
 
 function createContext(calls: string[], mode: "tui" | "rpc" | "json" | "print" = "tui"): ExtensionContext {
+	let currentEditorFactory: unknown;
 	return {
 		mode,
 		hasUI: mode === "tui" || mode === "rpc",
@@ -49,7 +50,11 @@ function createContext(calls: string[], mode: "tui" | "rpc" | "json" | "print" =
 		},
 		ui: {
 			setFooter: (factory: unknown) => calls.push(factory ? "setFooter:install" : "setFooter:clear"),
-			setEditorComponent: (factory: unknown) => calls.push(factory ? "setEditorComponent:install" : "setEditorComponent:clear"),
+			setEditorComponent: (factory: unknown) => {
+				currentEditorFactory = factory;
+				calls.push(factory ? "setEditorComponent:install" : "setEditorComponent:clear");
+			},
+			getEditorComponent: () => currentEditorFactory,
 		},
 		getContextUsage: () => ({ tokens: 0, contextWindow: 200_000, percent: 0 }),
 	} as unknown as ExtensionContext;
@@ -98,7 +103,7 @@ async function main(): Promise<void> {
 
 		assert.equal(isPromiseLike(disabledResult), false, "session_start should also be synchronous for disabled config");
 		assert.deepEqual(disabledCalls.filter((call) => call.endsWith(":install")), [], "disabled config should not claim custom footer/editor");
-		assert.ok(disabledCalls.includes("setEditorComponent:clear"), "disabled config should synchronously restore the built-in editor");
+		assert.equal(disabledCalls.includes("setEditorComponent:clear"), false, "disabled config should leave an editor it never owned untouched");
 		assert.ok(disabledCalls.includes("setFooter:clear"), "disabled config should synchronously restore the built-in footer");
 	} finally {
 		if (previousAgentDir === undefined) delete process.env.PI_CODING_AGENT_DIR;

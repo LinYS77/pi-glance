@@ -206,15 +206,64 @@ for (const matrixCase of [
 }
 
 {
+	const existingEditorFactory = (() => ({ kind: "existing-editor" })) as TestContext["editorFactories"][number];
 	const git = createGitHarness();
-	const test = createContext();
+	const test = createContext({ initialEditorFactory: existingEditorFactory });
 	const harness = createRuntimeHarness({ loadConfigSyncConfig: disabledConfig(), git });
 	const result = harness.runtime.events.sessionStart({}, test.ctx);
 
 	assert.equal(isPromiseLike(result), false, "sessionStart should stay synchronous for disabled config");
-	assert.deepEqual(test.surfaceCalls, ["setEditorComponent:clear", "setFooter:clear"], "disabled TUI sessionStart should synchronously restore editor and footer");
+	assert.deepEqual(test.surfaceCalls, ["setFooter:clear"], "disabled TUI sessionStart should leave an editor it never owned untouched");
+	assert.equal(test.getCurrentEditorFactory(), existingEditorFactory, "disabled TUI sessionStart should preserve an existing custom editor");
 	assert.equal(git.created, 0, "disabled sessionStart should not create a git refresher");
 	assert.equal(harness.getLoadConfigCalls(), 0, "disabled sessionStart should not call the async loadConfig adapter");
+}
+
+{
+	const previousEditorFactory = (() => ({ kind: "previous-editor" })) as TestContext["editorFactories"][number];
+	const git = createGitHarness();
+	const test = createContext({ initialEditorFactory: previousEditorFactory });
+	const harness = createRuntimeHarness({ loadConfigSyncConfig: defaultConfig(), git });
+
+	harness.runtime.events.sessionStart({}, test.ctx);
+	const ownedEditorFactory = test.getCurrentEditorFactory();
+	assert.ok(ownedEditorFactory && ownedEditorFactory !== previousEditorFactory, "enabled sessionStart should replace the previous editor with pi-glance's owned factory");
+
+	await harness.runtime.events.sessionShutdown({}, test.ctx as ExtensionContext);
+	assert.equal(test.getCurrentEditorFactory(), previousEditorFactory, "sessionShutdown should restore the editor factory that pi-glance replaced");
+	assert.deepEqual(test.surfaceCalls.slice(-2), ["setEditorComponent:install", "setFooter:clear"], "restoring a previous custom editor should use its original factory before clearing pi-glance's footer");
+}
+
+{
+	const previousEditorFactory = (() => ({ kind: "previous-editor" })) as TestContext["editorFactories"][number];
+	const externalEditorFactory = (() => ({ kind: "external-editor" })) as TestContext["editorFactories"][number];
+	const git = createGitHarness();
+	const test = createContext({ initialEditorFactory: previousEditorFactory });
+	const harness = createRuntimeHarness({ loadConfigSyncConfig: defaultConfig(), git });
+
+	harness.runtime.events.sessionStart({}, test.ctx);
+	test.setCurrentEditorFactory(externalEditorFactory);
+	const surfaceBaseline = test.surfaceCalls.length;
+	await harness.runtime.events.sessionShutdown({}, test.ctx as ExtensionContext);
+
+	assert.equal(test.getCurrentEditorFactory(), externalEditorFactory, "shutdown should leave a newer third-party editor factory untouched");
+	assert.deepEqual(test.surfaceCalls.slice(surfaceBaseline), ["setFooter:clear"], "shutdown should not call setEditorComponent after pi-glance loses editor ownership");
+}
+
+{
+	const previousEditorFactory = (() => ({ kind: "previous-editor" })) as TestContext["editorFactories"][number];
+	const git = createGitHarness();
+	const test = createContext({ initialEditorFactory: previousEditorFactory });
+	const harness = createRuntimeHarness({ loadConfigSyncConfig: defaultConfig(), git });
+
+	harness.runtime.events.sessionStart({}, test.ctx);
+	const firstOwnedFactory = test.getCurrentEditorFactory();
+	harness.runtime.events.sessionStart({}, test.ctx);
+	const secondOwnedFactory = test.getCurrentEditorFactory();
+	assert.ok(firstOwnedFactory && secondOwnedFactory && firstOwnedFactory !== secondOwnedFactory, "a new session should replace pi-glance's own factory for the new context");
+
+	await harness.runtime.events.sessionShutdown({}, test.ctx as ExtensionContext);
+	assert.equal(test.getCurrentEditorFactory(), previousEditorFactory, "reinstalling for a new session should retain the original predecessor for restoration");
 }
 
 {

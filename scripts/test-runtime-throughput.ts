@@ -69,6 +69,7 @@ function messageEnd(message: unknown): unknown {
 
 function createContext(): TestContext {
 	let renderRequests = 0;
+	let currentEditorFactory: unknown;
 	const fakeTui = { requestRender: () => renderRequests++ };
 	const fakeTheme = {};
 	const ctx = {
@@ -86,7 +87,10 @@ function createContext(): TestContext {
 			setFooter: (factory: unknown) => {
 				if (factory) (factory as (tui: unknown, theme: unknown) => unknown)(fakeTui, fakeTheme);
 			},
-			setEditorComponent: (_factory: unknown) => {},
+			setEditorComponent: (factory: unknown) => {
+				currentEditorFactory = factory;
+			},
+			getEditorComponent: () => currentEditorFactory,
 			notify: (_message: string, _type?: string) => {},
 		},
 		getContextUsage: () => ({ tokens: 42, contextWindow: 200_000, percent: 0.021 }),
