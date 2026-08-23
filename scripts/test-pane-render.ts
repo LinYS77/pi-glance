@@ -558,7 +558,7 @@ press(tokensPane.component, "\x1b[B");
 press(tokensPane.component, "\r");
 const tokensCacheChanged = plainText(tokensPane.component);
 assertLineContainsAll(tokensCacheChanged, ["Cache", "read/write"], "enter should cycle tokens cache from rate to read/write values");
-assertContains(tokensCacheChanged, "CH%, read/write token counts, or hidden.", "tokens cache hint should render");
+assertContains(tokensCacheChanged, "Cache rate, read/write counts, or hidden.", "tokens cache hint should render");
 
 const modelPane = await makePane();
 press(modelPane.component, "\x1b[B");

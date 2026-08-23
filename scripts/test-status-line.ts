@@ -90,7 +90,7 @@ const singleSegmentParityCases: Array<{ id: SegmentId; state: GlanceState; text:
 	{ id: "cost", state: richState(), text: "$ $0.042" },
 	{ id: "throughput", state: testState(), text: "spd ? tok/s" },
 	{ id: "context", state: richState(), text: "ctx 23% 47k/200k" },
-	{ id: "tokens", state: richState(), text: "tok ↑12k ↓3.1k CH6%" },
+	{ id: "tokens", state: richState(), text: "tok ↑12k ↓3.1k 6%" },
 	{ id: "model", state: modelState(1), text: "ai GPT 5.5" },
 ];
 
@@ -298,8 +298,8 @@ for (const themeId of ["light", "dark"] as const) {
 {
 	const reportedState = testState({
 		git: { ...testState().git, repo: true, branch: "main", status: "clean", dirty: false },
-		usage: { input: 20_000_000, output: 1_100_000, cacheRead: 320_000_000, cacheWrite: 0, cost: 297 },
-		context: { tokens: 76_000, window: 200_000, percent: 38 },
+		usage: { input: 20_000_000, output: 1_100_000, cacheRead: 320_000_000, cacheWrite: 0, cost: 302 },
+		context: { tokens: 106_000, window: 200_000, percent: 53 },
 		throughput: { currentRun: null, lastRun: null },
 		model: { id: "gpt-5.6-sol", provider: "OTTAI", displayName: "GPT 5.6 sol", thinking: "max" },
 		providers: { availableCount: 1 },
@@ -309,16 +309,30 @@ for (const themeId of ["light", "dark"] as const) {
 	});
 	assert.equal(
 		stripControls(renderGlanceLine(reportedState, reportedConfig, 75, 1)),
-		" main · 󰈸 $297.0 ·  ?/s · 󰔟 38% · 󰄨 ↑20M ↓1.1M · 󰚩 GPT 5.6 sol max",
-		"compact status should fold Tokens cache detail before dropping the final Model segment",
+		" main · 󰈸 $302.0 ·  ?/s · 󰔟 53% · 󰄨 94% · 󰚩 GPT 5.6 sol max",
+		"compact status should prioritize the configured Tokens cache rate with the same icon-plus-percent grammar as Context",
 	);
 }
 
 {
 	const state = richState();
-	assert.equal(plainLine(["tokens"], state, 96), "tok ↑12k ↓3.1k CH6%", "tokens full mode should include configured cache hit rate");
-	assert.equal(plainLine(["tokens"], state, 95), "tok ↑12k ↓3.1k", "tokens compact mode should fold cache detail");
-	assert.equal(plainLine(["tokens"], state, 63), "tok 16k", "tokens minimal mode should fold input/output into total usage");
+	assert.equal(plainLine(["tokens"], state, 96), "tok ↑12k ↓3.1k 6%", "tokens full plain mode should include cache rate without the CH abbreviation");
+	assert.equal(plainLine(["tokens"], state, 95), "tok 6%", "tokens compact rate mode should prioritize cache rate over absolute token amounts");
+	assert.equal(plainLine(["tokens"], state, 63), "tok 6%", "tokens minimal rate mode should retain the same icon-plus-percent grammar");
+	assert.equal(
+		plainLine(["tokens"], state, 96, state.providers.availableCount, (config) => {
+			config.icons = "nerd";
+		}),
+		"󰄨 ↑12k ↓3.1k 󰃨6%",
+		"tokens full Nerd mode should mark cache rate with nf-md-cached",
+	);
+	assert.equal(
+		plainLine(["tokens"], state, 95, state.providers.availableCount, (config) => {
+			config.icons = "nerd";
+		}),
+		"󰄨 6%",
+		"tokens compact Nerd mode should drop the inline cache glyph and align with other segment icon-plus-value forms",
+	);
 	assert.equal(
 		plainLine(["tokens"], state, 96, state.providers.availableCount, (config) => {
 			config.tokens.cache = "read-write";
@@ -344,8 +358,8 @@ for (const themeId of ["light", "dark"] as const) {
 		plainLine(["tokens"], state, 63, state.providers.availableCount, (config) => {
 			config.tokens.display = "total";
 		}),
-		"tok 16k",
-		"tokens minimal mode should keep only the configured total value without a redundant label",
+		"tok 6%",
+		"tokens minimal rate mode should prioritize cache rate even when full display is configured as total",
 	);
 	assert.equal(
 		plainLine(["tokens"], state, 96, state.providers.availableCount, (config) => {
@@ -364,8 +378,17 @@ for (const themeId of ["light", "dark"] as const) {
 				config.tokens.cache = "rate";
 			},
 		),
-		"tok ↑900 ↓50 CH0%",
-		"tokens cache rate should distinguish a known zero-percent cache hit from unknown usage",
+		"tok ↑900 ↓50 0%",
+		"tokens cache rate should distinguish a known zero-percent cache hit from unknown usage without CH",
+	);
+	assert.equal(
+		plainLine(
+			["tokens"],
+			testState({ usage: { input: 900, output: 50, cacheRead: 0, cacheWrite: 100, cost: 0 } }),
+			95,
+		),
+		"tok 0%",
+		"tokens compact rate mode should preserve a known zero-percent cache hit",
 	);
 	assert.equal(
 		plainLine(
@@ -377,8 +400,8 @@ for (const themeId of ["light", "dark"] as const) {
 				config.tokens.cache = "rate";
 			},
 		),
-		"tok ↑0 ↓50 CH100%",
-		"tokens cache rate should handle a fully cached prompt",
+		"tok ↑0 ↓50 100%",
+		"tokens cache rate should handle a fully cached prompt without CH",
 	);
 	assert.equal(
 		plainLine(
@@ -392,6 +415,24 @@ for (const themeId of ["light", "dark"] as const) {
 		),
 		"tok ↑0 ↓50",
 		"tokens cache rate should stay absent when no prompt-token denominator is known",
+	);
+	assert.equal(
+		plainLine(
+			["tokens"],
+			testState({ usage: { input: 0, output: 50, cacheRead: 0, cacheWrite: 0, cost: 0 } }),
+			95,
+		),
+		"tok ↑0 ↓50",
+		"tokens compact rate mode should fall back to absolute amounts while the rate denominator is unknown",
+	);
+	assert.equal(
+		plainLine(
+			["tokens"],
+			testState({ usage: { input: 0, output: 50, cacheRead: 0, cacheWrite: 0, cost: 0 } }),
+			63,
+		),
+		"tok 50",
+		"tokens minimal rate mode should fall back to total usage while the rate denominator is unknown",
 	);
 	assert.equal(plainLine(["model"], modelState(1, "high"), 96), "ai GPT 5.5 high", "model thinking auto should show thinking at full width");
 	assert.equal(plainLine(["model"], modelState(1, "high"), 64), "ai GPT 5.5 high", "model thinking auto should show thinking at compact width");

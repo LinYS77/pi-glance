@@ -342,7 +342,7 @@ const tokensRows = assertRows(config, "tokens", [
 		id: "tokens.cache",
 		label: "Cache",
 		value: "rate",
-		hint: "CH%, read/write token counts, or hidden.",
+		hint: "Cache rate, read/write counts, or hidden.",
 		kind: "cycle",
 	},
 ]);

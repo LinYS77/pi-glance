@@ -79,8 +79,8 @@ assert.equal(
 
 assert.equal(
 	line("tokens", { usage: { input: 12_400, output: 3_100, cacheRead: 800, cacheWrite: 20, cost: 0 } }),
-	"tok ↑12k ↓3.1k CH6%",
-	"tokens should default cache details to aggregate hit rate",
+	"tok ↑12k ↓3.1k 6%",
+	"tokens should default cache details to aggregate hit rate without CH",
 );
 assert.equal(
 	line(
@@ -90,13 +90,13 @@ assert.equal(
 			config.tokens.display = "total";
 		},
 	),
-	"tok total 16k CH6%",
-	"tokens can show total usage while retaining the default cache hit rate",
+	"tok total 16k 6%",
+	"tokens can show total usage while retaining the default cache hit rate without CH",
 );
 assert.equal(
 	line("tokens", { usage: { input: 12_400, output: 3_100, cacheRead: 800, cacheWrite: 20, cost: 0 } }, undefined, 80),
-	"tok ↑12k ↓3.1k",
-	"tokens compact mode should fold the configured cache hit rate",
+	"tok 6%",
+	"tokens compact rate mode should prioritize the cache percentage",
 );
 assert.equal(
 	line(

@@ -14,6 +14,8 @@ const TOKENS_CACHE_LABELS: Record<GlanceConfig["tokens"]["cache"], string> = {
 	hide: "hide",
 };
 
+const TOKEN_CACHE_RATE_NERD_ICON = "󰃨"; // nf-md-cached (U+F00E8)
+
 function nextIn<T extends string | number>(current: T, values: readonly T[]): T {
 	const index = values.indexOf(current);
 	return values[(index + 1) % values.length] ?? values[0]!;
@@ -36,13 +38,15 @@ function sessionCacheHitPercent(usage: UsageTotals): number | undefined {
 	return promptTokens > 0 ? Math.round((usage.cacheRead / promptTokens) * 100) : undefined;
 }
 
-function tokenCacheParts(ctx: SegmentRenderContext): string[] {
+function tokenCacheParts(ctx: SegmentRenderContext, hitRate: number | undefined): string[] {
 	if (!shouldShowTokenCache(ctx)) return [];
 	const usage = ctx.state.usage;
 	const parts: string[] = [];
 	if (ctx.config.tokens.cache === "rate") {
-		const hitRate = sessionCacheHitPercent(usage);
-		if (hitRate !== undefined) parts.push(`CH${hitRate}%`);
+		if (hitRate !== undefined) {
+			const icon = ctx.config.icons === "nerd" ? TOKEN_CACHE_RATE_NERD_ICON : "";
+			parts.push(`${icon}${hitRate}%`);
+		}
 	} else {
 		// Read/write mode shows the aggregate cache token amounts directly.
 		if (usage.cacheRead) parts.push(`R${formatTokens(usage.cacheRead)}`);
@@ -63,14 +67,16 @@ function tokenMinimal(ctx: SegmentRenderContext): string {
 
 function collectTokens(ctx: SegmentRenderContext): SegmentData | undefined {
 	const primary = tokenPrimary(ctx);
-	const cacheParts = tokenCacheParts(ctx);
+	const hitRate = ctx.config.tokens.cache === "rate" ? sessionCacheHitPercent(ctx.state.usage) : undefined;
+	const cacheParts = tokenCacheParts(ctx, hitRate);
+	const foldedRate = hitRate !== undefined ? `${hitRate}%` : undefined;
 	return {
 		primary,
 		secondary: cacheParts.join(" ") || undefined,
 		display: {
 			full: [primary, ...cacheParts].join(" "),
-			compact: primary,
-			minimal: tokenMinimal(ctx),
+			compact: foldedRate ?? primary,
+			minimal: foldedRate ?? tokenMinimal(ctx),
 		},
 	};
 }
@@ -93,7 +99,7 @@ export const tokensSegmentFeature = {
 		{
 			id: "tokens.cache",
 			label: "Cache",
-			hint: "CH%, read/write token counts, or hidden.",
+			hint: "Cache rate, read/write counts, or hidden.",
 			kind: "cycle",
 			value: (config: GlanceConfig) => tokensCacheLabel(config.tokens.cache),
 			mutate: (config: GlanceConfig) => {

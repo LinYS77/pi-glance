@@ -55,17 +55,20 @@ assertReadmeIncludes("exact `light` selects `theme.light`", "README should docum
 assertReadmeIncludes("exact `dark` selects `theme.dark`", "README should document exact dark ambient tone slot selection");
 assertReadmeIncludes("unknown or custom Pi theme names fall back to `theme.light`", "README should document unknown/custom ambient tone fallback");
 assertReadmeIncludes("three Cache modes: `rate` (default), `read/write`, and `hide`", "README should document the simplified Tokens cache modes and default");
+assertReadmeIncludes("full Nerd-icon mode it appears as `󰃨42%`", "README should document the full-width cache-rate glyph");
+assertReadmeIncludes("a known rate becomes the sole Tokens value (`󰄨 42%`)", "README should document compact/minimal rate priority");
+assertReadmeIncludes("unknown rate falls back to token amounts", "README should document the folded unknown-rate fallback");
 assertReadmeIncludes("actual aggregate cache token amounts such as `R563M W12M`", "README should explain the read/write cache amount mode");
-assertReadmeIncludes("shows configured cache detail in full mode, folds to input/output in compact mode, and folds to one total in minimal mode", "README should document Tokens adaptive folding tiers");
 assertReadmeIncludes("Legacy `auto` configs migrate to `rate`", "README should document the legacy auto migration");
 assertReadmeIncludes("legacy `show` configs migrate to the canonical `read-write` value", "README should document the legacy show migration");
 assert.ok(!readme.includes("Cache to `auto`, `show`, `hide`, or `rate`"), "README should not advertise the removed width-dependent auto mode");
 assertReadmeIncludes("rounded session aggregate cache hit percentage", "README should define cache-rate aggregation semantics");
-assertReadmeIncludes("cacheRead / (input + cacheRead + cacheWrite)", "README should document the CH% denominator");
+assertReadmeIncludes("cacheRead / (input + cacheRead + cacheWrite)", "README should document the cache-rate denominator");
 assertReadmeIncludes("billed assistant responses, usage-bearing tool results, compactions, and branch summaries", "README should document complete Pi 0.84 session usage sources");
 assertReadmeIncludes("Pi's public `ctx.getContextUsage()` result", "README should name the public context truth boundary");
 assertReadmeIncludes("Tokens and Cost use Pi's billed-session semantics", "README should align Tokens and Cost copy with complete session totals");
-assertReadmeIncludes("A known cache miss appears as `CH0%`", "README should distinguish a zero-percent hit rate from unknown usage");
-assertReadmeIncludes("No `CH%` is shown until prompt-token usage exists", "README should document the cache-rate unknown boundary");
+assertReadmeIncludes("A known cache miss appears as `0%`", "README should distinguish a zero-percent hit rate from unknown usage");
+assertReadmeIncludes("No cache rate is shown until prompt-token usage exists", "README should document the cache-rate unknown boundary");
+assert.ok(!readme.includes("CH%") && !/CH\d+%/.test(readme), "README should not use the removed CH abbreviation for cache rate");
 
 console.log("✓ README copy checks passed");
