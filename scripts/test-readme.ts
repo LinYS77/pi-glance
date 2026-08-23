@@ -39,6 +39,7 @@ assertReadmeIncludes("pi-glance uses its own curated 22 built-in Glance palettes
 assertReadmeIncludes("It is not a Pi theme manager", "README should avoid implying Pi theme management");
 assertReadmeIncludes("does not enumerate, switch, or install Pi UI themes", "README should explicitly rule out Pi theme enumeration/switching");
 assertReadmeIncludes("does not render with Pi theme token colors", "README should explicitly rule out Pi token color rendering");
+assertReadmeIncludes("no dormant Pi token-style adapter or activation flag", "README should document deletion of the speculative Pi style seam");
 assertReadmeIncludes("theme: { light: GlanceThemeName, dark: GlanceThemeName }", "README should document the supported theme pair config model");
 assertReadmeIncludes('"theme": {\n    "light": "light",\n    "dark": "dark"\n  }', "README should document the new-install theme pair default");
 assert.deepEqual(defaultConfig().theme, { light: "light", dark: "dark" }, "README default theme copy should stay aligned with defaultConfig");

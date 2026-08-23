@@ -92,7 +92,7 @@ That's the only command — opens a calm settings pane with a real input-surface
 
 ## Themes and config
 
-pi-glance uses its own curated 22 built-in Glance palettes. It is not a Pi theme manager: it does not enumerate, switch, or install Pi UI themes, and it does not render with Pi theme token colors.
+pi-glance uses its own curated 22 built-in Glance palettes. It is not a Pi theme manager: it does not enumerate, switch, or install Pi UI themes, it does not render with Pi theme token colors, and it carries no dormant Pi token-style adapter or activation flag.
 
 The supported config model is `theme: { light: GlanceThemeName, dark: GlanceThemeName }`. New installs default to:
 

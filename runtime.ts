@@ -3,7 +3,6 @@ import type { AgentEndEvent, AgentSettledEvent, AgentStartEvent, ExtensionComman
 import { GlanceEditor } from "./editor.js";
 import { GlanceFooter } from "./footer.js";
 import { GitRefresher } from "./git.js";
-import { resolveRuntimeRenderStyleContext } from "./render-style-context.js";
 import { RuntimeRefreshSession } from "./runtime-refresh-session.js";
 import type { GlanceRenderStyleContext } from "./theme-adapter.js";
 import { readPiAmbientTone } from "./theme-tone.js";
@@ -68,6 +67,10 @@ function createDefaultGitRefresher(options: CreateGitRefresherOptions): RuntimeG
 
 function isTuiMode(ctx: ExtensionContext): boolean {
 	return (ctx as ExtensionContext & RuntimeModeContext).mode === "tui";
+}
+
+function runtimeRenderStyleContext(ctx: ExtensionContext): GlanceRenderStyleContext {
+	return { getAmbientTone: () => readPiAmbientTone(ctx.ui) };
 }
 
 export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRuntime {
@@ -162,9 +165,7 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 			return;
 		}
 
-		const renderStyleContext = resolveRuntimeRenderStyleContext(activeConfig, {
-			getAmbientTone: () => readPiAmbientTone(ctx.ui),
-		});
+		const renderStyleContext = runtimeRenderStyleContext(ctx);
 		const generation = invalidateUiOwnership();
 
 		ensureGitRefresher().schedule(true);
@@ -188,7 +189,7 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 				() => {
 					void refreshSession.execute("editor_thinking_cycle", ctx);
 				},
-				renderStyleContext ? { renderStyleContext } : undefined,
+				{ renderStyleContext },
 			);
 		});
 	}
@@ -202,10 +203,8 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 				}
 				const current = await ensureConfig();
 				refreshSession.ensureState(ctx);
-				const renderStyleContext = resolveRuntimeRenderStyleContext(current, {
-					getAmbientTone: () => readPiAmbientTone(ctx.ui),
-				});
-				const result = await adapters.showPane(current, ctx, refreshSession.getState(), renderStyleContext ? { renderStyleContext } : undefined);
+				const renderStyleContext = runtimeRenderStyleContext(ctx);
+				const result = await adapters.showPane(current, ctx, refreshSession.getState(), { renderStyleContext });
 				if (result.action === "cancel") {
 					ctx.ui.notify("pi-glance configuration cancelled", "info");
 					return;

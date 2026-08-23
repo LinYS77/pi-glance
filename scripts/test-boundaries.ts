@@ -26,7 +26,6 @@ const PANE_MODEL_MODULE = "pane-model.ts";
 const THEME_ADAPTER_MODULE = "theme-adapter.ts";
 const THEME_SELECTION_MODULE = "theme-selection.ts";
 const THEME_TONE_MODULE = "theme-tone.ts";
-const RENDER_STYLE_CONTEXT_MODULE = "render-style-context.ts";
 const GUARD_SCRIPT = join("scripts", "test-boundaries.ts");
 const LEGACY_NAMESPACE = ["@mariozechner", ""].join("/");
 const LOW_LEVEL_FRAME_COMPOSITION_TOKENS = [
@@ -264,8 +263,12 @@ function assertThemeAdapterSeamImports(files: SourceFile[]): void {
 	if (!themeAdapter.text.includes("ambientTone") || !themeAdapter.text.includes("getAmbientTone")) fail(`${themeAdapter.path}: render style context should expose ambient tone inputs`);
 	if (!themeAdapter.text.includes("selectGlanceTheme")) fail(`${themeAdapter.path}: render style resolver should select from the configured theme pair`);
 	if (!themeAdapter.text.includes("resolveGlanceRenderStyles")) fail(`${themeAdapter.path}: theme adapter should expose a shared render style resolver`);
-	if (!themeAdapter.text.includes("interface PiThemeLike")) fail(`${themeAdapter.path}: theme adapter should expose a structural Pi theme-like style source skeleton`);
-	if (!themeAdapter.text.includes("resolvePiThemeStyles")) fail(`${themeAdapter.path}: theme adapter should expose an adapter-only Pi theme style resolver`);
+	if (/readonly\s+(?:source|themeId|label)\s*:/.test(themeAdapter.text)) {
+		fail(`${themeAdapter.path}: resolved built-in styles should not retain unused multi-adapter metadata`);
+	}
+	if (/resolvePiThemeStyles|PiThemeLike|PiThemeColorToken|PiThemeStyleOptions|styleFromPiTokens|piThemeCacheKey|resolvePiSegmentStyles/.test(themeAdapter.text)) {
+		fail(`${themeAdapter.path}: theme adapter must contain only Glance palette resolution after deleting the speculative Pi token-style adapter`);
+	}
 }
 
 function assertThemeSelectionSeamImports(files: SourceFile[]): void {
@@ -308,33 +311,29 @@ function assertThemeToneSeamImports(files: SourceFile[]): void {
 	}
 }
 
-function assertPiThemeResolverAdapterOnly(files: SourceFile[]): void {
-	const allowed = new Set([THEME_ADAPTER_MODULE, RENDER_STYLE_CONTEXT_MODULE, GUARD_SCRIPT, join("scripts", "test-themes.ts")]);
+function assertNoSpeculativePiThemeStyleSeam(files: SourceFile[]): void {
+	if (files.some((candidate) => basename(candidate.path) === "render-style-context.ts")) {
+		fail("render-style-context.ts: shallow speculative Pi style provider module should be deleted");
+	}
+	const forbiddenSymbols = [
+		"resolvePiThemeStyles",
+		"createPiRenderStyleContext",
+		"enablePiThemeStyles",
+		"readPiUiTheme",
+		"resolveRuntimeRenderStyleContext",
+		"PiThemeLike",
+		"PiThemeColorToken",
+		"PiThemeStyleOptions",
+		"PiThemeHost",
+		"RuntimeRenderStyleContextOptions",
+	] as const;
 	for (const file of files) {
-		if (allowed.has(file.path)) continue;
-		if (/resolvePiThemeStyles|PiThemeLike|PiThemeColorToken/.test(file.text)) {
-			fail(`${file.path}: Pi theme style resolver skeleton must remain adapter/provider/test-only in this slice`);
+		if (file.path === GUARD_SCRIPT) continue;
+		for (const symbol of forbiddenSymbols) {
+			if (file.text.includes(symbol)) fail(`${file.path}: deleted speculative Pi token-style symbol ${symbol} must not be reintroduced`);
 		}
+		if (/source\s*:\s*["']pi["']/.test(file.text)) fail(`${file.path}: deleted Pi style adapter source must not be reintroduced`);
 	}
-}
-
-function assertRenderStyleContextSeam(files: SourceFile[]): void {
-	const renderStyleContext = files.find((candidate) => basename(candidate.path) === RENDER_STYLE_CONTEXT_MODULE);
-	assert.ok(renderStyleContext, "render-style-context.ts inactive runtime style provider seam should exist");
-
-	const allowedSpecifiers = new Set(["./theme-adapter.js", "./theme-selection.js", "./types.js"]);
-	const importPattern = /(?:import|export)\s+(type\s+)?(?:[^"'`]*?\s+from\s+)?["']([^"']+)["']/g;
-	for (const match of renderStyleContext.text.matchAll(importPattern)) {
-		const specifier = match[2]!;
-		if (specifier.startsWith("@earendil-works/pi-")) fail(`${renderStyleContext.path}: provider seam must not import pi package ${specifier}`);
-		if (IO_NETWORK_PROCESS_IMPORTS.has(specifier)) fail(`${renderStyleContext.path}: provider seam must not import IO/network/process module ${specifier}`);
-		if (!allowedSpecifiers.has(specifier)) fail(`${renderStyleContext.path}: provider seam must not import ${specifier}`);
-	}
-	if (!renderStyleContext.text.includes("createPiRenderStyleContext")) fail(`${renderStyleContext.path}: provider seam should expose Pi theme to GlanceRenderStyleContext conversion`);
-	if (!renderStyleContext.text.includes("resolveRuntimeRenderStyleContext")) fail(`${renderStyleContext.path}: provider seam should expose inactive runtime context resolver`);
-	if (!renderStyleContext.text.includes("getAmbientTone")) fail(`${renderStyleContext.path}: runtime context resolver should merge ambient tone providers with future style overrides`);
-	if (!renderStyleContext.text.includes("enablePiThemeStyles")) fail(`${renderStyleContext.path}: runtime Pi style activation should require an explicit future enable flag`);
-	if (/getAllThemes|getTheme\s*\(|setTheme\s*\(/.test(renderStyleContext.text)) fail(`${renderStyleContext.path}: provider seam must not enumerate, load, or set Pi themes`);
 }
 
 function assertThemePairGuardrails(files: SourceFile[]): void {
@@ -361,34 +360,25 @@ function assertThemePairGuardrails(files: SourceFile[]): void {
 	if (/toLowerCase|toUpperCase|includes\s*\(|startsWith\s*\(|endsWith\s*\(|getColorMode\s*\(/.test(themeTone.text)) {
 		fail(`${themeTone.path}: ambient tone reader must not infer tone from fuzzy names or color-mode helpers`);
 	}
-
-	const renderStyleContext = files.find((candidate) => basename(candidate.path) === RENDER_STYLE_CONTEXT_MODULE);
-	assert.ok(renderStyleContext, "render-style-context.ts inactive runtime style provider seam should exist");
-	if (/enablePiThemeStyles\s*[:=]\s*true|enablePiThemeStyles\s*\?\?\s*true/.test(renderStyleContext.text)) {
-		fail(`${renderStyleContext.path}: Pi theme styles must remain inactive by default`);
-	}
-	if (!/options\.enablePiThemeStyles\s*\?\s*createPiRenderStyleContext\(options\.piTheme\)\s*:\s*undefined/.test(renderStyleContext.text)) {
-		fail(`${renderStyleContext.path}: active Pi theme color styles must remain behind the explicit future enable flag`);
-	}
 }
 
-function assertPiThemeRuntimeProviderBoundary(files: SourceFile[]): void {
+function assertRuntimeAmbientToneBoundary(files: SourceFile[]): void {
 	const runtime = files.find((candidate) => basename(candidate.path) === "runtime.ts");
 	assert.ok(runtime, "runtime.ts should exist");
-	if (!runtime.text.includes("./render-style-context.js")) fail(`${runtime.path}: runtime should import the inactive render style provider seam`);
-	if (!runtime.text.includes("resolveRuntimeRenderStyleContext(activeConfig")) fail(`${runtime.path}: runtime should prepare render style context through the inactive provider seam for editor install`);
-	if (!runtime.text.includes("resolveRuntimeRenderStyleContext(current")) fail(`${runtime.path}: runtime should prepare render style context through the inactive provider seam for pane preview`);
+	if (runtime.text.includes("./render-style-context.js")) fail(`${runtime.path}: runtime must not import the deleted speculative style provider module`);
 	if (!runtime.text.includes("./theme-tone.js")) fail(`${runtime.path}: runtime should import the public ambient tone reader seam`);
-	if (!runtime.text.includes("getAmbientTone: () => readPiAmbientTone(ctx.ui)")) fail(`${runtime.path}: runtime should provide lazy ambient tone through the theme-tone seam`);
-	if (/enablePiThemeStyles/.test(runtime.text)) fail(`${runtime.path}: runtime must not activate Pi theme styles without a future explicit product decision`);
-	if (/createPiRenderStyleContext|resolvePiThemeStyles|PiThemeLike|PiThemeColorToken|readPiUiTheme|ctx\.ui\.theme|ctx\.ui\.setTheme|getAllThemes|getTheme\s*\(|setTheme\s*\(/.test(runtime.text)) {
-		fail(`${runtime.path}: runtime must not directly use Pi theme adapters, inactive Pi color reader, or enumerate/set Pi themes`);
+	if (!runtime.text.includes("function runtimeRenderStyleContext")) fail(`${runtime.path}: runtime should keep lazy ambient context construction local`);
+	if (!runtime.text.includes("getAmbientTone: () => readPiAmbientTone(ctx.ui)")) fail(`${runtime.path}: runtime should provide lazy ambient tone through the exact public theme-name reader`);
+	if ((runtime.text.match(/const renderStyleContext = runtimeRenderStyleContext\(ctx\);/g) ?? []).length !== 2) {
+		fail(`${runtime.path}: editor install and pane preview should both use local ambient context construction`);
+	}
+	if (/ctx\.ui\.theme|ctx\.ui\.setTheme|getAllThemes|getTheme\s*\(|setTheme\s*\(/.test(runtime.text)) {
+		fail(`${runtime.path}: runtime must not directly inspect, enumerate, or set Pi themes`);
 	}
 
-	for (const file of files) {
-		if (new Set([RENDER_STYLE_CONTEXT_MODULE, GUARD_SCRIPT]).has(file.path)) continue;
-		if (/ctx\.ui\.theme|ctx\.ui\.setTheme|getAllThemes|getTheme\s*\(|setTheme\s*\(/.test(file.text)) {
-			fail(`${file.path}: Pi UI theme APIs must stay limited to the inactive provider seam in this slice`);
+	for (const file of files.filter((candidate) => !candidate.path.startsWith("scripts/"))) {
+		if (/ctx\.ui\.setTheme|getAllThemes|getTheme\s*\(|setTheme\s*\(/.test(file.text)) {
+			fail(`${file.path}: production must remain outside Pi theme management`);
 		}
 	}
 }
@@ -979,10 +969,9 @@ assertPaneModelSeamImports(sourceFiles);
 assertThemeAdapterSeamImports(sourceFiles);
 assertThemeSelectionSeamImports(sourceFiles);
 assertThemeToneSeamImports(sourceFiles);
-assertPiThemeResolverAdapterOnly(sourceFiles);
-assertRenderStyleContextSeam(sourceFiles);
+assertNoSpeculativePiThemeStyleSeam(sourceFiles);
 assertThemePairGuardrails(sourceFiles);
-assertPiThemeRuntimeProviderBoundary(sourceFiles);
+assertRuntimeAmbientToneBoundary(sourceFiles);
 assertPanePreviewStyleContextBoundary(sourceFiles);
 assertRenderModulesHaveNoIo(sourceFiles);
 assertInputSurfaceFrameSeamImports(sourceFiles);

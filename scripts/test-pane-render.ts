@@ -5,8 +5,8 @@ import type { Theme } from "@earendil-works/pi-coding-agent";
 import { defaultConfig } from "../config.js";
 import { showGlancePane, type GlancePaneOptions } from "../pane.js";
 import { PALETTES, fg } from "../palette.js";
-import { createPiRenderStyleContext } from "../render-style-context.js";
 import { getThemeCatalogForSlot } from "../settings-catalog.js";
+import { resolveBuiltInGlanceStyles } from "../theme-adapter.js";
 import { GLANCE_THEMES, themeLabel } from "../themes.js";
 import { testState } from "./helpers.js";
 import type { GlanceConfig, GlanceState } from "../types.js";
@@ -163,14 +163,6 @@ function assertNoRawThemeIds(text: string, context: string): void {
 	}
 }
 
-function ansiPiTheme(name: string, code: number) {
-	return {
-		name,
-		getColorMode: () => "test-pane-ansi",
-		fg: (_color: string, text: string) => `\x1b[${code}m${text}\x1b[0m`,
-	};
-}
-
 function assertThemeRow(text: string, label: string, rowLabel = "theme"): void {
 	const line = text.split("\n").find((candidate) => candidate.toLowerCase().includes(rowLabel.toLowerCase()) && candidate.includes(label));
 	assert.ok(line, `${rowLabel} row should show ${label}`);
@@ -201,17 +193,16 @@ assertNotContains(initial, "Changes stay local", "empty default status copy shou
 assertNotContains(initial, "NOTES", "old notes section should stay removed");
 assertNotContains(initial, "[Tab]", "tab navigation should stay removed");
 
-const injectedPreviewContext = createPiRenderStyleContext(ansiPiTheme("pane-pi-preview", 95));
-assert.ok(injectedPreviewContext, "test Pi preview style context should resolve");
+const injectedPreviewContext = { styles: resolveBuiltInGlanceStyles("dark") };
 const injectedPreviewPane = await makePane(defaultConfig(), makeState(), { renderStyleContext: injectedPreviewContext });
 const injectedPreviewRaw = rawText(injectedPreviewPane.component, 120);
-assertContains(injectedPreviewRaw, "\x1b[95mAsk pi to improve the input surface...\x1b[0m", "pane preview with runtime state should honor injected render style context");
+assertContains(injectedPreviewRaw, fg(PALETTES.dark.text, "Ask pi to improve the input surface..."), "pane preview with runtime state should honor an injected built-in style context");
 const injectedPreviewPlain = plainText(injectedPreviewPane.component, 120);
-assertContains(injectedPreviewPlain, "» General", "injected preview style context should not change pane settings controls");
-assertContains(injectedPreviewPlain, "✓ Saved", "injected preview style context should not dirty the pane");
+assertContains(injectedPreviewPlain, "» General", "injected built-in style context should not change pane settings controls");
+assertContains(injectedPreviewPlain, "✓ Saved", "injected built-in style context should not dirty the pane");
 
 const injectedStaticPreviewPane = await makePane(defaultConfig(), null, { renderStyleContext: injectedPreviewContext });
-assertContains(rawText(injectedStaticPreviewPane.component, 120), "\x1b[95mAsk pi to improve the input surface...\x1b[0m", "pane static preview should honor injected render style context");
+assertContains(rawText(injectedStaticPreviewPane.component, 120), fg(PALETTES.dark.text, "Ask pi to improve the input surface..."), "pane static preview should honor an injected built-in style context");
 
 const lightSlotPreviewPane = await makePane(defaultConfig(), makeState(), { renderStyleContext: { getAmbientTone: () => "dark" } });
 press(lightSlotPreviewPane.component, "\x1b[C");
