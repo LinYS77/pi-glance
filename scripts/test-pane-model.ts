@@ -11,7 +11,7 @@ type MoveDirection = "left" | "right" | "up" | "down";
 type PaneIntent =
 	| { type: "cancel" }
 	| { type: "back" }
-	| { type: "move"; direction: MoveDirection }
+	| { type: "move"; direction: MoveDirection; amount?: number }
 	| { type: "activate" }
 	| { type: "save" }
 	| { type: "resetDefaults" }
@@ -286,6 +286,10 @@ assert.deepEqual(
 );
 
 const categories = getSettingsCategories(config);
+const pagedCategories = updatePaneModel(model, { type: "move", direction: "down", amount: 3 });
+assert.equal(pagedCategories.model.categoryIndex, 3, "page-sized category movement should advance by the requested amount");
+assert.equal(pagedCategories.model.settingIndex, 0, "page-sized category movement should still enter the new parent at its first child");
+
 const upFromGeneral = move(model, "up");
 assert.equal(upFromGeneral.requestRender, true, "category up should request render");
 assert.equal(upFromGeneral.model.focus, "categories", "category up should stay in categories");
@@ -390,6 +394,10 @@ assert.deepEqual(
 	getThemeCatalogForSlot("light").map((theme, index) => ({ id: theme.id, label: theme.label, selected: index === 0, previewed: index === 0, restored: index === 0, saved: index === 0 })),
 	"theme browser view should expose all themes in light-slot order with friendly labels and markers",
 );
+
+const pagedLightSlotTheme = updatePaneModel(openedThemeBrowser.model, { type: "move", direction: "down", amount: 5 });
+assert.equal(pagedLightSlotTheme.model.themeBrowser?.highlightedThemeIndex, 5, "page-sized theme movement should advance the highlighted preview by the requested amount");
+assert.equal(lightTheme(pagedLightSlotTheme.model.draft), getThemeCatalogForSlot("light")[5]?.id, "page-sized theme movement should preview the target catalog theme");
 
 const previewedLightSlotTheme = move(openedThemeBrowser.model, "down");
 assert.equal(previewedLightSlotTheme.requestRender, true, "moving theme browser highlight should request render");

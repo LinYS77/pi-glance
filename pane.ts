@@ -1,5 +1,5 @@
-import { Key, matchesKey, truncateToWidth, visibleWidth, type Component, type TUI } from "@earendil-works/pi-tui";
-import type { Theme } from "@earendil-works/pi-coding-agent";
+import { Key, matchesKey, truncateToWidth, visibleWidth, type Component, type Keybinding, type KeyId, type TUI } from "@earendil-works/pi-tui";
+import type { KeybindingsManager, Theme } from "@earendil-works/pi-coding-agent";
 import {
 	createPaneModel,
 	createPaneViewModel,
@@ -143,14 +143,25 @@ function focusGap(gap: string, colors: PaneColors): string {
 	return `${" ".repeat(Math.max(0, gapWidth - 2))}${colors.accent("› ")}`;
 }
 
-function paneIntentFromKey(data: string): PaneIntent | undefined {
+function matchesPaneBinding(
+	data: string,
+	keybindings: KeybindingsManager | undefined,
+	action: Keybinding,
+	fallback: KeyId,
+): boolean {
+	return keybindings ? keybindings.matches(data, action) : matchesKey(data, fallback);
+}
+
+function paneIntentFromKey(data: string, keybindings: KeybindingsManager | undefined, pageSize: number): PaneIntent | undefined {
 	if (matchesKey(data, Key.ctrl("c"))) return { type: "cancel" };
-	if (matchesKey(data, Key.escape) || data === "q" || data === "Q") return { type: "back" };
+	if (matchesPaneBinding(data, keybindings, "tui.select.cancel", Key.escape) || data === "q" || data === "Q") return { type: "back" };
 	if (matchesKey(data, Key.left)) return { type: "move", direction: "left" };
 	if (matchesKey(data, Key.right)) return { type: "move", direction: "right" };
-	if (matchesKey(data, Key.up)) return { type: "move", direction: "up" };
-	if (matchesKey(data, Key.down)) return { type: "move", direction: "down" };
-	if (matchesKey(data, Key.enter)) return { type: "activate" };
+	if (matchesPaneBinding(data, keybindings, "tui.select.up", Key.up)) return { type: "move", direction: "up" };
+	if (matchesPaneBinding(data, keybindings, "tui.select.down", Key.down)) return { type: "move", direction: "down" };
+	if (matchesPaneBinding(data, keybindings, "tui.select.pageUp", Key.pageUp)) return { type: "move", direction: "up", amount: pageSize };
+	if (matchesPaneBinding(data, keybindings, "tui.select.pageDown", Key.pageDown)) return { type: "move", direction: "down", amount: pageSize };
+	if (matchesPaneBinding(data, keybindings, "tui.select.confirm", Key.enter)) return { type: "activate" };
 	if (matchesKey(data, Key.space)) return { type: "noop" };
 	if (data === "s" || data === "S") return { type: "save" };
 	if (data === "r" || data === "R") return { type: "resetDefaults" };
@@ -167,6 +178,7 @@ class GlanceConfigPane implements Component {
 		private readonly theme: Theme,
 		private readonly done: Done,
 		private readonly requestRender: () => void,
+		private readonly keybindings?: KeybindingsManager,
 		private readonly previewState?: GlanceState,
 		private readonly options: GlancePaneOptions = {},
 	) {
@@ -176,7 +188,8 @@ class GlanceConfigPane implements Component {
 	invalidate(): void {}
 
 	handleInput(data: string): void {
-		const intent = paneIntentFromKey(data);
+		const pageSize = this.model.subview === "themeBrowser" ? 8 : 5;
+		const intent = paneIntentFromKey(data, this.keybindings, pageSize);
 		if (!intent) return;
 
 		const update = updatePaneModel(this.model, intent);
@@ -365,7 +378,7 @@ class GlanceConfigPane implements Component {
 
 interface GlancePaneUI {
 	custom<T>(
-		factory: (tui: TUI, theme: Theme, keybindings: unknown, done: (result: T) => void) => Component,
+		factory: (tui: TUI, theme: Theme, keybindings: KeybindingsManager, done: (result: T) => void) => Component,
 	): Promise<T>;
 }
 
@@ -375,12 +388,13 @@ export async function showGlancePane(
 	previewState?: GlanceState,
 	options: GlancePaneOptions = {},
 ): Promise<PaneResult> {
-	return ctx.ui.custom<PaneResult>((tui, theme, _kb, done) => {
+	return ctx.ui.custom<PaneResult>((tui, theme, keybindings, done) => {
 		return new GlanceConfigPane(
 			initial,
 			theme,
 			(result) => done(result ? { action: "save", config: result } : { action: "cancel" }),
 			() => tui.requestRender(),
+			keybindings,
 			previewState,
 			options,
 		);

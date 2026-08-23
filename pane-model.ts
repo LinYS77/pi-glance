@@ -21,7 +21,7 @@ export type PaneMoveDirection = "left" | "right" | "up" | "down";
 export type PaneIntent =
 	| { type: "cancel" }
 	| { type: "back" }
-	| { type: "move"; direction: PaneMoveDirection }
+	| { type: "move"; direction: PaneMoveDirection; amount?: number }
 	| { type: "activate" }
 	| { type: "save" }
 	| { type: "resetDefaults" }
@@ -234,15 +234,16 @@ function restoreThemeBrowser(model: PaneModelState): PaneModelState {
 	return closeThemeBrowser(model, withConfigTheme(model.draft, model.themeBrowser.slot, model.themeBrowser.restoreTheme), "Theme preview discarded.");
 }
 
-function moveThemeBrowserHighlight(model: PaneModelState, direction: PaneMoveDirection): PaneModelState {
+function moveThemeBrowserHighlight(model: PaneModelState, direction: PaneMoveDirection, amount = 1): PaneModelState {
 	if (!model.themeBrowser) return model;
 	if (direction === "left") return restoreThemeBrowser(model);
 	if (direction === "right") return model;
 
 	const slot = model.themeBrowser.slot;
 	const count = getThemeCount(slot);
-	const step = direction === "up" ? -1 : 1;
-	const highlightedThemeIndex = (model.themeBrowser.highlightedThemeIndex + step + count) % count;
+	const distance = Math.max(1, Math.floor(amount));
+	const step = direction === "up" ? -distance : distance;
+	const highlightedThemeIndex = (model.themeBrowser.highlightedThemeIndex + step % count + count) % count;
 	const theme = getThemeIdByIndex(highlightedThemeIndex, slot) ?? configTheme(model.draft, slot);
 	return withModel(model, {
 		draft: withConfigTheme(model.draft, slot, theme),
@@ -253,10 +254,11 @@ function moveThemeBrowserHighlight(model: PaneModelState, direction: PaneMoveDir
 	});
 }
 
-function moveFocus(model: PaneModelState, direction: PaneMoveDirection): PaneModelState {
-	if (model.subview === "themeBrowser") return moveThemeBrowserHighlight(model, direction);
+function moveFocus(model: PaneModelState, direction: PaneMoveDirection, amount = 1): PaneModelState {
+	if (model.subview === "themeBrowser") return moveThemeBrowserHighlight(model, direction, amount);
 
 	const categories = categoriesFor(model);
+	const distance = Math.max(1, Math.floor(amount));
 
 	switch (direction) {
 		case "left":
@@ -273,17 +275,17 @@ function moveFocus(model: PaneModelState, direction: PaneMoveDirection): PaneMod
 		}
 		case "up":
 		case "down": {
-			const step = direction === "up" ? -1 : 1;
+			const step = (direction === "up" ? -1 : 1) * distance;
 			if (model.focus === "categories") {
 				const count = categories.length;
-				const categoryIndex = count === 0 ? 0 : (model.categoryIndex + step + count) % count;
+				const categoryIndex = count === 0 ? 0 : ((model.categoryIndex + step) % count + count) % count;
 				return withModel(model, { categoryIndex, settingIndex: 0 });
 			}
 
 			const category = categories[model.categoryIndex];
 			const count = category ? rowsFor(model, category.id).length : 0;
 			return withModel(model, {
-				settingIndex: count === 0 ? 0 : (model.settingIndex + step + count) % count,
+				settingIndex: count === 0 ? 0 : ((model.settingIndex + step) % count + count) % count,
 			});
 		}
 	}
@@ -448,7 +450,7 @@ export function updatePaneModel(model: PaneModelState, intent: PaneIntent): Pane
 			if (model.focus === "categories") return result(model, false, { action: "cancel" });
 			return result(withModel(model, { focus: model.focus === "values" ? "settings" : "categories" }), true);
 		case "move":
-			return result(moveFocus(model, intent.direction), true);
+			return result(moveFocus(model, intent.direction, intent.amount), true);
 		case "activate":
 			return result(activateCurrent(model), true);
 		case "save":

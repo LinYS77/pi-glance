@@ -1,7 +1,7 @@
 import { strict as assert } from "node:assert";
 import { readFile } from "node:fs/promises";
 import { visibleWidth, type Component, type TUI } from "@earendil-works/pi-tui";
-import type { Theme } from "@earendil-works/pi-coding-agent";
+import type { KeybindingsManager, Theme } from "@earendil-works/pi-coding-agent";
 import { defaultConfig } from "../config.js";
 import { showGlancePane, type GlancePaneOptions } from "../pane.js";
 import { PALETTES, fg } from "../palette.js";
@@ -67,6 +67,7 @@ async function makePane(
 	config: GlanceConfig = defaultConfig(),
 	previewState: GlanceState | null = makeState(),
 	options: GlancePaneOptions = {},
+	keybindings?: KeybindingsManager,
 ): Promise<{ component: Component; renders: () => number; done: () => unknown }> {
 	let component: Component | undefined;
 	let renderRequests = 0;
@@ -76,11 +77,11 @@ async function makePane(
 		config,
 		{
 			ui: {
-				custom: async <T>(factory: (tui: TUI, theme: Theme, keybindings: unknown, done: (result: T) => void) => Component): Promise<T> => {
+				custom: async <T>(factory: (tui: TUI, theme: Theme, keybindings: KeybindingsManager, done: (result: T) => void) => Component): Promise<T> => {
 					component = factory(
 						{ requestRender: () => renderRequests++ } as unknown as TUI,
 						theme,
-						undefined,
+						keybindings as KeybindingsManager,
 						(result: T) => {
 							doneResult = result;
 						},
@@ -95,6 +96,12 @@ async function makePane(
 
 	assert.ok(component, "pane component should be created");
 	return { component, renders: () => renderRequests, done: () => doneResult };
+}
+
+function keybindingsWith(bindings: Partial<Record<string, readonly string[]>>): KeybindingsManager {
+	return {
+		matches: (data: string, action: string) => bindings[action]?.includes(data) ?? false,
+	} as unknown as KeybindingsManager;
 }
 
 function assertContains(text: string, fragment: string, message?: string): void {
@@ -192,6 +199,46 @@ assertNotContains(initial, "[J/K] switch", "category help should not describe re
 assertNotContains(initial, "Changes stay local", "empty default status copy should stay removed");
 assertNotContains(initial, "NOTES", "old notes section should stay removed");
 assertNotContains(initial, "[Tab]", "tab navigation should stay removed");
+
+const injectedBindings = keybindingsWith({
+	"tui.select.up": ["u"],
+	"tui.select.down": ["n"],
+	"tui.select.pageUp": ["p"],
+	"tui.select.pageDown": ["f"],
+	"tui.select.confirm": ["o"],
+	"tui.select.cancel": ["b"],
+});
+const injectedKeysPane = await makePane(defaultConfig(), makeState(), {}, injectedBindings);
+const injectedKeysRenderBaseline = injectedKeysPane.renders();
+press(injectedKeysPane.component, "\x1b[B");
+press(injectedKeysPane.component, "\r");
+assertContains(plainText(injectedKeysPane.component), "» General", "raw default selection keys should not bypass injected user bindings");
+assert.equal(injectedKeysPane.renders(), injectedKeysRenderBaseline, "unbound default selection keys should not request renders");
+press(injectedKeysPane.component, "n");
+assertContains(plainText(injectedKeysPane.component), "» Git", "injected tui.select.down binding should navigate categories");
+press(injectedKeysPane.component, "o");
+assertContains(plainText(injectedKeysPane.component), "» Enabled", "injected tui.select.confirm binding should descend into child settings");
+press(injectedKeysPane.component, "n");
+assertContains(plainText(injectedKeysPane.component), "» Dirty marker", "injected down binding should navigate the active child list");
+press(injectedKeysPane.component, "b");
+assertContains(plainText(injectedKeysPane.component), "» Git", "injected tui.select.cancel binding should return to the parent level");
+
+const injectedThemePane = await makePane(defaultConfig(), makeState(), {}, injectedBindings);
+press(injectedThemePane.component, "o");
+press(injectedThemePane.component, "n");
+press(injectedThemePane.component, "o");
+press(injectedThemePane.component, "o");
+press(injectedThemePane.component, "f");
+const injectedPagedTheme = getThemeCatalogForSlot("light")[8]!;
+assertContains(plainText(injectedThemePane.component, 160), `Light theme · preview ${injectedPagedTheme.label}`, "injected page-down binding should move the theme preview by one viewport page");
+press(injectedThemePane.component, "p");
+assertContains(plainText(injectedThemePane.component, 160), "Light theme · preview Light", "injected page-up binding should return by one viewport page");
+press(injectedThemePane.component, "b");
+assertContains(plainText(injectedThemePane.component), "Theme preview discarded.", "injected cancel binding should restore and leave the theme browser");
+
+const injectedHardCancelPane = await makePane(defaultConfig(), makeState(), {}, injectedBindings);
+press(injectedHardCancelPane.component, "\x03");
+assert.deepEqual((injectedHardCancelPane.done() as { action?: string }).action, "cancel", "Ctrl-C should remain a hard pane cancel independent of selection rebinding");
 
 const injectedPreviewContext = { styles: resolveBuiltInGlanceStyles("dark") };
 const injectedPreviewPane = await makePane(defaultConfig(), makeState(), { renderStyleContext: injectedPreviewContext });
