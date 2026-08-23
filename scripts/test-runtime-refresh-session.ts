@@ -122,7 +122,7 @@ function createSessionHarness(initialConfig: GlanceConfig = cloneConfig()): Sess
 	assert.deepEqual(state.usage, { input: 7, output: 9, cacheRead: 11, cacheWrite: 13, cost: 1 }, "session compact should dedupe repeated entry ids");
 
 	ctx.setContextUsage({ tokens: 55_000, contextWindow: 222_000, percent: 24.8 });
-	await harness.session.execute("model_select", ctx.ctx);
+	await harness.session.modelSelect(ctx.ctx);
 	assert.equal(state.context.tokens, 55_000, "later lifecycle refresh should use newly known public context tokens directly");
 	assert.equal(state.context.percent, 24.8, "later lifecycle refresh should use newly known public context percent directly");
 }
@@ -151,14 +151,14 @@ function createSessionHarness(initialConfig: GlanceConfig = cloneConfig()): Sess
 		branchSummary({ id: "summary-next", usage: { input: 50, output: 60, cost: { total: 3 } } }),
 	]);
 	ctx.setContextUsage({ tokens: null, contextWindow: 200_000, percent: null });
-	await harness.session.execute("session_tree", ctx.ctx);
+	await harness.session.sessionTree(ctx.ctx);
 	assert.deepEqual(state.usage, { input: 90, output: 120, cacheRead: 0, cacheWrite: 0, cost: 6 }, "session_tree reliable reconciliation should include assistant, tool, and branch-summary usage");
 	assert.equal(ctx.getBranchReads(), branchBaseline, "session_tree reconciliation should not duplicate public context truth with a branch scan");
 	assert.equal(state.context.tokens, null, "session_tree should accept public unknown context tokens");
 	assert.equal(state.context.percent, null, "session_tree should accept public unknown context percent");
 
 	ctx.setContextUsage({ tokens: 88_000, contextWindow: 200_000, percent: 44 });
-	await harness.session.execute("session_tree", ctx.ctx);
+	await harness.session.sessionTree(ctx.ctx);
 	assert.equal(state.context.tokens, 88_000, "session_tree should restore context directly when the public API reports known tokens");
 	assert.equal(state.context.percent, 44, "session_tree should restore context directly when the public API reports known percent");
 }
@@ -203,10 +203,6 @@ function createSessionHarness(initialConfig: GlanceConfig = cloneConfig()): Sess
 	assert.deepEqual(state.usage, { input: 3, output: 4, cacheRead: 5, cacheWrite: 6, cost: 0.9 }, "assistant messageEnd should dedupe cloned messages by responseId");
 	assert.equal(ctx.getEntryReads(), entryBaseline, "assistant messageEnd should not scan entries");
 	assert.equal(ctx.getBranchReads(), branchBaseline, "assistant messageEnd should not scan branch");
-
-	harness.session.resetAccumulators();
-	await harness.session.messageEnd(messageEnd({ ...assistant }), ctx.ctx);
-	assert.deepEqual(state.usage, { input: 6, output: 8, cacheRead: 10, cacheWrite: 12, cost: 1.8 }, "resetAccumulators should clear responseId usage dedupe");
 }
 
 {
@@ -384,16 +380,17 @@ function createSessionHarness(initialConfig: GlanceConfig = cloneConfig()): Sess
 	await harness.session.messageEnd(messageEnd({ ...assistant }), ctx.ctx);
 	assert.deepEqual(state.usage, { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, cost: 0.1 }, "setup should confirm assistant responseId dedupe is active");
 
-	harness.session.resetAccumulators();
+	ctx.setEntries([]);
+	const restartedState = harness.session.sessionStart(ctx.ctx);
 	await harness.session.messageEnd(messageEnd({ ...assistant }), ctx.ctx);
-	assert.deepEqual(state.usage, { input: 2, output: 2, cacheRead: 0, cacheWrite: 0, cost: 0.2 }, "resetAccumulators should clear assistant responseId dedupe");
+	assert.deepEqual(restartedState.usage, { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, cost: 0.1 }, "sessionStart should reset assistant responseId dedupe for the new session");
 
 	harness.session.agentStart();
 	harness.setNowMs(2000);
 	harness.session.sessionShutdown();
 	await harness.session.agentEnd({ messages: [eventMessage("assistant", { usage: { output: 10, totalTokens: 10 } })] }, ctx.ctx);
 	harness.session.agentSettled();
-	assert.equal(state.throughput.lastRun, null, "sessionShutdown should reset the tracker so later end/settled events cannot create final model speed");
+	assert.equal(restartedState.throughput.lastRun, null, "sessionShutdown should reset the tracker so later end/settled events cannot create final model speed");
 }
 
 console.log("✓ runtime refresh session checks passed");

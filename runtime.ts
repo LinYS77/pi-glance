@@ -250,7 +250,7 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 				() => refreshSession.getState() ?? refreshSession.ensureState(ctx),
 				() => getConfig(),
 				() => {
-					void refreshSession.execute("editor_thinking_cycle", ctx);
+					void refreshSession.editorThinkingCycle(ctx);
 				},
 				{ renderStyleContext },
 			);
@@ -295,9 +295,10 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 				configDiagnosticStatus = "loaded";
 				configDiagnosticNotified = false;
 				if (previousConfig.enabled && nextConfig.enabled) reconcileGitRefresher();
-				await refreshSession.execute("config_save_success", ctx, {
-					beforeRender: previousConfig.enabled === nextConfig.enabled ? undefined : () => installInputSurface(ctx),
-				});
+				await refreshSession.configSaved(
+					ctx,
+					previousConfig.enabled === nextConfig.enabled ? undefined : () => installInputSurface(ctx),
+				);
 				ctx.ui.notify("pi-glance configuration saved", "info");
 			},
 		},
@@ -313,19 +314,19 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 				clearUI(ctx);
 			},
 			modelSelect: async (_event, ctx) => {
-				await refreshSession.execute("model_select", ctx);
+				await refreshSession.modelSelect(ctx);
 			},
 			thinkingLevelSelect: async (_event, ctx) => {
-				await refreshSession.execute("thinking_level_select", ctx);
+				await refreshSession.thinkingLevelSelect(ctx);
 			},
 			turnStart: async (_event, ctx) => {
-				await refreshSession.execute("turn_start", ctx);
+				await refreshSession.turnStart(ctx);
 			},
 			toolExecutionEnd: async (_event, ctx) => {
-				await refreshSession.execute("tool_execution_end", ctx);
+				await refreshSession.toolExecutionEnd(ctx);
 			},
 			sessionTree: async (_event, ctx) => {
-				await refreshSession.execute("session_tree", ctx);
+				await refreshSession.sessionTree(ctx);
 			},
 			sessionCompact: async (event, ctx) => {
 				await refreshSession.sessionCompact(event, ctx);

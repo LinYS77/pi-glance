@@ -2252,7 +2252,6 @@ const FORBIDDEN_THEME_CATALOG_LOCAL_IMPORTS = new Set([
 	"./status-line",
 	"./surface-layout",
 	"./runtime",
-	"./runtime-policy",
 	"./runtime-snapshot",
 	"./config",
 	"./config-options",
