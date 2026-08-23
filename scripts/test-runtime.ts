@@ -207,6 +207,26 @@ for (const matrixCase of [
 }
 
 {
+	const git = createGitHarness();
+	const test = createContext();
+	const harness = createRuntimeHarness({ loadConfigSyncConfig: defaultConfig(), git });
+
+	harness.runtime.events.sessionStart({}, test.ctx);
+	const renderBaseline = test.getRenderRequests();
+	const scheduleBaseline = git.schedules.length;
+	await harness.runtime.events.turnStart({}, test.ctx as ExtensionContext);
+	await harness.runtime.events.messageEnd({
+		message: assistantMessage({ responseId: "change-driven-run", usage: { input: 1, output: 2, totalTokens: 3, cost: { total: 0.1 } } }),
+	}, test.ctx as ExtensionContext);
+	await harness.runtime.events.turnEnd({ turnIndex: 0, message: assistantMessage() }, test.ctx as ExtensionContext);
+	await harness.runtime.events.agentEnd({ messages: [] }, test.ctx as ExtensionContext);
+	harness.runtime.events.agentSettled({}, test.ctx as ExtensionContext);
+
+	assert.equal(test.getRenderRequests() - renderBaseline, 1, "stable no-tool lifecycle should render only the assistant usage change");
+	assert.deepEqual(git.schedules.slice(scheduleBaseline), [], "stable no-tool lifecycle should not add Git refreshes after the initial session refresh");
+}
+
+{
 	const config = defaultConfig();
 	config.segments = config.segments.map((segment) => segment.id === "git" ? { ...segment, enabled: false } : segment);
 	const git = createGitHarness();

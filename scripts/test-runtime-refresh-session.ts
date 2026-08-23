@@ -95,6 +95,40 @@ function createSessionHarness(initialConfig: GlanceConfig = cloneConfig()): Sess
 
 {
 	const ctx = createContext({
+		cwd: "/stable-repo",
+		model: { id: "stable-model", provider: "openai", contextWindow: 200_000 },
+		contextUsage: { tokens: 10_000, contextWindow: 200_000, percent: 5 },
+		availableProviders: ["openai"],
+		entries: [],
+	});
+	const harness = createSessionHarness();
+	harness.session.ensureState(ctx.ctx);
+	const renderBaseline = harness.getRenderCount();
+
+	await harness.session.turnStart(ctx.ctx);
+	await harness.session.turnEnd({}, ctx.ctx);
+	await harness.session.agentEnd({}, ctx.ctx);
+	await harness.session.thinkingLevelSelect(ctx.ctx);
+	await harness.session.editorThinkingCycle(ctx.ctx);
+	assert.equal(harness.getRenderCount(), renderBaseline, "stable lifecycle and thinking refreshes should not request redundant renders");
+	assert.deepEqual(harness.schedules, [], "stable on-workspace-change refreshes should not schedule Git");
+
+	await harness.session.modelSelect(ctx.ctx);
+	await harness.session.toolExecutionEnd(ctx.ctx);
+	await harness.session.sessionTree(ctx.ctx);
+	assert.equal(harness.getRenderCount(), renderBaseline, "immediate Git events should still skip render when all visible facts are unchanged");
+	assert.deepEqual(harness.schedules, [true, true, true], "change-driven rendering should preserve immediate Git scheduling side effects");
+
+	let beforeRenderCalls = 0;
+	await harness.session.configSaved(ctx.ctx, () => {
+		beforeRenderCalls++;
+	});
+	assert.equal(beforeRenderCalls, 1, "configSaved should preserve transition ordering before render");
+	assert.equal(harness.getRenderCount(), renderBaseline + 1, "configSaved should force one render because display config may change without state facts changing");
+}
+
+{
+	const ctx = createContext({
 		cwd: "/compact-repo",
 		model: { id: "compact-model", provider: "openai", contextWindow: 222_000 },
 		contextUsage: { tokens: 88_000, contextWindow: 222_000, percent: 39.6 },
@@ -120,6 +154,8 @@ function createSessionHarness(initialConfig: GlanceConfig = cloneConfig()): Sess
 
 	await harness.session.sessionCompact({ compactionEntry: { ...compactEntry } }, ctx.ctx);
 	assert.deepEqual(state.usage, { input: 7, output: 9, cacheRead: 11, cacheWrite: 13, cost: 1 }, "session compact should dedupe repeated entry ids");
+	assert.equal(harness.getRenderCount(), 1, "deduped compaction with unchanged public facts should not request a redundant render");
+	assert.deepEqual(harness.schedules, [true, true], "deduped compaction should still preserve immediate Git refresh scheduling");
 
 	ctx.setContextUsage({ tokens: 55_000, contextWindow: 222_000, percent: 24.8 });
 	await harness.session.modelSelect(ctx.ctx);
@@ -192,6 +228,7 @@ function createSessionHarness(initialConfig: GlanceConfig = cloneConfig()): Sess
 	const state = harness.session.ensureState(ctx.ctx);
 	const entryBaseline = ctx.getEntryReads();
 	const branchBaseline = ctx.getBranchReads();
+	const renderBaseline = harness.getRenderCount();
 	const assistant = eventMessage("assistant", {
 		responseId: "response-1",
 		usage: { input: 3, output: 4, cacheRead: 5, cacheWrite: 6, totalTokens: 18, cost: { total: 0.9 } },
@@ -199,8 +236,10 @@ function createSessionHarness(initialConfig: GlanceConfig = cloneConfig()): Sess
 
 	await harness.session.messageEnd(messageEnd(assistant), ctx.ctx);
 	assert.deepEqual(state.usage, { input: 3, output: 4, cacheRead: 5, cacheWrite: 6, cost: 0.9 }, "assistant messageEnd should apply responseId usage delta once");
+	assert.equal(harness.getRenderCount(), renderBaseline + 1, "first assistant usage delta should request one render");
 	await harness.session.messageEnd(messageEnd({ ...assistant }), ctx.ctx);
 	assert.deepEqual(state.usage, { input: 3, output: 4, cacheRead: 5, cacheWrite: 6, cost: 0.9 }, "assistant messageEnd should dedupe cloned messages by responseId");
+	assert.equal(harness.getRenderCount(), renderBaseline + 1, "deduped assistant usage with unchanged lifecycle facts should not render again");
 	assert.equal(ctx.getEntryReads(), entryBaseline, "assistant messageEnd should not scan entries");
 	assert.equal(ctx.getBranchReads(), branchBaseline, "assistant messageEnd should not scan branch");
 }

@@ -53,6 +53,7 @@ export interface RuntimeRefreshSessionHost {
 
 type SnapshotMode = "none" | "reliable" | "lifecycle" | "thinking";
 type GitRefreshMode = "never" | "onWorkspaceChange" | "immediate";
+type RenderMode = "never" | "changed" | "always";
 
 interface RefreshPlan {
 	ensureConfig: boolean;
@@ -63,11 +64,11 @@ interface RefreshPlan {
 	refreshUsageTotals: boolean;
 	refreshContext: boolean;
 	git: GitRefreshMode;
-	render: boolean;
+	render: RenderMode;
 }
 
 interface RefreshOptions {
-	beforeRender?: () => void;
+	beforeRender?: () => boolean | void;
 }
 
 const ENSURE_ONLY: RefreshPlan = {
@@ -79,7 +80,7 @@ const ENSURE_ONLY: RefreshPlan = {
 	refreshUsageTotals: false,
 	refreshContext: false,
 	git: "never",
-	render: false,
+	render: "never",
 };
 
 const LIFECYCLE_MODEL_IMMEDIATE: RefreshPlan = {
@@ -91,7 +92,7 @@ const LIFECYCLE_MODEL_IMMEDIATE: RefreshPlan = {
 	refreshUsageTotals: false,
 	refreshContext: true,
 	git: "immediate",
-	render: true,
+	render: "changed",
 };
 
 const LIFECYCLE_MODEL_ON_WORKSPACE_CHANGE: RefreshPlan = {
@@ -121,7 +122,7 @@ const ASSISTANT_MESSAGE_END: RefreshPlan = {
 
 const USAGE_MESSAGE_END: RefreshPlan = {
 	...ENSURE_ONLY,
-	render: true,
+	render: "changed",
 };
 
 const THINKING_LEVEL_SELECT: RefreshPlan = {
@@ -133,7 +134,7 @@ const THINKING_LEVEL_SELECT: RefreshPlan = {
 	refreshUsageTotals: false,
 	refreshContext: false,
 	git: "never",
-	render: true,
+	render: "changed",
 };
 
 const EDITOR_THINKING_CYCLE: RefreshPlan = {
@@ -146,6 +147,7 @@ const CONFIG_SAVED: RefreshPlan = {
 	...LIFECYCLE_MODEL_IMMEDIATE,
 	ensureConfig: false,
 	ensureState: false,
+	render: "always",
 };
 
 function applyModelSpeedIntent(state: GlanceState, intent: ModelSpeedStateIntent): boolean {
@@ -240,42 +242,48 @@ export class RuntimeRefreshSession {
 		else if (plan.git === "onWorkspaceChange" && workspaceChanged) this.host.scheduleGitRefresh(true);
 	}
 
-	private applyLifecycleSnapshot(inputs: StateLifecycleInputs, plan: RefreshPlan, usage?: UsageTotals): void {
-		if (!this.state) return;
+	private applyLifecycleSnapshot(inputs: StateLifecycleInputs, plan: RefreshPlan, usage?: UsageTotals): boolean {
+		if (!this.state) return false;
+		let changed = false;
 		const workspaceChanged = plan.refreshWorkspace ? refreshWorkspace(this.state, inputs) : false;
-		setProviderCount(this.state, inputs.availableProviderCount);
-		if (plan.refreshModel) refreshModel(this.state, inputs, this.host.getConfig());
-		if (plan.refreshUsageTotals && usage) setUsageTotals(this.state, usage);
-		if (plan.refreshContext) refreshContextUsage(this.state, inputs);
+		changed = workspaceChanged || changed;
+		changed = setProviderCount(this.state, inputs.availableProviderCount) || changed;
+		if (plan.refreshModel) changed = refreshModel(this.state, inputs, this.host.getConfig()) || changed;
+		if (plan.refreshUsageTotals && usage) changed = setUsageTotals(this.state, usage) || changed;
+		if (plan.refreshContext) changed = refreshContextUsage(this.state, inputs) || changed;
 		this.applyGitScheduling(plan, workspaceChanged);
+		return changed;
 	}
 
-	private applyRefreshPlan(ctx: ExtensionContext, plan: RefreshPlan): void {
-		if (!this.state || plan.snapshot === "none") return;
+	private applyRefreshPlan(ctx: ExtensionContext, plan: RefreshPlan): boolean {
+		if (!this.state || plan.snapshot === "none") return false;
 		const config = this.host.getConfig();
 
 		if (plan.snapshot === "thinking") {
 			const inputs = thinkingInputsFromContext(ctx, this.host.getThinkingLevel());
-			setProviderCount(this.state, inputs.availableProviderCount);
-			if (plan.refreshModel) refreshModel(this.state, inputs, config);
-			return;
+			let changed = setProviderCount(this.state, inputs.availableProviderCount);
+			if (plan.refreshModel) changed = refreshModel(this.state, inputs, config) || changed;
+			return changed;
 		}
 
 		if (plan.snapshot === "reliable") {
 			const inputs = stateInputsFromContext(ctx, this.host.getThinkingLevel());
-			this.applyLifecycleSnapshot(inputs, plan, inputs.usage);
-			return;
+			return this.applyLifecycleSnapshot(inputs, plan, inputs.usage);
 		}
 
-		this.applyLifecycleSnapshot(lifecycleInputsFromContext(ctx, this.host.getThinkingLevel()), plan);
+		return this.applyLifecycleSnapshot(lifecycleInputsFromContext(ctx, this.host.getThinkingLevel()), plan);
 	}
 
 	private async refresh(ctx: ExtensionContext, plan: RefreshPlan, options: RefreshOptions = {}): Promise<void> {
 		if (plan.ensureConfig) await this.host.ensureConfig();
-		if (plan.ensureState) this.ensureState(ctx);
-		this.applyRefreshPlan(ctx, plan);
-		options.beforeRender?.();
-		if (plan.render) this.host.requestRender();
+		let changed = false;
+		if (plan.ensureState && !this.state) {
+			this.ensureState(ctx);
+			changed = true;
+		}
+		changed = this.applyRefreshPlan(ctx, plan) || changed;
+		changed = options.beforeRender?.() === true || changed;
+		if (plan.render === "always" || (plan.render === "changed" && changed)) this.host.requestRender();
 	}
 
 	async modelSelect(ctx: ExtensionContext): Promise<void> {
@@ -322,8 +330,10 @@ export class RuntimeRefreshSession {
 				: ENSURE_ONLY;
 		await this.refresh(ctx, plan, {
 			beforeRender: () => {
-				if (hadState) this.applyUsageDelta(message, delta, this.messageUsageKey(message));
-				if (this.state) applyModelSpeedIntent(this.state, modelSpeedIntent);
+				let changed = false;
+				if (hadState) changed = this.applyUsageDelta(message, delta, this.messageUsageKey(message)) || changed;
+				if (this.state) changed = applyModelSpeedIntent(this.state, modelSpeedIntent) || changed;
+				return changed;
 			},
 		});
 	}
@@ -335,8 +345,10 @@ export class RuntimeRefreshSession {
 		const modelSpeedIntent = this.modelSpeedTracker.compactionRetry(event.willRetry === true);
 		await this.refresh(ctx, LIFECYCLE_MODEL_IMMEDIATE, {
 			beforeRender: () => {
-				if (hadState) this.applyUsageDelta(entry, delta, this.entryUsageKey(entry));
-				if (this.state) applyModelSpeedIntent(this.state, modelSpeedIntent);
+				let changed = false;
+				if (hadState) changed = this.applyUsageDelta(entry, delta, this.entryUsageKey(entry)) || changed;
+				if (this.state) changed = applyModelSpeedIntent(this.state, modelSpeedIntent) || changed;
+				return changed;
 			},
 		});
 	}
