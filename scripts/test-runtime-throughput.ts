@@ -104,8 +104,8 @@ function createRuntime(nowValues: number[]): { runtime: RuntimeRecord; capturedS
 	const config = defaultConfig();
 	const adapters = {
 		getThinkingLevel: () => "max",
-		loadConfigSync: () => cloneConfig(config),
-		loadConfig: async () => cloneConfig(config),
+		loadConfigSync: () => ({ config: cloneConfig(config), status: "loaded" as const, writable: true }),
+		loadConfig: async () => ({ config: cloneConfig(config), status: "loaded" as const, writable: true }),
 		saveConfig: async (_config: GlanceConfig) => {},
 		showPane: async (_initial: GlanceConfig, _ctx: ExtensionCommandContext, previewState?: unknown) => {
 			capturedStates.push(JSON.parse(JSON.stringify(previewState)) as unknown);

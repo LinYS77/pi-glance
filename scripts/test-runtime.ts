@@ -811,6 +811,51 @@ for (const matrixCase of [
 }
 
 {
+	const diagnostic = "pi-glance configuration is invalid; using defaults without replacing the broken file";
+	const initialConfig = defaultConfig();
+	const nextConfig = disabledConfig(initialConfig);
+	const git = createGitHarness();
+	const test = createContext();
+	const harness = createRuntimeHarness({
+		loadConfigSyncResult: { config: initialConfig, status: "invalid", writable: false, diagnostic },
+		showPaneResults: [{ action: "save", config: nextConfig }],
+		git,
+	});
+
+	harness.runtime.events.sessionStart({}, test.ctx);
+	assert.equal(hasNotification(test.notifications, diagnostic, "error"), true, "invalid config load should notify its diagnostic once at session start");
+	const surfaceBaseline = test.surfaceCalls.length;
+	const notificationBaseline = test.notifications.length;
+	await harness.runtime.commands.openPane("", test.ctx);
+
+	assert.deepEqual(harness.savedConfigs, [], "read-only fallback config should block /glance from overwriting the existing file");
+	assert.equal(
+		hasNotification(test.notifications.slice(notificationBaseline), "pi-glance configuration save blocked to protect the existing file; fix or remove it, then /reload", "error"),
+		true,
+		"blocked save should explain how to recover",
+	);
+	assert.equal(test.notifications.filter((notification) => notification.message === diagnostic).length, 1, "opening /glance should not repeat an already reported load diagnostic");
+	assert.deepEqual(test.surfaceCalls.slice(surfaceBaseline), [], "blocked save should preserve the active input surface");
+}
+
+{
+	const diagnostic = "pi-glance configuration version 9 is newer than supported version 8";
+	const initialConfig = defaultConfig();
+	const git = createGitHarness();
+	const test = createContext();
+	const harness = createRuntimeHarness({
+		loadConfigSyncResult: { config: initialConfig, status: "future", writable: false, diagnostic },
+		showPaneResults: [{ action: "cancel" }],
+		git,
+	});
+
+	harness.runtime.events.sessionStart({}, test.ctx);
+	assert.equal(hasNotification(test.notifications, diagnostic, "warning"), true, "future config load should warn without treating known fields as a runtime failure");
+	await harness.runtime.commands.openPane("", test.ctx);
+	assert.equal(test.notifications.filter((notification) => notification.message === diagnostic).length, 1, "future config warning should be emitted only once for the loaded config");
+}
+
+{
 	const initialConfig = defaultConfig();
 	const nextConfig = nextEnabledConfig(initialConfig);
 	const git = createGitHarness();

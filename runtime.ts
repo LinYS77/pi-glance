@@ -16,6 +16,7 @@ import type {
 	TurnEndEvent,
 	TurnStartEvent,
 } from "@earendil-works/pi-coding-agent";
+import type { ConfigLoadResult } from "./config.js";
 import { GlanceEditor } from "./editor.js";
 import { GlanceFooter } from "./footer.js";
 import { GitRefresher } from "./git.js";
@@ -43,8 +44,8 @@ export interface RuntimeShowPaneOptions {
 
 export interface GlanceRuntimeAdapters {
 	getThinkingLevel(): string;
-	loadConfigSync(): GlanceConfig;
-	loadConfig(): Promise<GlanceConfig>;
+	loadConfigSync(): ConfigLoadResult;
+	loadConfig(): Promise<ConfigLoadResult>;
 	saveConfig(config: GlanceConfig): Promise<void>;
 	showPane(initial: GlanceConfig, ctx: ExtensionCommandContext, previewState?: GlanceState, options?: RuntimeShowPaneOptions): Promise<GlancePaneResult>;
 	createGitRefresher?: (options: CreateGitRefresherOptions) => RuntimeGitRefresher;
@@ -91,6 +92,10 @@ function runtimeRenderStyleContext(ctx: ExtensionContext): GlanceRenderStyleCont
 
 export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRuntime {
 	let config: GlanceConfig | undefined;
+	let configWritable = true;
+	let configDiagnostic: string | undefined;
+	let configDiagnosticStatus: ConfigLoadResult["status"] | undefined;
+	let configDiagnosticNotified = false;
 	let footer: GlanceFooter | undefined;
 	let ownedEditorFactory: EditorFactory | undefined;
 	let previousEditorFactory: EditorFactory | undefined;
@@ -99,8 +104,23 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 	let uiGeneration = 0;
 	const nowMs = adapters.nowMs ?? (() => performance.now());
 
+	function acceptConfigLoad(result: ConfigLoadResult): GlanceConfig {
+		config = result.config;
+		configWritable = result.writable;
+		configDiagnostic = result.diagnostic;
+		configDiagnosticStatus = result.status;
+		configDiagnosticNotified = false;
+		return result.config;
+	}
+
+	function notifyConfigDiagnostic(ctx: ExtensionContext): void {
+		if (!ctx.hasUI || !configDiagnostic || configDiagnosticNotified) return;
+		configDiagnosticNotified = true;
+		ctx.ui.notify(configDiagnostic, configDiagnosticStatus === "future" ? "warning" : "error");
+	}
+
 	async function ensureConfig(): Promise<GlanceConfig> {
-		config ??= await adapters.loadConfig();
+		if (!config) return acceptConfigLoad(await adapters.loadConfig());
 		return config;
 	}
 
@@ -247,6 +267,7 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 					return;
 				}
 				const current = await ensureConfig();
+				notifyConfigDiagnostic(ctx);
 				refreshSession.ensureState(ctx);
 				const renderStyleContext = runtimeRenderStyleContext(ctx);
 				const result = await adapters.showPane(current, ctx, refreshSession.getState(), { renderStyleContext });
@@ -257,6 +278,10 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 
 				const previousConfig = current;
 				const nextConfig = result.config;
+				if (!configWritable) {
+					ctx.ui.notify("pi-glance configuration save blocked to protect the existing file; fix or remove it, then /reload", "error");
+					return;
+				}
 				try {
 					await adapters.saveConfig(nextConfig);
 				} catch {
@@ -265,6 +290,10 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 				}
 
 				config = nextConfig;
+				configWritable = true;
+				configDiagnostic = undefined;
+				configDiagnosticStatus = "loaded";
+				configDiagnosticNotified = false;
 				if (previousConfig.enabled && nextConfig.enabled) reconcileGitRefresher();
 				await refreshSession.execute("config_save_success", ctx, {
 					beforeRender: previousConfig.enabled === nextConfig.enabled ? undefined : () => installInputSurface(ctx),
@@ -274,7 +303,8 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 		},
 		events: {
 			sessionStart: (_event, ctx) => {
-				config = adapters.loadConfigSync();
+				acceptConfigLoad(adapters.loadConfigSync());
+				notifyConfigDiagnostic(ctx);
 				refreshSession.sessionStart(ctx);
 				installInputSurface(ctx);
 			},

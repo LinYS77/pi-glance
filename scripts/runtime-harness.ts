@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert";
 import type { ExtensionCommandContext, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { defaultConfig } from "../config.js";
+import { defaultConfig, type ConfigLoadResult } from "../config.js";
 import { createGlanceRuntime, type CreateGitRefresherOptions, type GlancePaneResult, type GlanceRuntimeAdapters, type RuntimeGitRefresher, type RuntimeShowPaneOptions } from "../runtime.js";
 import type { StateSessionEntry } from "../runtime-snapshot.js";
 import type { GitSnapshot, GlanceConfig, GlanceState } from "../types.js";
@@ -75,6 +75,8 @@ export interface RuntimeGitHarness {
 export interface RuntimeHarnessOptions {
 	loadConfigSyncConfig?: GlanceConfig;
 	loadConfigConfig?: GlanceConfig;
+	loadConfigSyncResult?: ConfigLoadResult;
+	loadConfigResult?: ConfigLoadResult;
 	showPaneResults?: GlancePaneResult[];
 	onSaveConfig?: (config: GlanceConfig) => void | Promise<void>;
 	saveConfigError?: Error;
@@ -103,6 +105,10 @@ export interface RuntimeHarness {
 
 export function cloneConfig(config: GlanceConfig = defaultConfig()): GlanceConfig {
 	return JSON.parse(JSON.stringify(config)) as GlanceConfig;
+}
+
+export function loadedConfigResult(config: GlanceConfig = defaultConfig()): ConfigLoadResult {
+	return { config, status: "loaded", writable: true };
 }
 
 export function disabledConfig(config = defaultConfig()): GlanceConfig {
@@ -354,13 +360,15 @@ export function createRuntimeHarness(options: RuntimeHarnessOptions = {}): Runti
 	let loadConfigCalls = 0;
 	const loadConfigSyncConfig = options.loadConfigSyncConfig ?? defaultConfig();
 	const loadConfigConfig = options.loadConfigConfig ?? loadConfigSyncConfig;
+	const loadConfigSyncResult = options.loadConfigSyncResult ?? loadedConfigResult(loadConfigSyncConfig);
+	const loadConfigResult = options.loadConfigResult ?? loadedConfigResult(loadConfigConfig);
 	const showPaneResults = [...(options.showPaneResults ?? [])];
 	const adapters: GlanceRuntimeAdapters = {
 		getThinkingLevel: options.getThinkingLevel ?? (() => "off"),
-		loadConfigSync: () => loadConfigSyncConfig,
+		loadConfigSync: () => loadConfigSyncResult,
 		loadConfig: async () => {
 			loadConfigCalls++;
-			return loadConfigConfig;
+			return loadConfigResult;
 		},
 		saveConfig: async (config) => {
 			await options.onSaveConfig?.(config);

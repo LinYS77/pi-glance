@@ -166,7 +166,8 @@ npm run debug:git
 - Context facts come from Pi's public `ctx.getContextUsage()` result; `null` remains unknown after compaction until Pi reports a known value.
 - Tokens and Cost use Pi's billed-session semantics across assistant, tool, compaction, and branch-summary usage; Model speed uses only final assistant usage with matching public output-stream timing.
 - No render-time IO — Git is collected asynchronously and cached
-- Global config at `~/.pi/agent/pi-glance/config.json`
+- Global config at `~/.pi/agent/pi-glance/config.json`; saves use an atomic temporary-file rename.
+- Invalid, unreadable, or newer-version config files are diagnosed and treated as read-only so `/glance` cannot silently overwrite them. Fix or remove the file, then run `/reload`.
 
 ## License
 
