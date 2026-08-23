@@ -22,6 +22,11 @@ assertReadmeIncludes("/glance` → **General** → `Icons`", "README should poin
 assertReadmeIncludes("Nerd icons need a Nerd Font or Symbols Nerd Font fallback", "README should explain Nerd Font fallback requirement");
 assertReadmeIncludes("If icons look like boxes, choose `plain`", "README should explain the plain fallback when icons render as boxes");
 assertReadmeIncludes("does not auto-detect, install, or bundle terminal fonts", "README should avoid implying font detection/install/bundling");
+assertReadmeIncludes("supports Pi 0.84's regular and fullscreen TUI modes", "README should document the fullscreen dogfood compatibility result");
+assertReadmeIncludes("reserves one footer dock row", "README should disclose Pi's current fullscreen empty-footer dock behavior");
+assertReadmeIncludes("Pi exposes a single custom-editor slot", "README should disclose the public custom-editor composition boundary");
+assertReadmeIncludes("the last one loaded wins", "README should explain custom-editor load-order behavior");
+assertReadmeIncludes("does not patch or wrap arbitrary third-party editors", "README should preserve the public-seam-only custom-editor boundary");
 
 assert.equal(GLANCE_THEMES.length, 22, "README theme copy should describe the curated 22-theme collection");
 assertReadmeIncludes("22 built-in palettes", "README should describe the curated 22-theme count");
