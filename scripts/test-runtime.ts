@@ -340,7 +340,8 @@ for (const matrixCase of [
 	const renderBaseline = test.getRenderRequests();
 	const scheduleBaseline = git.schedules.length;
 	test.setAvailableProviders(["openai", "anthropic", "openai", "local"]);
-	test.setModel({ id: "claude-opus-4-20250514", provider: "anthropic", contextWindow: 500_000 });
+	test.setScopedProviders(["anthropic", "anthropic"]);
+	test.setModel({ id: "claude-opus-4-20250514", name: "Claude Opus Official", provider: "anthropic", contextWindow: 500_000 });
 	test.setContextUsage({ tokens: 123_456, contextWindow: 500_000, percent: 24.6912 });
 	await harness.runtime.events.modelSelect({}, test.ctx as ExtensionContext);
 
@@ -352,7 +353,7 @@ for (const matrixCase of [
 
 	const previewState = harness.showPanePreviewStates.at(-1);
 	assert.ok(previewState, "model_select smoke test should open /glance with preview state");
-	assert.equal(previewState.providers.availableCount, 3, "preview state should refresh unique provider count after model_select");
+	assert.equal(previewState.providers.availableCount, 1, "preview state should count providers from non-empty ctx.scopedModels instead of the full registry");
 	assert.equal(previewState.model.id, "claude-opus-4-20250514", "preview state should refresh model id after model_select");
 	assert.equal(previewState.model.provider, "anthropic", "preview state should refresh model provider after model_select");
 	assert.equal(previewState.model.displayName, "Opus Custom", "preview state should refresh configured model display name after model_select");

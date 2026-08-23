@@ -1,5 +1,21 @@
 import { performance } from "node:perf_hooks";
-import type { AgentEndEvent, AgentSettledEvent, AgentStartEvent, ExtensionCommandContext, ExtensionContext, MessageEndEvent, MessageUpdateEvent, SessionCompactEvent, TurnEndEvent } from "@earendil-works/pi-coding-agent";
+import type {
+	AgentEndEvent,
+	AgentSettledEvent,
+	AgentStartEvent,
+	ExtensionCommandContext,
+	ExtensionContext,
+	ExtensionEvent,
+	MessageEndEvent,
+	MessageUpdateEvent,
+	SessionCompactEvent,
+	SessionShutdownEvent,
+	SessionStartEvent,
+	SessionTreeEvent,
+	ToolExecutionEndEvent,
+	TurnEndEvent,
+	TurnStartEvent,
+} from "@earendil-works/pi-coding-agent";
 import { GlanceEditor } from "./editor.js";
 import { GlanceFooter } from "./footer.js";
 import { GitRefresher } from "./git.js";
@@ -35,10 +51,8 @@ export interface GlanceRuntimeAdapters {
 	nowMs?: () => number;
 }
 
-interface RuntimeModeContext {
-	mode?: string;
-}
-
+type RuntimeModelSelectEvent = Extract<ExtensionEvent, { type: "model_select" }>;
+type RuntimeThinkingLevelSelectEvent = Extract<ExtensionEvent, { type: "thinking_level_select" }>;
 type EditorFactory = NonNullable<ReturnType<ExtensionContext["ui"]["getEditorComponent"]>>;
 
 export interface GlanceRuntime {
@@ -46,13 +60,13 @@ export interface GlanceRuntime {
 		openPane(args: string, ctx: ExtensionCommandContext): Promise<void>;
 	};
 	events: {
-		sessionStart(event: unknown, ctx: ExtensionContext): void;
-		sessionShutdown(event: unknown, ctx: ExtensionContext): Promise<void>;
-		modelSelect(event: unknown, ctx: ExtensionContext): Promise<void>;
-		thinkingLevelSelect(event: unknown, ctx: ExtensionContext): Promise<void>;
-		turnStart(event: unknown, ctx: ExtensionContext): Promise<void>;
-		toolExecutionEnd(event: unknown, ctx: ExtensionContext): Promise<void>;
-		sessionTree(event: unknown, ctx: ExtensionContext): Promise<void>;
+		sessionStart(event: SessionStartEvent, ctx: ExtensionContext): void;
+		sessionShutdown(event: SessionShutdownEvent, ctx: ExtensionContext): Promise<void>;
+		modelSelect(event: RuntimeModelSelectEvent, ctx: ExtensionContext): Promise<void>;
+		thinkingLevelSelect(event: RuntimeThinkingLevelSelectEvent, ctx: ExtensionContext): Promise<void>;
+		turnStart(event: TurnStartEvent, ctx: ExtensionContext): Promise<void>;
+		toolExecutionEnd(event: ToolExecutionEndEvent, ctx: ExtensionContext): Promise<void>;
+		sessionTree(event: SessionTreeEvent, ctx: ExtensionContext): Promise<void>;
 		sessionCompact(event: SessionCompactEvent, ctx: ExtensionContext): Promise<void>;
 		messageUpdate(event: MessageUpdateEvent, ctx: ExtensionContext): void;
 		messageEnd(event: MessageEndEvent, ctx: ExtensionContext): Promise<void>;
@@ -68,7 +82,7 @@ function createDefaultGitRefresher(options: CreateGitRefresherOptions): RuntimeG
 }
 
 function isTuiMode(ctx: ExtensionContext): boolean {
-	return (ctx as ExtensionContext & RuntimeModeContext).mode === "tui";
+	return ctx.mode === "tui";
 }
 
 function runtimeRenderStyleContext(ctx: ExtensionContext): GlanceRenderStyleContext {

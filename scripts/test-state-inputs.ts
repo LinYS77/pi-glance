@@ -1,6 +1,8 @@
 import { strict as assert } from "node:assert";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { defaultConfig } from "../config.js";
 import { lifecycleInputsFromContext, stateInputsFromContext, thinkingInputsFromContext, usageTotalsFromEntries, usageTotalsFromMessage, type StateSessionEntry } from "../runtime-snapshot.js";
+import { createInitialState } from "../state.js";
 
 function message(role: string, options: { usage?: Record<string, unknown>; stopReason?: string } = {}): StateSessionEntry {
 	return {
@@ -16,9 +18,10 @@ function message(role: string, options: { usage?: Record<string, unknown>; stopR
 interface FakeContextOptions {
 	cwd?: string;
 	sessionCwd?: string;
-	model?: { id?: string; provider?: string; contextWindow?: number };
+	model?: { id?: string; name?: string; provider?: string; contextWindow?: number };
 	contextUsage?: { tokens: number | null; contextWindow: number; percent: number | null };
 	availableProviders?: readonly unknown[];
+	scopedProviders?: readonly unknown[];
 	entries?: readonly StateSessionEntry[];
 	branch?: readonly StateSessionEntry[];
 }
@@ -30,6 +33,7 @@ function fakeContext(options: FakeContextOptions = {}): ExtensionContext {
 		modelRegistry: {
 			getAvailable: () => (options.availableProviders ?? ["test-provider"]).map((provider, index) => ({ provider, id: `model-${index}` })),
 		},
+		scopedModels: (options.scopedProviders ?? []).map((provider, index) => ({ model: { provider, id: `scoped-model-${index}` } })),
 		getContextUsage: () => options.contextUsage,
 		sessionManager: {
 			getCwd: () => options.sessionCwd,
@@ -50,17 +54,18 @@ const modelInputs = stateInputsFromContext(
 	fakeContext({
 		model: {
 			id: "claude-test",
+			name: "Claude Test Friendly",
 			provider: "anthropic",
 			contextWindow: 200000,
 			ignored: "drop-me",
-		} as { id?: string; provider?: string; contextWindow?: number } & { ignored?: string },
+		} as { id?: string; name?: string; provider?: string; contextWindow?: number } & { ignored?: string },
 	}),
 	"off",
 );
 assert.deepEqual(
 	modelInputs.model,
-	{ id: "claude-test", provider: "anthropic", contextWindow: 200000 },
-	"model extraction should copy only id/provider/contextWindow",
+	{ id: "claude-test", name: "Claude Test Friendly", provider: "anthropic", contextWindow: 200000 },
+	"model extraction should copy the public id/name/provider/contextWindow facts",
 );
 assert.equal(stateInputsFromContext(fakeContext({ model: undefined }), "off").model, undefined, "undefined ctx.model should produce undefined model inputs");
 
@@ -77,6 +82,22 @@ assert.equal(stateInputsFromContext(fakeContext({ contextUsage: undefined }), "o
 assert.equal(stateInputsFromContext(fakeContext({ availableProviders: ["openai", "anthropic", "openai", ""] }), "off").availableProviderCount, 2, "provider count should deduplicate non-empty available provider names from modelRegistry");
 assert.equal(stateInputsFromContext(fakeContext({ availableProviders: [] }), "off").availableProviderCount, 1, "provider count should keep one-provider fallback when no available models are configured");
 assert.equal(stateInputsFromContext(fakeContext({ availableProviders: [undefined, 123] }), "off").availableProviderCount, 1, "provider count should ignore invalid provider names and keep fallback minimum");
+assert.equal(
+	stateInputsFromContext(fakeContext({ availableProviders: ["openai", "anthropic", "local"], scopedProviders: ["anthropic", "anthropic"] }), "off").availableProviderCount,
+	1,
+	"non-empty ctx.scopedModels should define the provider count instead of the full model registry",
+);
+assert.equal(
+	stateInputsFromContext(fakeContext({ availableProviders: ["openai", "anthropic"], scopedProviders: [] }), "off").availableProviderCount,
+	2,
+	"empty ctx.scopedModels should fall back to every available registry model",
+);
+
+const friendlyModelState = createInitialState(modelInputs, defaultConfig());
+assert.equal(friendlyModelState.model.displayName, "Claude Test Friendly", "state should prefer Pi's public model.name over id shortening");
+const customNameConfig = defaultConfig();
+customNameConfig.model.customNames["claude-test"] = "User Override";
+assert.equal(createInitialState(modelInputs, customNameConfig).model.displayName, "User Override", "configured custom model names should continue to override Pi model.name");
 
 const cheapThinkingInputs = thinkingInputsFromContext(
 	{

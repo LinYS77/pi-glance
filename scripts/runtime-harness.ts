@@ -17,6 +17,7 @@ export type RuntimeCapturedEditorFactory = (tui: { terminal: { rows: number }; r
 
 export interface RuntimeMutableModelInfo {
 	id?: string;
+	name?: string;
 	provider?: string;
 	contextWindow?: number;
 }
@@ -32,6 +33,7 @@ export interface RuntimeTestContextOptions {
 	mode?: RuntimeMode;
 	hasUI?: boolean;
 	availableProviders?: string[];
+	scopedProviders?: string[];
 	model?: RuntimeMutableModelInfo;
 	contextUsage?: RuntimeMutableContextUsage;
 	entries?: StateSessionEntry[];
@@ -54,6 +56,7 @@ export interface RuntimeTestContext {
 	getCurrentEditorFactory(): RuntimeCapturedEditorFactory | undefined;
 	setCwd(cwd: string): void;
 	setAvailableProviders(providers: string[]): void;
+	setScopedProviders(providers: string[]): void;
 	setModel(model: RuntimeMutableModelInfo | undefined): void;
 	setContextUsage(usage: RuntimeMutableContextUsage | undefined): void;
 	setSessionEntries(entries: StateSessionEntry[]): void;
@@ -220,6 +223,7 @@ export function createRuntimeTestContext(options: RuntimeTestContextOptions = {}
 	let branchReads = 0;
 	let cwd = options.cwd ?? "/repo";
 	let availableProviders = options.availableProviders ?? ["test-provider"];
+	let scopedProviders = options.scopedProviders ?? [];
 	let model: RuntimeMutableModelInfo | undefined = options.model ?? { id: "test-model", provider: "test-provider", contextWindow: 200_000 };
 	let contextUsage: RuntimeMutableContextUsage | undefined = options.contextUsage ?? { tokens: 42, contextWindow: 200_000, percent: 0.021 };
 	let entries: StateSessionEntry[] = options.entries ?? [];
@@ -243,6 +247,9 @@ export function createRuntimeTestContext(options: RuntimeTestContextOptions = {}
 		},
 		modelRegistry: {
 			getAvailable: () => availableProviders.map((provider) => ({ provider, id: `${provider}-model` })),
+		},
+		get scopedModels() {
+			return scopedProviders.map((provider) => ({ model: { provider, id: `${provider}-scoped-model` } }));
 		},
 		sessionManager: {
 			getCwd: () => cwd,
@@ -294,6 +301,9 @@ export function createRuntimeTestContext(options: RuntimeTestContextOptions = {}
 		},
 		setAvailableProviders: (providers: string[]) => {
 			availableProviders = providers;
+		},
+		setScopedProviders: (providers: string[]) => {
+			scopedProviders = providers;
 		},
 		setModel: (nextModel: RuntimeMutableModelInfo | undefined) => {
 			model = nextModel;

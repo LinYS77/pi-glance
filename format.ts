@@ -8,11 +8,13 @@ const SMART_NAME_MAX_SURFACE_WIDTH = 83;
 const SMART_PARENT_MAX_SURFACE_WIDTH = 139;
 const HOME_PATH = normalizePath(homedir());
 
-export function shortenModel(modelId: string | undefined, customNames: Record<string, string> = {}): string {
-	if (!modelId) return "no-model";
+export function shortenModel(modelId: string | undefined, customNames: Record<string, string> = {}, modelName?: string): string {
+	if (!modelId) return modelName?.trim() || "no-model";
 	for (const [pattern, name] of Object.entries(customNames)) {
 		if (modelId.includes(pattern)) return name;
 	}
+	const preferredName = modelName?.trim();
+	if (preferredName) return preferredName;
 	let id = modelId;
 	id = id.replace(/^claude-/, "");
 	id = id.replace(/^anthropic[/:]/, "");

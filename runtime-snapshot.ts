@@ -3,6 +3,7 @@ import type { UsageTotals } from "./types.js";
 
 export interface StateModelInputs {
 	id?: string;
+	name?: string;
 	provider?: string;
 	contextWindow?: number;
 }
@@ -51,14 +52,6 @@ export interface StateMessageInputs {
 	responseId?: unknown;
 	toolCallId?: unknown;
 	usage?: StateUsageInputs;
-}
-
-interface ModelRegistryLike {
-	getAvailable?(): readonly { provider?: unknown }[];
-}
-
-interface ProviderContext {
-	modelRegistry?: ModelRegistryLike;
 }
 
 export interface StateSessionEntry {
@@ -114,8 +107,8 @@ export function usageTotalsFromEntries(entries: readonly StateSessionEntry[]): U
 }
 
 function availableProviderCountFromContext(ctx: ExtensionContext): number {
-	const registry = (ctx as ExtensionContext & ProviderContext).modelRegistry;
-	const availableModels = registry?.getAvailable?.() ?? [];
+	const scopedModels = ctx.scopedModels ?? [];
+	const availableModels = scopedModels.length > 0 ? scopedModels.map((entry) => entry.model) : ctx.modelRegistry.getAvailable();
 	const providers = new Set<string>();
 	for (const model of availableModels) {
 		if (typeof model.provider === "string" && model.provider) providers.add(model.provider);
@@ -125,13 +118,14 @@ function availableProviderCountFromContext(ctx: ExtensionContext): number {
 
 function modelInputsFromContext(ctx: ExtensionContext): StateModelInputs | undefined {
 	const model = ctx.model;
-	return model
-		? {
-				id: model.id,
-				provider: model.provider,
-				contextWindow: model.contextWindow,
-			}
-		: undefined;
+	if (!model) return undefined;
+	const name = model.name?.trim();
+	return {
+		id: model.id,
+		...(name ? { name } : {}),
+		provider: model.provider,
+		contextWindow: model.contextWindow,
+	};
 }
 
 function contextUsageInputsFromContext(ctx: ExtensionContext): StateContextUsageInputs | undefined {

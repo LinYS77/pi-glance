@@ -16,7 +16,7 @@ export function createInitialState(inputs: StateInputs, config: GlanceConfig): G
 		model: {
 			id: inputs.model?.id,
 			provider: inputs.model?.provider,
-			displayName: shortenModel(inputs.model?.id, config.model.customNames),
+			displayName: shortenModel(inputs.model?.id, config.model.customNames, inputs.model?.name),
 			thinking: inputs.thinkingLevel,
 		},
 		context: {
@@ -166,7 +166,7 @@ export function refreshContextUsage(state: GlanceState, inputs: Pick<StateInputs
 export function refreshModel(state: GlanceState, inputs: Pick<StateInputs, "model" | "thinkingLevel">, config: GlanceConfig): boolean {
 	const id = inputs.model?.id;
 	const provider = inputs.model?.provider;
-	const displayName = shortenModel(inputs.model?.id, config.model.customNames);
+	const displayName = shortenModel(inputs.model?.id, config.model.customNames, inputs.model?.name);
 	const window = inputs.model?.contextWindow ?? state.context.window;
 	if (
 		state.model.id === id &&
