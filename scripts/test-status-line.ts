@@ -341,8 +341,8 @@ for (const themeId of ["light", "dark"] as const) {
 		plainLine(["tokens"], state, 96, state.providers.availableCount, (config) => {
 			config.icons = "nerd";
 		}),
-		"󰄨 ↑12k ↓3.1k 󰃨6%",
-		"tokens full Nerd mode should mark cache rate with nf-md-cached",
+		"󰄨 ↑12k ↓3.1k 󰑐6%",
+		"tokens full Nerd mode should mark cache rate with the taller nf-md-refresh glyph",
 	);
 	assert.equal(
 		plainLine(["tokens"], state, 95, state.providers.availableCount, (config) => {

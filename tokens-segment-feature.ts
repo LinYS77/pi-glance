@@ -14,7 +14,7 @@ const TOKENS_CACHE_LABELS: Record<GlanceConfig["tokens"]["cache"], string> = {
 	hide: "hide",
 };
 
-const TOKEN_CACHE_RATE_NERD_ICON = "󰃨"; // nf-md-cached (U+F00E8)
+const TOKEN_CACHE_RATE_NERD_ICON = "󰑐"; // nf-md-refresh (U+F0450)
 
 function nextIn<T extends string | number>(current: T, values: readonly T[]): T {
 	const index = values.indexOf(current);

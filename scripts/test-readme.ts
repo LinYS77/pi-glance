@@ -55,7 +55,7 @@ assertReadmeIncludes("exact `light` selects `theme.light`", "README should docum
 assertReadmeIncludes("exact `dark` selects `theme.dark`", "README should document exact dark ambient tone slot selection");
 assertReadmeIncludes("unknown or custom Pi theme names fall back to `theme.light`", "README should document unknown/custom ambient tone fallback");
 assertReadmeIncludes("three Cache modes: `rate` (default), `read/write`, and `hide`", "README should document the simplified Tokens cache modes and default");
-assertReadmeIncludes("full Nerd-icon mode it appears as `󰃨42%`", "README should document the full-width cache-rate glyph");
+assertReadmeIncludes("full Nerd-icon mode it appears as `󰑐42%`", "README should document the taller full-width cache-rate glyph");
 assertReadmeIncludes("a known rate becomes the sole Tokens value (`󰄨 42%`)", "README should document compact/minimal rate priority");
 assertReadmeIncludes("unknown rate falls back to token amounts", "README should document the folded unknown-rate fallback");
 assertReadmeIncludes("actual aggregate cache token amounts such as `R563M W12M`", "README should explain the read/write cache amount mode");
