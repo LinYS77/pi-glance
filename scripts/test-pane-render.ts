@@ -546,7 +546,7 @@ press(tokensPane.component, "\x1b[B");
 const tokensCategory = plainText(tokensPane.component);
 assertContains(tokensCategory, "Cache", "tokens category should show tokens detail settings");
 assertLineContainsAll(tokensCategory, ["Display", "input / output"], "tokens display setting should render");
-assertLineContainsAll(tokensCategory, ["Cache", "auto"], "tokens cache setting should render");
+assertLineContainsAll(tokensCategory, ["Cache", "rate"], "tokens cache setting should default to hit rate");
 
 press(tokensPane.component, "\x1b[C");
 press(tokensPane.component, "\x1b[A");
@@ -557,8 +557,8 @@ assertLineContainsAll(tokensDisplayChanged, ["Display", "total"], "enter should 
 press(tokensPane.component, "\x1b[B");
 press(tokensPane.component, "\r");
 const tokensCacheChanged = plainText(tokensPane.component);
-assertLineContainsAll(tokensCacheChanged, ["Cache", "show"], "enter should cycle tokens cache mode");
-assertContains(tokensCacheChanged, "Show, hide, or display cache hit rate.", "tokens cache hint should render");
+assertLineContainsAll(tokensCacheChanged, ["Cache", "read/write"], "enter should cycle tokens cache from rate to read/write values");
+assertContains(tokensCacheChanged, "CH%, read/write token counts, or hidden.", "tokens cache hint should render");
 
 const modelPane = await makePane();
 press(modelPane.component, "\x1b[B");

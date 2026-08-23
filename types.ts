@@ -15,7 +15,7 @@ export type GitShaMode = "off" | "detached" | "always";
 export type ContextDisplayMode = "percent+tokens" | "percent" | "tokens";
 export type ContextUnknownMode = "show" | "hide";
 export type TokensDisplayMode = "input-output" | "total";
-export type TokensCacheMode = "auto" | "show" | "hide" | "rate";
+export type TokensCacheMode = "rate" | "read-write" | "hide";
 export type ModelThinkingMode = "auto" | "always" | "never";
 export type WorkspaceLabelMode = "name" | "smart" | "path";
 export type EditorTopMarginRows = 0 | 1 | 2;
@@ -64,7 +64,7 @@ interface ThroughputConfig {
 }
 
 export interface GlanceConfig {
-	version: 7;
+	version: 8;
 	enabled: boolean;
 	theme: GlanceThemePair;
 	icons: IconMode;

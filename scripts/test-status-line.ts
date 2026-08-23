@@ -90,7 +90,7 @@ const singleSegmentParityCases: Array<{ id: SegmentId; state: GlanceState; text:
 	{ id: "cost", state: richState(), text: "$ $0.042" },
 	{ id: "throughput", state: testState(), text: "spd ? tok/s" },
 	{ id: "context", state: richState(), text: "ctx 23% 47k/200k" },
-	{ id: "tokens", state: richState(), text: "tok ↑12k ↓3.1k R800 W20" },
+	{ id: "tokens", state: richState(), text: "tok ↑12k ↓3.1k CH6%" },
 	{ id: "model", state: modelState(1), text: "ai GPT 5.5" },
 ];
 
@@ -297,15 +297,19 @@ for (const themeId of ["light", "dark"] as const) {
 
 {
 	const state = richState();
-	assert.equal(plainLine(["tokens"], state, 96), "tok ↑12k ↓3.1k R800 W20", "tokens cache auto should show cache details in full width");
-	assert.equal(plainLine(["tokens"], state, 95), "tok ↑12k ↓3.1k", "tokens cache auto should hide cache details in compact width");
-	assert.equal(plainLine(["tokens"], state, 63), "tok ↑12k ↓3.1k", "tokens cache auto should hide cache details in minimal width");
+	for (const width of [63, 95, 96]) {
+		assert.equal(
+			plainLine(["tokens"], state, width),
+			"tok ↑12k ↓3.1k CH6%",
+			`tokens cache should default to aggregate hit rate at width ${width}`,
+		);
+	}
 	assert.equal(
 		plainLine(["tokens"], state, 63, state.providers.availableCount, (config) => {
-			config.tokens.cache = "show";
+			config.tokens.cache = "read-write";
 		}),
 		"tok ↑12k ↓3.1k R800 W20",
-		"tokens cache show should retain read/write details in minimal width mode",
+		"tokens cache read/write mode should retain actual cache token amounts in minimal width mode",
 	);
 	assert.equal(
 		plainLine(["tokens"], state, 96, state.providers.availableCount, (config) => {
@@ -314,15 +318,6 @@ for (const themeId of ["light", "dark"] as const) {
 		"tok ↑12k ↓3.1k",
 		"tokens cache hide should suppress read/write details in full width mode",
 	);
-	for (const width of [63, 95, 96]) {
-		assert.equal(
-			plainLine(["tokens"], state, width, state.providers.availableCount, (config) => {
-				config.tokens.cache = "rate";
-			}),
-			"tok ↑12k ↓3.1k CH6%",
-			`tokens cache rate should show the rounded aggregate prompt cache hit percentage without R/W details at width ${width}`,
-		);
-	}
 	assert.equal(
 		plainLine(
 			["tokens"],

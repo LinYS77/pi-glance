@@ -34,7 +34,7 @@ import type {
 
 const CONFIG_PATH = join(getAgentDir(), "pi-glance", "config.json");
 // CONFIG_VERSION is the on-disk config schema version, not the npm package version.
-const CONFIG_VERSION = 7 as const;
+const CONFIG_VERSION = 8 as const;
 
 const ICON_MODES = new Set<IconMode>(ICON_MODE_VALUES);
 const PROVIDER_MODES = new Set<GlanceConfig["display"]["showProvider"]>(PROVIDER_DISPLAY_MODE_VALUES);
@@ -82,7 +82,7 @@ export function defaultConfig(): GlanceConfig {
 		},
 		tokens: {
 			display: "input-output",
-			cache: "auto",
+			cache: "rate",
 		},
 		throughput: {
 			precision: THROUGHPUT_PRECISION_DESCRIPTOR.defaultValue,
@@ -112,6 +112,14 @@ function parseBool(value: unknown, fallback: boolean): boolean {
 
 function parseStringEnum<T extends string>(value: unknown, allowed: ReadonlySet<T>, fallback: T): T {
 	return typeof value === "string" && allowed.has(value as T) ? (value as T) : fallback;
+}
+
+function parseTokensCacheMode(value: unknown, fallback: TokensCacheMode): TokensCacheMode {
+	// 0.6.0 and earlier used auto for width-dependent R/W details and show for
+	// explicit R/W details. Cache now has three content-only canonical modes.
+	if (value === "auto") return "rate";
+	if (value === "show") return "read-write";
+	return parseStringEnum(value, TOKENS_CACHE_MODES, fallback);
 }
 
 function parseThemePair(value: unknown, fallback: GlanceThemePair): GlanceThemePair {
@@ -241,7 +249,7 @@ export function normalizeConfig(raw: unknown): GlanceConfig {
 		},
 		tokens: {
 			display: parseStringEnum(tokens.display, TOKENS_DISPLAY_MODES, defaults.tokens.display),
-			cache: parseStringEnum(tokens.cache, TOKENS_CACHE_MODES, defaults.tokens.cache),
+			cache: parseTokensCacheMode(tokens.cache, defaults.tokens.cache),
 		},
 		throughput: {
 			precision: THROUGHPUT_PRECISION_DESCRIPTOR.normalize(throughput.precision),

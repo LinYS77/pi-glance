@@ -8,6 +8,12 @@ const TOKENS_DISPLAY_LABELS: Record<GlanceConfig["tokens"]["display"], string> =
 	total: "total",
 };
 
+const TOKENS_CACHE_LABELS: Record<GlanceConfig["tokens"]["cache"], string> = {
+	rate: "rate",
+	"read-write": "read/write",
+	hide: "hide",
+};
+
 function nextIn<T extends string | number>(current: T, values: readonly T[]): T {
 	const index = values.indexOf(current);
 	return values[(index + 1) % values.length] ?? values[0]!;
@@ -17,10 +23,12 @@ function tokensDisplayLabel(mode: GlanceConfig["tokens"]["display"]): string {
 	return TOKENS_DISPLAY_LABELS[mode];
 }
 
+function tokensCacheLabel(mode: GlanceConfig["tokens"]["cache"]): string {
+	return TOKENS_CACHE_LABELS[mode];
+}
+
 function shouldShowTokenCache(ctx: SegmentRenderContext): boolean {
-	if (ctx.config.tokens.cache === "hide") return false;
-	if (ctx.config.tokens.cache === "show" || ctx.config.tokens.cache === "rate") return true;
-	return ctx.widthMode === "full";
+	return ctx.config.tokens.cache !== "hide";
 }
 
 function sessionCacheHitPercent(usage: UsageTotals): number | undefined {
@@ -36,7 +44,7 @@ function tokenCacheParts(ctx: SegmentRenderContext): string[] {
 		const hitRate = sessionCacheHitPercent(usage);
 		if (hitRate !== undefined) parts.push(`CH${hitRate}%`);
 	} else {
-		// Default mode: show cache read and cache write tokens
+		// Read/write mode shows the aggregate cache token amounts directly.
 		if (usage.cacheRead) parts.push(`R${formatTokens(usage.cacheRead)}`);
 		if (usage.cacheWrite) parts.push(`W${formatTokens(usage.cacheWrite)}`);
 	}
@@ -81,9 +89,9 @@ export const tokensSegmentFeature = {
 		{
 			id: "tokens.cache",
 			label: "Cache",
-			hint: "Show, hide, or display cache hit rate.",
+			hint: "CH%, read/write token counts, or hidden.",
 			kind: "cycle",
-			value: (config: GlanceConfig) => config.tokens.cache,
+			value: (config: GlanceConfig) => tokensCacheLabel(config.tokens.cache),
 			mutate: (config: GlanceConfig) => {
 				config.tokens.cache = nextIn(config.tokens.cache, TOKENS_CACHE_MODE_VALUES);
 			},

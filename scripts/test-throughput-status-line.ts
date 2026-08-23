@@ -189,8 +189,8 @@ function turn(rate: number): ThroughputTurnFixture {
 	const withTokens = defaultConfig();
 	withTokens.segments = withTokens.segments.map((segment) => segment.id === "tokens" ? { ...segment, enabled: true } : segment);
 	const tokenLine = plain(richState, withTokens, 180);
-	assert.ok(tokenLine.indexOf("ctx 23% 47k/200k") < tokenLine.indexOf("tok ↑12k ↓3.1k R800 W20"), "enabled Tokens should render after Context by default");
-	assert.ok(tokenLine.indexOf("tok ↑12k ↓3.1k R800 W20") < tokenLine.indexOf("ai GPT 5.5 high"), "Model should stay last when Tokens are enabled");
+	assert.ok(tokenLine.indexOf("ctx 23% 47k/200k") < tokenLine.indexOf("tok ↑12k ↓3.1k CH6%"), "enabled Tokens should render after Context by default");
+	assert.ok(tokenLine.indexOf("tok ↑12k ↓3.1k CH6%") < tokenLine.indexOf("ai GPT 5.5 high"), "Model should stay last when Tokens are enabled");
 
 	const narrow = plain(richState, config, 48);
 	assert.ok(visibleWidth(narrow) <= 48, "fitted status line should stay within width budget");

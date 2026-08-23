@@ -54,7 +54,11 @@ assert.deepEqual(normalizeConfig({ theme: "tokyo-night" }).theme, { light: "toky
 assertReadmeIncludes("exact `light` selects `theme.light`", "README should document exact light ambient tone slot selection");
 assertReadmeIncludes("exact `dark` selects `theme.dark`", "README should document exact dark ambient tone slot selection");
 assertReadmeIncludes("unknown or custom Pi theme names fall back to `theme.light`", "README should document unknown/custom ambient tone fallback");
-assertReadmeIncludes("`auto`, `show`, `hide`, or `rate`", "README should document every Tokens cache mode");
+assertReadmeIncludes("three Cache modes: `rate` (default), `read/write`, and `hide`", "README should document the simplified Tokens cache modes and default");
+assertReadmeIncludes("actual aggregate cache token amounts such as `R563M W12M`", "README should explain the read/write cache amount mode");
+assertReadmeIncludes("Legacy `auto` configs migrate to `rate`", "README should document the legacy auto migration");
+assertReadmeIncludes("legacy `show` configs migrate to the canonical `read-write` value", "README should document the legacy show migration");
+assert.ok(!readme.includes("Cache to `auto`, `show`, `hide`, or `rate`"), "README should not advertise the removed width-dependent auto mode");
 assertReadmeIncludes("rounded session aggregate cache hit percentage", "README should define cache-rate aggregation semantics");
 assertReadmeIncludes("cacheRead / (input + cacheRead + cacheWrite)", "README should document the CH% denominator");
 assertReadmeIncludes("billed assistant responses, usage-bearing tool results, compactions, and branch summaries", "README should document complete Pi 0.84 session usage sources");

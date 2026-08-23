@@ -32,10 +32,11 @@ for (const raw of [undefined, null, false, true, 0, 1, "", "{}", []]) {
 }
 
 assert.equal(defaults.editor.topMarginRows, 1, "default editor top margin rows should preserve the one-row breathing room");
-assert.equal(defaults.version, 7, "removing the adaptive-width config switch should bump CONFIG_VERSION to 7");
-assert.equal(normalizeConfig({ version: 0 }).version, 7, "old raw version should normalize to current schema version");
-assert.equal(normalizeConfig({ version: 999 }).version, 7, "future raw version should normalize to current schema version");
+assert.equal(defaults.version, 8, "simplifying Tokens cache modes should bump CONFIG_VERSION to 8");
+assert.equal(normalizeConfig({ version: 0 }).version, 8, "old raw version should normalize to current schema version");
+assert.equal(normalizeConfig({ version: 999 }).version, 8, "future raw version should normalize to current schema version");
 assert.deepEqual(defaults.theme, { light: "light", dark: "dark" }, "default theme pair should use light for light tone and dark for dark tone");
+assert.equal(defaults.tokens.cache, "rate", "new configs should default Tokens cache details to aggregate hit rate");
 assert.equal(defaults.throughput.precision, THROUGHPUT_PRECISION_DESCRIPTOR.defaultValue, "default config throughput precision should come from descriptor default");
 assert.deepEqual((defaults as unknown as { throughput?: unknown }).throughput, { precision: THROUGHPUT_PRECISION_DESCRIPTOR.defaultValue }, "default config should include throughput.precision=auto");
 
@@ -108,6 +109,9 @@ for (const display of TOKENS_DISPLAY_MODE_VALUES) {
 for (const cache of TOKENS_CACHE_MODE_VALUES) {
 	assert.equal(normalizeConfig({ tokens: { cache } }).tokens.cache, cache, `${cache} should normalize as a valid tokens cache mode`);
 }
+assert.deepEqual(TOKENS_CACHE_MODE_VALUES, ["rate", "read-write", "hide"], "Tokens cache should expose only rate, read/write, and hide semantics");
+assert.equal(normalizeConfig({ version: 7, tokens: { cache: "auto" } }).tokens.cache, "rate", "legacy cache auto should migrate to the new rate default");
+assert.equal(normalizeConfig({ version: 7, tokens: { cache: "show" } }).tokens.cache, "read-write", "legacy cache show should migrate to the canonical read-write mode");
 for (const showThinking of MODEL_THINKING_MODE_VALUES) {
 	assert.equal(normalizeConfig({ model: { showThinking } }).model.showThinking, showThinking, `${showThinking} should normalize as a valid model thinking mode`);
 }
@@ -173,7 +177,7 @@ const userConfig = normalizeConfig({
 assert.deepEqual(
 	userConfig,
 	{
-		version: 7,
+		version: 8,
 		enabled: false,
 		theme: { light: "tokyo-night", dark: "tokyo-night" },
 		icons: "nerd",
@@ -217,13 +221,13 @@ assert.deepEqual(
 		},
 		tokens: {
 			display: "total",
-			cache: "show",
+			cache: "read-write",
 		},
 		throughput: {
 			precision: 1,
 		},
 	},
-	"valid existing user settings should be preserved while version normalizes",
+	"valid existing user settings should be preserved while legacy cache modes and version normalize",
 );
 
 assert.equal(normalizeConfig({ icons: "nerd" }).icons, "nerd", "saved icons: nerd should remain nerd");

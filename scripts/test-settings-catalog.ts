@@ -341,8 +341,8 @@ const tokensRows = assertRows(config, "tokens", [
 	{
 		id: "tokens.cache",
 		label: "Cache",
-		value: "auto",
-		hint: "Show, hide, or display cache hit rate.",
+		value: "rate",
+		hint: "CH%, read/write token counts, or hidden.",
 		kind: "cycle",
 	},
 ]);
@@ -439,7 +439,12 @@ assertConfigUnchanged(infoBefore, config, "reading an info row should not dirty 
 
 assert.equal(rowById(tokensRows, "tokens.enabled").apply!(config).segments.find((segment) => segment.id === "tokens")?.enabled, true, "tokens enabled should toggle on");
 assert.equal(rowById(tokensRows, "tokens.display").apply!(config).tokens.display, "total", "tokens display should cycle input-output -> total");
-assert.equal(rowById(tokensRows, "tokens.cache").apply!(config).tokens.cache, "show", "tokens cache should cycle auto -> show");
+assert.equal(rowById(tokensRows, "tokens.cache").apply!(config).tokens.cache, "read-write", "tokens cache should cycle rate -> read/write");
+assert.equal(
+	rowById(getSettingsRows({ ...config, tokens: { ...config.tokens, cache: "read-write" } }, "tokens"), "tokens.cache").value,
+	"read/write",
+	"tokens cache read-write mode should use a concise read/write label",
+);
 
 assert.equal(rowById(modelRows, "model.enabled").apply!(config).segments.find((segment) => segment.id === "model")?.enabled, false, "model enabled should toggle off");
 assert.equal(rowById(modelRows, "model.providerLabel").apply!(config).display.showProvider, "always", "provider label should cycle auto -> always");

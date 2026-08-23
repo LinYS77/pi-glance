@@ -79,8 +79,8 @@ assert.equal(
 
 assert.equal(
 	line("tokens", { usage: { input: 12_400, output: 3_100, cacheRead: 800, cacheWrite: 20, cost: 0 } }),
-	"tok ↑12k ↓3.1k R800 W20",
-	"tokens default input/output shows cache in full width",
+	"tok ↑12k ↓3.1k CH6%",
+	"tokens should default cache details to aggregate hit rate",
 );
 assert.equal(
 	line(
@@ -90,25 +90,36 @@ assert.equal(
 			config.tokens.display = "total";
 		},
 	),
-	"tok total 16k R800 W20",
-	"tokens can show total usage",
+	"tok total 16k CH6%",
+	"tokens can show total usage while retaining the default cache hit rate",
 );
 assert.equal(
 	line("tokens", { usage: { input: 12_400, output: 3_100, cacheRead: 800, cacheWrite: 20, cost: 0 } }, undefined, 80),
-	"tok ↑12k ↓3.1k",
-	"tokens cache auto hides cache outside full width",
+	"tok ↑12k ↓3.1k CH6%",
+	"tokens cache rate should remain content-stable outside full width",
 );
 assert.equal(
 	line(
 		"tokens",
 		{ usage: { input: 12_400, output: 3_100, cacheRead: 800, cacheWrite: 20, cost: 0 } },
 		(config) => {
-			config.tokens.cache = "show";
+			config.tokens.cache = "read-write";
 		},
 		80,
 	),
 	"tok ↑12k ↓3.1k R800 W20",
-	"tokens cache show keeps cache outside full width",
+	"tokens cache read/write mode keeps actual cache token amounts outside full width",
+);
+assert.equal(
+	line(
+		"tokens",
+		{ usage: { input: 12_400, output: 3_100, cacheRead: 563_000_000, cacheWrite: 0, cost: 0 } },
+		(config) => {
+			config.tokens.cache = "read-write";
+		},
+	),
+	"tok ↑12k ↓3.1k R563M",
+	"tokens cache read/write mode should format a large actual cache-read amount as R563M",
 );
 assert.equal(
 	line(
