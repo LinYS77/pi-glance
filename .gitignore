@@ -20,8 +20,11 @@ coverage/
 tmp/
 .cache/
 
-# Local planning notes / design docs are intentionally not published to GitHub or npm.
-docs/
+# Local planning notes stay ignored; accepted ADRs are tracked.
+docs/*
+!docs/adr/
+docs/adr/*
+!docs/adr/*.md
 
 # pi local config if this repo is opened as a project
 .pi/

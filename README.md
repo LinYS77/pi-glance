@@ -162,6 +162,7 @@ npm run debug:git
 
 ## Design
 
+- Architecture context and accepted decisions: [`CONTEXT.md`](https://github.com/LinYS77/pi-glance/blob/main/CONTEXT.md) and [`docs/adr/`](https://github.com/LinYS77/pi-glance/tree/main/docs/adr)
 - No pi core patches — public extension APIs only
 - Context facts come from Pi's public `ctx.getContextUsage()` result; `null` remains unknown after compaction until Pi reports a known value.
 - Tokens and Cost use Pi's billed-session semantics across assistant, tool, compaction, and branch-summary usage; Model speed uses only final assistant usage with matching public output-stream timing.

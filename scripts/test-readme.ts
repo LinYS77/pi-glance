@@ -71,6 +71,10 @@ assertReadmeIncludes("A known cache miss appears as `0%`", "README should distin
 assertReadmeIncludes("No cache rate is shown until prompt-token usage exists", "README should document the cache-rate unknown boundary");
 assert.ok(!readme.includes("CH%") && !/CH\d+%/.test(readme), "README should not use the removed CH abbreviation for cache rate");
 
+assertReadmeIncludes("Architecture context and accepted decisions", "README should link contributors to tracked architecture context");
+assertReadmeIncludes("CONTEXT.md", "README should link the tracked context map");
+assertReadmeIncludes("docs/adr/", "README should link accepted architecture decisions");
+
 assertReadmeIncludes("Global config at `~/.pi/agent/pi-glance/config.json`; saves use an atomic temporary-file rename", "README should document atomic config persistence");
 assertReadmeIncludes("Invalid, unreadable, or newer-version config files are diagnosed and treated as read-only", "README should document conservative config load diagnostics");
 assertReadmeIncludes("Fix or remove the file, then run `/reload`", "README should document config diagnostic recovery");
