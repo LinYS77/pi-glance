@@ -153,4 +153,32 @@ for (const theme of ["light", "dark", "high-contrast-light"] as const) {
 	assert.ok(stripAnsi(unfocused.at(-1) ?? "").startsWith("╰"), "unfocused editor bottom frame should keep the same visible border glyphs");
 }
 
+{
+	const config = defaultConfig();
+	config.editor.topMarginRows = 0;
+	config.editor.minContentRows = 2;
+	const state = richState();
+	const styles = resolveBuiltInGlanceStyles(config.theme.light);
+	const expectedByWidth = new Map<number, readonly string[]>([
+		[0, ["", "", "", ""]],
+		[1, ["╭", "│", "│", "╰"]],
+		[2, ["╭╮", "││", "││", "╰╯"]],
+		[3, ["╭─╮", "│ │", "│ │", "╰─╯"]],
+	]);
+
+	for (const [width, expected] of expectedByWidth) {
+		const frame = renderInputSurfaceFrame({
+			state,
+			config,
+			width,
+			styles,
+			body: { kind: "preview", lines: ["x"] },
+		});
+		assert.deepEqual(frame.map(stripAnsi), expected, `the complete frame should degrade cleanly at width ${width}`);
+		for (const line of frame) {
+			assert.ok(visibleWidth(line) <= width, `the complete frame must not exceed width ${width}: ${stripAnsi(line)}`);
+		}
+	}
+}
+
 console.log("✓ input surface frame checks passed");

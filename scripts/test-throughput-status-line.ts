@@ -81,7 +81,7 @@ function turn(rate: number): ThroughputTurnFixture {
 	const state = withThroughput(testState(), sample);
 	assert.equal(
 		plain(state, config, 120),
-		"$ $0.000 · spd 20 tok/s · ctx 23% 47k/200k · ai GPT 5.5",
+		"$0.000 · spd 20 tok/s · ctx 23% 47k/200k · ai GPT 5.5",
 		"default status line should show finalized Model speed between Cost and Context while keeping Model last",
 	);
 	assert.deepEqual(
@@ -102,7 +102,7 @@ function turn(rate: number): ThroughputTurnFixture {
 	const config = defaultConfig();
 	assert.equal(
 		plain(withThroughput(testState(), null), config, 120),
-		"$ $0.000 · spd ? tok/s · ctx 23% 47k/200k · ai GPT 5.5",
+		"$0.000 · spd ? tok/s · ctx 23% 47k/200k · ai GPT 5.5",
 		"enabled Model speed should show an unknown placeholder until a trusted measurement exists",
 	);
 }
@@ -149,7 +149,7 @@ function turn(rate: number): ThroughputTurnFixture {
 {
 	const config = setSegments(defaultConfig(), [{ id: "throughput", enabled: true }]);
 	assert.equal(plain(withThroughput(testState(), turn(7.04)), setPrecision(config, "auto"), 120), "spd 7.0 tok/s", "precision auto should keep one decimal below 10 tok/s");
-	assert.equal(plain(withThroughput(testState(), turn(42.4)), setPrecision(defaultConfig(), "auto"), 120), "$ $0.000 · spd 42 tok/s · ctx 23% 47k/200k · ai GPT 5.5", "precision auto should round integer-rate values at normal widths");
+	assert.equal(plain(withThroughput(testState(), turn(42.4)), setPrecision(defaultConfig(), "auto"), 120), "$0.000 · spd 42 tok/s · ctx 23% 47k/200k · ai GPT 5.5", "precision auto should round integer-rate values at normal widths");
 }
 
 {
@@ -182,7 +182,7 @@ function turn(rate: number): ThroughputTurnFixture {
 	assert.ok(roomy.includes("git main *"), "roomy default-order status should include Git when available");
 	assert.ok(roomy.includes("spd 20 tok/s"), "roomy default-order status should include Model speed by default");
 	assert.ok(roomy.includes("ai GPT 5.5 high"), "roomy default-order status should include Model");
-	assert.ok(roomy.indexOf("$ $0.042") < roomy.indexOf("spd 20 tok/s"), "Cost should render before Model speed by default");
+	assert.ok(roomy.indexOf("$0.042") < roomy.indexOf("spd 20 tok/s"), "Cost should render before Model speed by default");
 	assert.ok(roomy.indexOf("spd 20 tok/s") < roomy.indexOf("ctx 23% 47k/200k"), "Model speed should render before Context by default");
 	assert.ok(roomy.indexOf("ctx 23% 47k/200k") < roomy.indexOf("ai GPT 5.5 high"), "Context should render before final Model by default");
 

@@ -36,8 +36,8 @@ assert.equal(
 	line("context", { context: { tokens: null, percent: null, window: 200_000 } }, (config) => {
 		config.context.unknown = "show";
 	}),
-	"ctx ? ?/200k",
-	"context unknown defaults to visible unknown values",
+	"ctx ?/200k",
+	"fully unknown context should show the known window without repeating the unknown marker",
 );
 assert.equal(
 	line("context", { context: { tokens: null, percent: null, window: 200_000 } }, (config) => {
@@ -54,13 +54,13 @@ assert.equal(
 	"context unknown hide keeps partial context when percent is known",
 );
 
-assert.equal(line("cost"), "$ $0.000", "cost defaults to visible zero");
+assert.equal(line("cost"), "$0.000", "plain cost should use its currency symbol only once");
 assert.equal(
 	line("cost", { usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 } }, (config) => {
 		config.cost.hideZero = false;
 	}),
-	"$ $0.000",
-	"cost hideZero false keeps zero visible",
+	"$0.000",
+	"cost hideZero false keeps zero visible without duplicating the plain currency marker",
 );
 assert.equal(
 	line("cost", { usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 } }, (config) => {
@@ -73,8 +73,14 @@ assert.equal(
 	line("cost", { usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0.042 } }, (config) => {
 		config.cost.hideZero = true;
 	}),
-	"$ $0.042",
-	"cost hideZero true keeps non-zero cost visible",
+	"$0.042",
+	"cost hideZero true keeps non-zero cost visible without duplicating the plain currency marker",
+);
+
+assert.equal(
+	line("cost", { usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 302 } }),
+	"$302.0",
+	"plain cost should not duplicate the currency marker for large session totals",
 );
 
 assert.equal(

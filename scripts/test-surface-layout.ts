@@ -21,7 +21,7 @@ import {
 import type { WorkspaceLabelMode } from "../types.js";
 
 const ANSI_PATTERN = /\x1b\[[0-?]*[ -/]*[@-~]/g;
-const WIDTHS = [4, 12, 15, 16, 20, 56, 64, 72, 96, 120, 160];
+const WIDTHS = [0, 1, 2, 3, 4, 12, 15, 16, 20, 56, 64, 72, 96, 120, 160];
 const homePath = `${homedir()}/winnie/00_project/07_pi-glance`;
 
 function stripAnsi(text: string): string {
@@ -56,8 +56,8 @@ function titlePlan(width: number, mode: WorkspaceLabelMode = "name", showTitle =
 
 for (const width of WIDTHS) {
 	const metrics = surfaceMetrics(width);
-	assert.equal(metrics.safeWidth, Math.max(4, width), `safe width clamps at ${width}`);
-	assert.equal(metrics.innerWidth, metrics.safeWidth - 2, `inner width reserves borders at ${width}`);
+	assert.equal(metrics.safeWidth, Math.max(0, width), `safe width should preserve the available non-negative width at ${width}`);
+	assert.equal(metrics.innerWidth, Math.max(0, metrics.safeWidth - 2), `inner width should reserve borders when they fit at ${width}`);
 
 	const title = titlePlan(width);
 	const statusBudget = planSurfaceStatusBudget(metrics.innerWidth, title.width);
@@ -67,9 +67,9 @@ for (const width of WIDTHS) {
 	const bottomWithIndicator = planSurfaceBottomFrame({ width, scrollIndicator: formatSurfaceScrollIndicator("│ ↑ 123 more │", width) });
 	const row = planSurfaceRow({ width, text: "Ask pi to improve the input surface...", prefix: "› " });
 	assert.deepEqual(renderSurfaceTopMargin(width, 0), [], `zero top margin rows render no lines at width ${width}`);
-	assert.deepEqual(renderSurfaceTopMargin(width), [" "], `default top margin is one defensive space at width ${width}`);
-	assert.deepEqual(renderSurfaceTopMargin(width, 1), [" "], `one top margin row is one defensive space at width ${width}`);
-	assert.deepEqual(renderSurfaceTopMargin(width, 2), [" ", " "], `two top margin rows are defensive spaces at width ${width}`);
+	assert.deepEqual(renderSurfaceTopMargin(width), [width > 0 ? " " : ""], `default top margin should fit width ${width}`);
+	assert.deepEqual(renderSurfaceTopMargin(width, 1), [width > 0 ? " " : ""], `one top margin row should fit width ${width}`);
+	assert.deepEqual(renderSurfaceTopMargin(width, 2), [width > 0 ? " " : "", width > 0 ? " " : ""], `two top margin rows should fit width ${width}`);
 	for (const line of renderSurfaceTopMargin(width, 2)) {
 		assert.equal(line.trim(), "", `top margin line is blank after trim at width ${width}`);
 		assert.ok(visibleWidth(line) <= metrics.safeWidth, `top margin should fit width ${width}`);
@@ -85,6 +85,23 @@ for (const width of WIDTHS) {
 		assert.ok(visibleWidth(rendered) <= metrics.safeWidth, `${label} line should fit width ${width}: ${stripAnsi(rendered)}`);
 	}
 }
+
+for (const [width, expected] of [
+	[0, { top: "", row: "", bottom: "" }],
+	[1, { top: "╭", row: "│", bottom: "╰" }],
+	[2, { top: "╭╮", row: "││", bottom: "╰╯" }],
+	[3, { top: "╭─╮", row: "│›│", bottom: "╰─╯" }],
+] as const) {
+	const top = planSurfaceTopFrame({ width, left: titlePlan(width), status: "ctx 23%" });
+	const row = planSurfaceRow({ width, text: "content", prefix: "› " });
+	const bottom = planSurfaceBottomFrame({ width });
+	assert.equal(plain(top.chunks), expected.top, `top frame should degrade without overflowing at width ${width}`);
+	assert.equal(plain(row.chunks), expected.row, `body row should degrade without overflowing at width ${width}`);
+	assert.equal(plain(bottom.chunks), expected.bottom, `bottom frame should degrade without overflowing at width ${width}`);
+}
+
+assert.equal(safeSurfaceWidth(-4), 0, "negative surface widths should clamp to zero");
+assert.equal(safeSurfaceWidth(Number.NaN), 0, "non-finite surface widths should fall back to zero");
 
 assert.deepEqual(renderSurfaceTopMargin(80, -1), [], "negative row count clamps to no top margin rows");
 assert.deepEqual(renderSurfaceTopMargin(80, 99), [" ", " "], "large row count clamps to two top margin rows");

@@ -88,7 +88,7 @@ function lastColorBefore(text: string, index: number): string | undefined {
 
 const singleSegmentParityCases: Array<{ id: SegmentId; state: GlanceState; text: string }> = [
 	{ id: "git", state: richState(), text: "git main *" },
-	{ id: "cost", state: richState(), text: "$ $0.042" },
+	{ id: "cost", state: richState(), text: "$0.042" },
 	{ id: "throughput", state: testState(), text: "spd ? tok/s" },
 	{ id: "context", state: richState(), text: "ctx 23% 47k/200k" },
 	{ id: "tokens", state: richState(), text: "tok ↑12k ↓3.1k 6%" },
@@ -251,7 +251,7 @@ for (const themeId of ["light", "dark"] as const) {
 {
 	const state = richState();
 	const full = plainLine(["cost", "model", "context", "git"], state, 160, 2);
-	assert.ok(full.indexOf("$ $0.042") < full.indexOf("ai openai/GPT 5.5 high"), "status line should follow configured segment order: cost before model");
+	assert.ok(full.indexOf("$0.042") < full.indexOf("ai openai/GPT 5.5 high"), "status line should follow configured segment order: cost before model");
 	assert.ok(full.indexOf("ai openai/GPT 5.5 high") < full.indexOf("ctx 23% 47k/200k"), "status line should follow configured segment order: model before context");
 	assert.ok(full.indexOf("ctx 23% 47k/200k") < full.indexOf("git main *"), "status line should follow configured segment order: context before git");
 
@@ -260,7 +260,7 @@ for (const themeId of ["light", "dark"] as const) {
 	assert.ok(visibleWidth(narrow) <= narrowWidth, "adaptive fitting should keep visible width within the requested width");
 	assert.ok(narrow.includes("ai GPT 5.5"), "adaptive fitting should keep earlier segments first");
 	assert.ok(narrow.includes("ctx 23%"), "adaptive fitting should keep earlier context segment at narrow width");
-	assert.equal(narrow.includes("$ $0.042"), false, "adaptive fitting should drop later cost segment before earlier segments");
+	assert.equal(narrow.includes("$0.042"), false, "adaptive fitting should drop later cost segment before earlier segments");
 	assert.equal(narrow.includes("git main"), false, "adaptive fitting should drop latest git segment first at narrow width");
 }
 

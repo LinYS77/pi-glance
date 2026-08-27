@@ -31,6 +31,7 @@ function contextDisplayValue(ctx: SegmentRenderContext): string {
 	const ratio = contextTokenRatio(ctx);
 	if (ctx.config.context.display === "percent") return pct;
 	if (ctx.config.context.display === "tokens") return ratio;
+	if (contextIsUnknown(ctx)) return ratio;
 	return `${pct} ${ratio}`;
 }
 

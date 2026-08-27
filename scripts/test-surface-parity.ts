@@ -557,6 +557,22 @@ for (const width of WIDTHS) {
 	assert.ok(visibleWidth(scrolledBottom) <= width, `live scrolled bottom should fit width ${width}`);
 }
 
+for (const [width, expected] of [
+	[0, ["", "", "", ""]],
+	[1, ["╭", "│", "│", "╰"]],
+	[2, ["╭╮", "││", "││", "╰╯"]],
+	[3, ["╭─╮", "│ │", "│ │", "╰─╯"]],
+] as const) {
+	const config = defaultConfig();
+	config.editor.topMarginRows = 0;
+	config.editor.minContentRows = 2;
+	const frame = liveFrame(dirtyState(), config, width, true, "x");
+	assert.deepEqual(frame, expected, `live Pi editor frame should degrade cleanly at width ${width}`);
+	for (const line of frame) {
+		assert.ok(visibleWidth(line) <= width, `live Pi editor frame line should fit width ${width}: ${line}`);
+	}
+}
+
 for (const width of Array.from({ length: 13 }, (_, index) => index + 4)) {
 	const config = defaultConfig();
 	config.editor.topMarginRows = 0;

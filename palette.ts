@@ -19,7 +19,7 @@ export const ICONS: Record<IconMode, IconSet> = {
 		model: "ai",
 		context: "ctx",
 		tokens: "tok",
-		cost: "$",
+		cost: "",
 		throughput: "spd",
 	},
 };

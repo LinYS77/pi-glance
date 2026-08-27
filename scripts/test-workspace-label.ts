@@ -96,7 +96,9 @@ for (const width of [56, 64, 72, 96, 120, 160]) {
 	const top = renderedTop(width);
 	assert.ok(visibleWidth(top) <= width, `preview top frame fits width ${width}`);
 }
-assert.ok(stripControls(renderedTop(56)).includes("$ $0.042"), "preview top status preserves cost at width 56");
+const width56Top = stripControls(renderedTop(56));
+assert.ok(width56Top.includes("$0.042"), "preview top status preserves a single plain currency marker at width 56");
+assert.ok(!width56Top.includes("$ $"), "preview top status must not duplicate the plain currency marker");
 assert.ok(!stripControls(renderedTop(56)).includes("Sonnet 4"), "preview top status drops trailing segment when seam budget is tight at width 56");
 assert.ok(stripControls(renderedTop(72)).includes("Sonnet 4"), "preview top status keeps model once width allows it");
 assert.ok(stripControls(renderedTop(18)).includes(" repo "), "preview title starts at the seam's innerWidth 16 threshold");

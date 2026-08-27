@@ -2,7 +2,6 @@ import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import { formatWorkspaceLabel } from "./format.js";
 import type { WorkspaceLabelMode } from "./types.js";
 
-const MIN_SURFACE_WIDTH = 4;
 export const SURFACE_TITLE_MAX_WIDTH = 48;
 export const SURFACE_TITLE_RATIO = 0.42;
 export const SURFACE_TITLE_MIN_INNER_WIDTH = 16;
@@ -151,7 +150,7 @@ function truncateSurfaceText(text: string, width: number, ellipsis: string): str
 }
 
 export function safeSurfaceWidth(width: number): number {
-	return Math.max(MIN_SURFACE_WIDTH, finiteFloor(width, MIN_SURFACE_WIDTH));
+	return Math.max(0, finiteFloor(width, 0));
 }
 
 export function renderSurfaceTopMargin(width: number, rows = 1): string[] {
@@ -186,7 +185,7 @@ export function planWorkspaceTitle(options: WorkspaceTitlePlanOptions): SurfaceT
 	const innerWidth = Math.max(0, finiteFloor(options.innerWidth, 0));
 	const surfaceWidth = safeSurfaceWidth(options.surfaceWidth);
 	const budget = surfaceTitleBudget(innerWidth);
-	const fallbackChunks = [chunk("border", SURFACE_BORDER.horizontal)];
+	const fallbackChunks = surfaceWidth > 0 ? [chunk("border", SURFACE_BORDER.horizontal)] : [];
 
 	if (options.showTitle === false) {
 		return { kind: "hidden", budget, label: "", title: "", chunks: fallbackChunks, width: surfaceChunksWidth(fallbackChunks) };
@@ -228,6 +227,20 @@ function resolveInlinePlan(left: SurfaceTopFrameOptions["left"]): SurfaceInlineP
 
 export function planSurfaceTopFrame(options: SurfaceTopFrameOptions): SurfaceTopFramePlan {
 	const metrics = surfaceMetrics(options.width);
+	if (metrics.safeWidth <= 2) {
+		let chunks: SurfaceChunk[] = [];
+		if (metrics.safeWidth === 1) chunks = [chunk("border", SURFACE_BORDER.topLeft)];
+		if (metrics.safeWidth === 2) chunks = [chunk("border", SURFACE_BORDER.topLeft), chunk("border", SURFACE_BORDER.topRight)];
+		return {
+			...metrics,
+			chunks,
+			width: surfaceChunksWidth(chunks),
+			leftWidth: 0,
+			status: planSurfaceStatus("", 0, options.statusEllipsis),
+			fillerWidth: 0,
+		};
+	}
+
 	const left = resolveInlinePlan(options.left);
 	const statusBudget = planSurfaceStatusBudget(metrics.innerWidth, left.width);
 	const status = planSurfaceStatus(options.status, statusBudget, options.statusEllipsis);
@@ -263,6 +276,11 @@ export function formatSurfaceScrollIndicator(line: string, width: number): strin
 
 export function planSurfaceBottomFrame(options: SurfaceBottomFrameOptions): SurfaceBottomFramePlan {
 	const metrics = surfaceMetrics(options.width);
+	if (metrics.safeWidth <= 1) {
+		const chunks = metrics.safeWidth === 0 ? [] : [chunk("border", SURFACE_BORDER.bottomLeft)];
+		return { ...metrics, chunks, width: surfaceChunksWidth(chunks), indicator: "", fillerWidth: 0 };
+	}
+
 	const indicator = options.scrollIndicator ? truncateSurfaceText(options.scrollIndicator, metrics.innerWidth, "") : "";
 	const indicatorWidth = visibleWidth(indicator);
 	const fillerWidth = Math.max(0, metrics.innerWidth - indicatorWidth);
@@ -283,6 +301,20 @@ export function planSurfaceBottomFrame(options: SurfaceBottomFrameOptions): Surf
 
 export function planSurfaceRow(options: SurfaceRowOptions): SurfaceRowPlan {
 	const metrics = surfaceMetrics(options.width);
+	if (metrics.safeWidth <= 1) {
+		const chunks = metrics.safeWidth === 0 ? [] : [chunk("border", SURFACE_BORDER.vertical)];
+		return {
+			...metrics,
+			chunks,
+			width: surfaceChunksWidth(chunks),
+			content: "",
+			contentBudget: 0,
+			prefix: "",
+			paddingX: 0,
+			fillerWidth: 0,
+		};
+	}
+
 	const paddingX = Math.max(0, finiteFloor(options.paddingX ?? 0, 0));
 	const leftPaddingWidth = Math.min(paddingX, metrics.innerWidth);
 	const reserveRightPadding = options.reserveRightPadding === true;
