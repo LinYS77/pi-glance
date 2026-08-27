@@ -16,7 +16,7 @@ const manifest = JSON.parse(await readFile("package.json", "utf8")) as {
 
 const INPUT_SURFACE_IMAGE = "https://raw.githubusercontent.com/LinYS77/pi-glance/main/assets/input-surface.png";
 const SETTINGS_IMAGE = "https://raw.githubusercontent.com/LinYS77/pi-glance/main/assets/settings.png";
-const THEMES_VIDEO = "https://raw.githubusercontent.com/LinYS77/pi-glance/main/assets/themes.mp4";
+const THEMES_GIF = "https://raw.githubusercontent.com/LinYS77/pi-glance/main/assets/themes.gif";
 
 function assertIncludes(document: string, fragment: string, message: string): void {
 	assert.ok(document.includes(fragment), message);
@@ -37,7 +37,8 @@ for (const document of [readme, chineseReadme]) {
 	assertIncludes(document, "/glance", "both READMEs should name the only settings command");
 	assertIncludes(document, INPUT_SURFACE_IMAGE, "both READMEs should show the input surface");
 	assertIncludes(document, SETTINGS_IMAGE, "both READMEs should show the settings pane");
-	assertIncludes(document, THEMES_VIDEO, "both READMEs should link the theme preview video");
+	assertIncludes(document, THEMES_GIF, "both READMEs should embed the animated theme preview");
+	assert.ok(!document.includes(".mp4"), "the READMEs should not reference the retired MP4 preview");
 	assert.ok(!document.includes("assets/demo.gif"), "the retired demo GIF must not return");
 	assert.ok(!document.includes("github.com/badlogic/pi-mono"), "README links should use the current Pi repository");
 }
@@ -61,9 +62,12 @@ for (const implementationDetail of ["cacheRead /", "agent_settled", "sessionMana
 assert.equal(manifest.description, "A calm input surface for Pi with a rounded multiline editor and adaptive status glance.");
 assert.ok(manifest.files?.includes("README*.md"), "the npm package should include both language READMEs");
 assert.deepEqual(manifest.pi?.extensions, ["./index.ts"], "the Pi extension entry should remain unchanged");
-assert.equal(manifest.pi?.image, INPUT_SURFACE_IMAGE, "the Pi package gallery should lead with the input surface preview");
-assert.equal(manifest.pi?.video, THEMES_VIDEO, "the Pi package gallery should have an MP4 preview");
+assert.equal(manifest.pi?.image, THEMES_GIF, "the Pi package gallery should use the animated GIF preview");
+assert.equal(manifest.pi?.video, undefined, "the Pi package manifest should not retain an MP4 preview");
 
-await Promise.all([access("assets/input-surface.png"), access("assets/settings.png"), access("assets/themes.mp4")]);
+await Promise.all([access("assets/input-surface.png"), access("assets/settings.png"), access("assets/themes.gif")]);
+const themesGif = await readFile("assets/themes.gif");
+assert.equal(themesGif.subarray(0, 6).toString("ascii"), "GIF89a", "the theme preview should be a GIF89a animation");
+assert.ok(themesGif.byteLength < 5_000_000, "the animated theme preview should remain suitable for a README");
 
 console.log("✓ concise bilingual README and gallery metadata checks passed");

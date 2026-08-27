@@ -53,7 +53,7 @@ Run:
 </p>
 
 <p align="center">
-  <a href="https://raw.githubusercontent.com/LinYS77/pi-glance/main/assets/themes.mp4">▶ Watch the 10-second theme preview</a>
+  <img src="https://raw.githubusercontent.com/LinYS77/pi-glance/main/assets/themes.gif" alt="pi-glance theme preview">
 </p>
 
 Changes preview live. Press `D` to see how the status line folds at full, compact, and minimal widths.

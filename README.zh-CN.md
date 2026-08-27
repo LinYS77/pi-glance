@@ -53,7 +53,7 @@ pi install npm:pi-glance
 </p>
 
 <p align="center">
-  <a href="https://raw.githubusercontent.com/LinYS77/pi-glance/main/assets/themes.mp4">▶ 查看 10 秒主题预览</a>
+  <img src="https://raw.githubusercontent.com/LinYS77/pi-glance/main/assets/themes.gif" alt="pi-glance 主题预览">
 </p>
 
 修改会实时显示在预览中。按 `D` 可以查看状态栏在完整、紧凑和极简宽度下的折叠效果。

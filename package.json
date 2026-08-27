@@ -35,8 +35,7 @@
     "extensions": [
       "./index.ts"
     ],
-    "video": "https://raw.githubusercontent.com/LinYS77/pi-glance/main/assets/themes.mp4",
-    "image": "https://raw.githubusercontent.com/LinYS77/pi-glance/main/assets/input-surface.png"
+    "image": "https://raw.githubusercontent.com/LinYS77/pi-glance/main/assets/themes.gif"
   },
   "peerDependencies": {
     "@earendil-works/pi-ai": "*",
