@@ -3,7 +3,7 @@ import { truncateToWidth, visibleWidth, type AutocompleteItem, type Autocomplete
 import type { KeybindingsManager } from "@earendil-works/pi-coding-agent";
 import { defaultConfig } from "../config.js";
 import { GlanceEditor } from "../editor.js";
-import { PALETTES, fg } from "../palette.js";
+import { PALETTES, fg, fg256 } from "../palette.js";
 import { renderInputSurface } from "../renderer.js";
 import { resolveBuiltInGlanceStyles } from "../theme-adapter.js";
 import { renderGlanceLine } from "../status-line.js";
@@ -442,6 +442,32 @@ for (const themeId of EDITOR_STYLE_PARITY_THEMES) {
 	const darkTop = rawTopBorder(editor.render(120));
 	assert.ok(darkTop.includes(fg(PALETTES.dark.segments.model.fg, "ai GPT 5.5")), "live editor should re-evaluate getAmbientTone on later renders and invalidate cache by style cacheKey");
 	assert.equal(darkTop.includes(fg(PALETTES.light.segments.model.fg, "ai GPT 5.5")), false, "live editor should not reuse stale light status bytes after ambient tone changes");
+}
+
+{
+	const state = editorStyleState;
+	const config = defaultConfig();
+	useTheme(config, "light");
+	config.editor.topMarginRows = 0;
+	onlySegments(config, ["model"]);
+	let trueColor = true;
+	const editor = new GlanceEditor(
+		{ terminal: { rows: 40 }, requestRender: () => undefined } as unknown as TUI,
+		theme,
+		keybindings,
+		() => state,
+		() => config,
+		undefined,
+		{ renderStyleContext: { getTrueColor: () => trueColor } },
+	);
+	editor.focused = true;
+	editor.setText("capability cache check");
+	const trueColorTop = rawTopBorder(editor.render(120));
+	assert.ok(trueColorTop.includes(fg(PALETTES.light.segments.model.fg, "ai GPT 5.5")), "live editor should initially render truecolor status bytes");
+	trueColor = false;
+	const ansi256Top = rawTopBorder(editor.render(120));
+	assert.ok(ansi256Top.includes(fg256(PALETTES.light.segments.model.fg, "ai GPT 5.5")), "live editor should re-evaluate truecolor capability and render ANSI 256-color status bytes");
+	assert.equal(ansi256Top.includes(fg(PALETTES.light.segments.model.fg, "ai GPT 5.5")), false, "live editor status cache should not retain truecolor bytes after capability downgrade");
 }
 
 {

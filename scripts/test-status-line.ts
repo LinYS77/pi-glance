@@ -2,7 +2,7 @@ import { strict as assert } from "node:assert";
 import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import { defaultConfig } from "../config.js";
 import { stripControls } from "../format.js";
-import { PALETTES, fg } from "../palette.js";
+import { PALETTES, fg, fg256 } from "../palette.js";
 import { resolveBuiltInGlanceStyles, type GlanceRenderStyleContext } from "../theme-adapter.js";
 import { GLANCE_THEME_IDS } from "../themes.js";
 import { testState } from "./helpers.js";
@@ -107,6 +107,20 @@ for (const themeId of GLANCE_THEME_IDS) {
 			`${themeId}.${id} status segment should keep byte-equivalent legacy palette styling through adapter`,
 		);
 	}
+}
+
+{
+	const config = configWithSegments(["model"], (next) => {
+		useTheme(next, "light");
+	});
+	const ansi256 = renderGlanceLine(modelState(1), config, 120, 1, { trueColor: false });
+	assert.equal(
+		ansi256,
+		`${fg256(PALETTES.light.segments.model.fg, "ai GPT 5.5")}${RESET}`,
+		"status-line should emit ANSI 256-color output when Pi reports truecolor unavailable",
+	);
+	assert.equal(ansi256.includes("\x1b[38;2;"), false, "ANSI 256-color status output should not retain truecolor escapes");
+	assert.ok(ansi256.includes("\x1b[38;5;"), "ANSI 256-color status output should use indexed foreground escapes");
 }
 
 {

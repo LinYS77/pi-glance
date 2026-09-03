@@ -1,4 +1,5 @@
 import { performance } from "node:perf_hooks";
+import { getCapabilities } from "@earendil-works/pi-tui";
 import type {
 	AgentEndEvent,
 	AgentSettledEvent,
@@ -50,6 +51,7 @@ export interface GlanceRuntimeAdapters {
 	showPane(initial: GlanceConfig, ctx: ExtensionCommandContext, previewState?: GlanceState, options?: RuntimeShowPaneOptions): Promise<GlancePaneResult>;
 	createGitRefresher?: (options: CreateGitRefresherOptions) => RuntimeGitRefresher;
 	nowMs?: () => number;
+	getTrueColor?: () => boolean;
 }
 
 type RuntimeModelSelectEvent = Extract<ExtensionEvent, { type: "model_select" }>;
@@ -86,8 +88,11 @@ function isTuiMode(ctx: ExtensionContext): boolean {
 	return ctx.mode === "tui";
 }
 
-function runtimeRenderStyleContext(ctx: ExtensionContext): GlanceRenderStyleContext {
-	return { getAmbientTone: () => readPiAmbientTone(ctx.ui) };
+function runtimeRenderStyleContext(ctx: ExtensionContext, getTrueColor: () => boolean): GlanceRenderStyleContext {
+	return {
+		getAmbientTone: () => readPiAmbientTone(ctx.ui),
+		getTrueColor,
+	};
 }
 
 export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRuntime {
@@ -103,6 +108,7 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 	let requestRender: (() => void) | undefined;
 	let uiGeneration = 0;
 	const nowMs = adapters.nowMs ?? (() => performance.now());
+	const getTrueColor = adapters.getTrueColor ?? (() => getCapabilities().trueColor);
 
 	function acceptConfigLoad(result: ConfigLoadResult): GlanceConfig {
 		config = result.config;
@@ -226,7 +232,7 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 			return;
 		}
 
-		const renderStyleContext = runtimeRenderStyleContext(ctx);
+		const renderStyleContext = runtimeRenderStyleContext(ctx, getTrueColor);
 		const generation = invalidateUiOwnership();
 
 		reconcileGitRefresher(true);
@@ -269,7 +275,7 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 				const current = await ensureConfig();
 				notifyConfigDiagnostic(ctx);
 				refreshSession.ensureState(ctx);
-				const renderStyleContext = runtimeRenderStyleContext(ctx);
+				const renderStyleContext = runtimeRenderStyleContext(ctx, getTrueColor);
 				const result = await adapters.showPane(current, ctx, refreshSession.getState(), { renderStyleContext });
 				if (result.action === "cancel") {
 					ctx.ui.notify("pi-glance configuration cancelled", "info");

@@ -1,7 +1,7 @@
 import { strict as assert } from "node:assert";
 import { readFile } from "node:fs/promises";
-import { PALETTES, fg } from "../palette.js";
-import { resolveBuiltInGlanceStyles, resolveGlanceRenderStyles } from "../theme-adapter.js";
+import { PALETTES, fg, fg256, rgbToAnsi256 } from "../palette.js";
+import { resolveBuiltInGlanceStyles, resolveGlanceRenderStyles, type GlanceColorMode } from "../theme-adapter.js";
 import { selectGlanceTheme } from "../theme-selection.js";
 import { readPiAmbientTone } from "../theme-tone.js";
 import { GLANCE_THEME_CATALOG } from "../theme-catalog.js";
@@ -2391,14 +2391,14 @@ const selectedThemePair = { light: "one-light", dark: "tokyo-night" } as const;
 assert.equal(selectGlanceTheme(selectedThemePair, "light"), "one-light", "theme selection should return the light slot for light ambient tone");
 assert.equal(selectGlanceTheme(selectedThemePair, "dark"), "tokyo-night", "theme selection should return the dark slot for dark ambient tone");
 assert.equal(selectGlanceTheme(selectedThemePair, "unknown"), "one-light", "theme selection should fall back to the light slot for unknown ambient tone");
-assert.equal(resolveGlanceRenderStyles(selectedThemePair, { ambientTone: "light" }).cacheKey, "glance:one-light", "render style resolver should use the light slot for ambient light");
-assert.equal(resolveGlanceRenderStyles(selectedThemePair, { ambientTone: "dark" }).cacheKey, "glance:tokyo-night", "render style resolver should use the dark slot for ambient dark");
-assert.equal(resolveGlanceRenderStyles(selectedThemePair, { ambientTone: "unknown" }).cacheKey, "glance:one-light", "render style resolver should use the light slot for ambient unknown");
-assert.equal(resolveGlanceRenderStyles(selectedThemePair).cacheKey, "glance:one-light", "render style resolver should default missing ambient tone to the light slot");
-assert.equal(resolveGlanceRenderStyles(selectedThemePair, { getAmbientTone: () => "dark" }).cacheKey, "glance:tokyo-night", "render style resolver should use lazy getAmbientTone when no static tone is provided");
+assert.equal(resolveGlanceRenderStyles(selectedThemePair, { ambientTone: "light" }).cacheKey, "glance:one-light:truecolor", "render style resolver should use the light slot for ambient light");
+assert.equal(resolveGlanceRenderStyles(selectedThemePair, { ambientTone: "dark" }).cacheKey, "glance:tokyo-night:truecolor", "render style resolver should use the dark slot for ambient dark");
+assert.equal(resolveGlanceRenderStyles(selectedThemePair, { ambientTone: "unknown" }).cacheKey, "glance:one-light:truecolor", "render style resolver should use the light slot for ambient unknown");
+assert.equal(resolveGlanceRenderStyles(selectedThemePair).cacheKey, "glance:one-light:truecolor", "render style resolver should default missing ambient tone to the light slot");
+assert.equal(resolveGlanceRenderStyles(selectedThemePair, { getAmbientTone: () => "dark" }).cacheKey, "glance:tokyo-night:truecolor", "render style resolver should use lazy getAmbientTone when no static tone is provided");
 assert.equal(
 	resolveGlanceRenderStyles(selectedThemePair, { ambientTone: "light", getAmbientTone: () => "dark" }).cacheKey,
-	"glance:one-light",
+	"glance:one-light:truecolor",
 	"render style resolver should prefer static ambientTone over getAmbientTone",
 );
 const explicitStyleOverride = resolveBuiltInGlanceStyles("dark");
@@ -2444,30 +2444,51 @@ function assertPalette(themeId: (typeof GLANCE_THEME_IDS)[number], theme: Glance
 	}
 }
 
+const colorModes = ["truecolor", "ansi256"] as const satisfies readonly GlanceColorMode[];
 const styleCacheKeys = new Set<string>();
 for (const themeId of GLANCE_THEME_IDS) {
 	const palette: GlancePalette = PALETTES[themeId];
 	assertPalette(themeId, palette);
 
-	const styles = resolveBuiltInGlanceStyles(themeId);
-	const secondStyles = resolveBuiltInGlanceStyles(themeId);
-	assert.equal(styles.cacheKey, `glance:${themeId}`, `${themeId} resolved style cacheKey should be stable and theme-specific`);
-	assert.equal(secondStyles.cacheKey, styles.cacheKey, `${themeId} resolved style cacheKey should be stable across calls`);
-	styleCacheKeys.add(styles.cacheKey);
+	for (const colorMode of colorModes) {
+		const styles = resolveBuiltInGlanceStyles(themeId, colorMode);
+		const secondStyles = resolveBuiltInGlanceStyles(themeId, colorMode);
+		assert.equal(styles.cacheKey, `glance:${themeId}:${colorMode}`, `${themeId} ${colorMode} resolved style cacheKey should be stable and capability-specific`);
+		assert.equal(secondStyles.cacheKey, styles.cacheKey, `${themeId} ${colorMode} resolved style cacheKey should be stable across calls`);
+		styleCacheKeys.add(styles.cacheKey);
 
-	for (const role of STYLE_ROLE_KEYS) {
-		const text = `${themeId}:${role}:sample`;
-		assert.equal(styles[role](text), fg(palette[role], text), `${themeId}.${role} style should preserve current fg(PALETTES[theme].${role}, text) ANSI output`);
-	}
-	for (const segment of SEGMENT_IDS) {
-		const text = `${themeId}:${segment}:segment`;
-		assert.equal(
-			styles.segments[segment].fg(text),
-			fg(palette.segments[segment].fg, text),
-			`${themeId}.segments.${segment}.fg style should preserve current palette segment ANSI output`,
-		);
+		for (const role of STYLE_ROLE_KEYS) {
+			const text = `${themeId}:${role}:sample`;
+			const expected = colorMode === "truecolor" ? fg(palette[role], text) : fg256(palette[role], text);
+			assert.equal(styles[role](text), expected, `${themeId}.${role} style should use ${colorMode} palette output`);
+		}
+		for (const segment of SEGMENT_IDS) {
+			const text = `${themeId}:${segment}:segment`;
+			const expected = colorMode === "truecolor" ? fg(palette.segments[segment].fg, text) : fg256(palette.segments[segment].fg, text);
+			assert.equal(styles.segments[segment].fg(text), expected, `${themeId}.segments.${segment}.fg should use ${colorMode} palette output`);
+		}
 	}
 }
-assert.equal(styleCacheKeys.size, GLANCE_THEME_IDS.length, "resolved style cache keys should be unique across all built-in themes");
+assert.equal(styleCacheKeys.size, GLANCE_THEME_IDS.length * colorModes.length, "resolved style cache keys should be unique across themes and color modes");
+
+assert.equal(rgbToAnsi256(PALETTES.light.text), 16, "light neutral text should map to the nearest xterm cube color");
+assert.equal(rgbToAnsi256(PALETTES.dark.text), 254, "near-neutral dark-theme text should map to the nearest xterm grayscale color");
+assert.equal(rgbToAnsi256(PALETTES.light.segments.context.fg), 29, "saturated context color should preserve its tint in the xterm cube");
+
+assert.equal(
+	resolveGlanceRenderStyles(selectedThemePair, { ambientTone: "light", trueColor: false }).cacheKey,
+	"glance:one-light:ansi256",
+	"a static false trueColor capability should select ANSI 256-color styles",
+);
+assert.equal(
+	resolveGlanceRenderStyles(selectedThemePair, { ambientTone: "dark", getTrueColor: () => false }).cacheKey,
+	"glance:tokyo-night:ansi256",
+	"a lazy false trueColor capability should select ANSI 256-color styles",
+);
+assert.equal(
+	resolveGlanceRenderStyles(selectedThemePair, { ambientTone: "dark", trueColor: true, getTrueColor: () => false }).cacheKey,
+	"glance:tokyo-night:truecolor",
+	"static trueColor should take precedence over the lazy capability provider",
+);
 
 console.log("✓ theme config checks passed");

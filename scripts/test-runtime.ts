@@ -1,7 +1,7 @@
 import { strict as assert } from "node:assert";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { defaultConfig } from "../config.js";
-import { PALETTES, fg } from "../palette.js";
+import { PALETTES, fg, fg256 } from "../palette.js";
 import { renderInputSurface } from "../renderer.js";
 import type { GlanceRenderStyleContext } from "../theme-adapter.js";
 import {
@@ -63,6 +63,7 @@ function assertAmbientPaneOptions(options: RuntimeHarness["showPaneOptions"][num
 	assert.ok(renderStyleContext, `${message}: pane should receive a render style context`);
 	assert.equal(renderStyleContext.styles, undefined, `${message}: inactive Pi style provider should not inject Pi color styles`);
 	assert.equal(typeof renderStyleContext.getAmbientTone, "function", `${message}: pane render style context should provide lazy ambient tone`);
+	assert.equal(typeof renderStyleContext.getTrueColor, "function", `${message}: pane render style context should provide lazy terminal color capability`);
 	return renderStyleContext;
 }
 
@@ -300,6 +301,31 @@ for (const matrixCase of [
 
 	await harness.runtime.events.sessionShutdown({}, test.ctx as ExtensionContext);
 	assert.equal(test.getCurrentEditorFactory(), previousEditorFactory, "reinstalling for a new session should retain the original predecessor for restoration");
+}
+
+{
+	const config = defaultConfig();
+	config.editor.topMarginRows = 0;
+	const git = createGitHarness();
+	const test = createContext({ uiTheme: fakePiTheme("light") });
+	const harness = createRuntimeHarness({
+		loadConfigSyncConfig: config,
+		showPaneResults: [{ action: "cancel" }],
+		getTrueColor: () => false,
+		git,
+	});
+
+	harness.runtime.events.sessionStart({}, test.ctx);
+	const editor = invokeEditorFactory(test, 0, () => undefined) as { focused: boolean; setText(text: string): void; render(width: number): string[] };
+	editor.focused = true;
+	editor.setText("terminal capability check");
+	const frame = editor.render(100).join("\n");
+	assert.ok(frame.includes(fg256(PALETTES.light.border, "╭")), "runtime editor should honor Pi's false truecolor capability with ANSI 256-color frame output");
+	assert.equal(frame.includes("\x1b[38;2;"), false, "runtime editor should not emit truecolor escapes after Pi disables truecolor");
+
+	await harness.runtime.commands.openPane("", test.ctx);
+	const paneRenderStyleContext = assertAmbientPaneOptions(harness.showPaneOptions[0], "terminal capability override");
+	assert.equal(paneRenderStyleContext.getTrueColor?.(), false, "/glance preview should receive the same lazy false truecolor capability");
 }
 
 {

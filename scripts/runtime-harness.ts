@@ -82,6 +82,7 @@ export interface RuntimeHarnessOptions {
 	saveConfigError?: Error;
 	git?: RuntimeGitHarness;
 	getThinkingLevel?: () => string;
+	getTrueColor?: () => boolean;
 }
 
 type ProductionRuntime = ReturnType<typeof createGlanceRuntime>;
@@ -365,6 +366,7 @@ export function createRuntimeHarness(options: RuntimeHarnessOptions = {}): Runti
 	const showPaneResults = [...(options.showPaneResults ?? [])];
 	const adapters: GlanceRuntimeAdapters = {
 		getThinkingLevel: options.getThinkingLevel ?? (() => "off"),
+		getTrueColor: options.getTrueColor ?? (() => true),
 		loadConfigSync: () => loadConfigSyncResult,
 		loadConfig: async () => {
 			loadConfigCalls++;
