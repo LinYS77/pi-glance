@@ -74,6 +74,7 @@ async function main(): Promise<void> {
 
 		const enabledPi = createPi();
 		piGlance(enabledPi.api);
+		assert.ok(enabledPi.handlers.has("thinking_level_select"), "entry point should register Pi /thinking selection notifications");
 		assert.ok(enabledPi.handlers.has("ui_prompt_start"), "entry point should register Pi 0.84.4 ui_prompt_start notifications");
 		assert.ok(enabledPi.handlers.has("ui_prompt_end"), "entry point should register Pi 0.84.4 ui_prompt_end notifications");
 		const enabledCalls: string[] = [];
