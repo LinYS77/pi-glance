@@ -63,6 +63,7 @@ Changes preview live. Press `D` to see how the status line folds at full, compac
 - Plain icons work with normal terminal fonts. Nerd Font icons are optional in `/glance` → **General** → **Icons**.
 - Pi provides one custom-editor slot, so the last editor extension loaded wins.
 - Built and tested with Pi 0.84.4 on Node.js 22.19.0 or newer.
+- Glance follows Pi's terminal truecolor capability and falls back to ANSI 256 colors.
 - Uses only public Pi extension APIs.
 
 ## Update

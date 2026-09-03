@@ -93,6 +93,7 @@ GlanceEditor
 - Context always comes from `ctx.getContextUsage()`.
 - Git scheduling is independent from render decisions.
 - Ordinary lifecycle events request a render only when visible Glance state changes.
+- Blocking `ui_prompt_start` / `ui_prompt_end` spans pause Model speed timing without requesting a render.
 - Config save always requests a render because display configuration can change without changing session facts.
 - Git snapshots request a render only when visible Git facts change; timestamp-only updates remain silent.
 
@@ -158,7 +159,7 @@ Pi theme.name === "dark"  -> theme.dark
 otherwise                 -> theme.light
 ```
 
-Both slots can select any of the 22 Glance palettes. `/glance` does not manage Pi themes.
+Both slots can select any of the 22 Glance palettes. `/glance` does not manage Pi themes. Pi's public terminal capability is authoritative for color depth: truecolor output is used when available, otherwise palette RGB values are mapped to ANSI 256 colors without changing ambient-tone selection.
 
 ## Config invariants
 

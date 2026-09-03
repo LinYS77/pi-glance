@@ -63,6 +63,7 @@ pi install npm:pi-glance
 - 普通图标适用于常规终端字体；Nerd Font 图标可在 `/glance` → **General** → **Icons** 中开启。
 - Pi 只提供一个自定义编辑器位置，因此最后加载的编辑器扩展会生效。
 - 基于 Pi 0.84.4 开发并测试，需要 Node.js 22.19.0 或更高版本。
+- Glance 会遵循 Pi 的终端真彩色能力，并在不可用时回退到 ANSI 256 色。
 - 只使用 Pi 公开的扩展 API。
 
 ## 更新
