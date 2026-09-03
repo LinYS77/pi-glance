@@ -50,8 +50,8 @@ assertIncludes(readme, "Git · Cost · Model speed · Context · Tokens · Model
 assertIncludes(chineseReadme, "Git · 费用 · 模型速度 · 上下文 · Tokens · 模型", "the Chinese README should name the adaptive facts");
 assertIncludes(readme, "no telemetry", "the English README should state the privacy boundary");
 assertIncludes(chineseReadme, "不收集遥测数据", "the Chinese README should state the privacy boundary");
-assertIncludes(readme, "Pi 0.84.2", "the English README should state the tested Pi baseline");
-assertIncludes(chineseReadme, "Pi 0.84.2", "the Chinese README should state the tested Pi baseline");
+assertIncludes(readme, "Pi 0.84.4", "the English README should state the tested Pi baseline");
+assertIncludes(chineseReadme, "Pi 0.84.4", "the Chinese README should state the tested Pi baseline");
 assertIncludes(readme, "Node.js 22.19.0 or newer", "the English README should state the Node floor");
 assertIncludes(chineseReadme, "Node.js 22.19.0 或更高版本", "the Chinese README should state the Node floor");
 

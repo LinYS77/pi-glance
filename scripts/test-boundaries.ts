@@ -101,13 +101,13 @@ function assertCompatibilityBaseline(packageText: string, lockText: string): voi
 		packages?: Record<string, { engines?: Record<string, string>; devDependencies?: Record<string, string>; peerDependencies?: Record<string, string> }>;
 	};
 	const expectedDevDependencies = {
-		"@earendil-works/pi-ai": "0.84.2",
-		"@earendil-works/pi-coding-agent": "0.84.2",
-		"@earendil-works/pi-tui": "0.84.2",
+		"@earendil-works/pi-ai": "0.84.4",
+		"@earendil-works/pi-coding-agent": "0.84.4",
+		"@earendil-works/pi-tui": "0.84.4",
 		"@types/node": "24.12.4",
 		typescript: "5.9.3",
 	};
-	assert.deepEqual(manifest.devDependencies, expectedDevDependencies, "package.json should pin the Pi 0.84.2 development baseline");
+	assert.deepEqual(manifest.devDependencies, expectedDevDependencies, "package.json should pin the Pi 0.84.4 development baseline");
 	assert.deepEqual(lock.packages?.[""]?.devDependencies, expectedDevDependencies, "package-lock should match the development baseline");
 	assert.equal(manifest.engines?.node, ">=22.19.0", "package.json should preserve Pi's Node floor");
 	assert.equal(lock.packages?.[""]?.engines?.node, ">=22.19.0", "package-lock should preserve Pi's Node floor");

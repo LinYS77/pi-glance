@@ -172,7 +172,7 @@ Both slots can select any of the 22 Glance palettes. `/glance` does not manage P
 
 ## Compatibility and packaging
 
-- Development baseline: Pi `0.84.2`.
+- Development baseline: Pi `0.84.4`.
 - Node floor: `>=22.19.0`.
 - Pi packages are wildcard peer dependencies supplied by Pi and are not bundled.
 - Production source is shipped directly as TypeScript.
