@@ -27,6 +27,8 @@ type ModelSpeedStateIntent =
 interface ModelSpeedRunTrackerInstance {
 	start(): ModelSpeedStateIntent;
 	messageUpdate(message: unknown, assistantMessageEvent: unknown, nowMs: ModelSpeedClock): ModelSpeedStateIntent;
+	uiPromptStart(): void;
+	uiPromptEnd(): void;
 	messageEnd(message: unknown): ModelSpeedStateIntent;
 	compactionRetry(willRetry: boolean): ModelSpeedStateIntent;
 	settle(): ModelSpeedStateIntent;
@@ -161,6 +163,39 @@ function expectFinal(intent: ModelSpeedStateIntent, expected: ModelSpeedExpectat
 		run.messageEnd(assistant(50, {}, "stop", "split")),
 		measurement(1_000, 6_000, 2_000, 50),
 		"reasoning intervals between visible output spans should be excluded from active output time",
+	);
+}
+
+{
+	const run = tracker();
+	run.start();
+	run.messageUpdate(assistant(50), textDelta(), clock(1_000));
+	run.messageUpdate(assistant(50), textDelta(), clock(2_000));
+	run.uiPromptStart();
+	run.messageUpdate(assistant(50), textDelta(), throwingClock("output delivered while a UI prompt is active should not be timed"));
+	run.uiPromptStart();
+	run.uiPromptEnd();
+	run.messageUpdate(assistant(50), textDelta(), clock(5_000));
+	run.messageUpdate(assistant(50), textDelta(), clock(6_000));
+	expectCurrent(
+		run.messageEnd(assistant(50, {}, "stop", "prompt-split")),
+		measurement(1_000, 6_000, 2_000, 50),
+		"blocking extension UI prompt spans should be excluded from active output time",
+	);
+}
+
+{
+	const run = tracker();
+	run.uiPromptStart();
+	run.start();
+	run.messageUpdate(assistant(20), textDelta(), throwingClock("a prompt opened before agent_start should still pause model-speed timing"));
+	run.uiPromptEnd();
+	run.messageUpdate(assistant(20), textDelta(), clock(1_000));
+	run.messageUpdate(assistant(20), textDelta(), clock(2_000));
+	expectCurrent(
+		run.messageEnd(assistant(20, {}, "stop", "pre-opened-prompt")),
+		measurement(1_000, 2_000, 1_000, 20),
+		"agent runs begun under an existing UI prompt should remain paused until ui_prompt_end",
 	);
 }
 

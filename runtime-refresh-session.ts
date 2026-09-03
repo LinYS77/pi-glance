@@ -318,6 +318,14 @@ export class RuntimeRefreshSession {
 		this.modelSpeedTracker.messageUpdate(event.message, event.assistantMessageEvent, () => this.host.nowMs());
 	}
 
+	uiPromptStart(): void {
+		this.modelSpeedTracker.uiPromptStart();
+	}
+
+	uiPromptEnd(): void {
+		this.modelSpeedTracker.uiPromptEnd();
+	}
+
 	async messageEnd(event: RuntimeMessageEndInput, ctx: ExtensionContext): Promise<void> {
 		const message = event.message;
 		const hadState = this.state !== undefined;

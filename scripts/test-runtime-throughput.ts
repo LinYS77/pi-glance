@@ -189,6 +189,27 @@ function expectedTurn(startedAtMs: number, endedAtMs: number, elapsedMs: number,
 
 {
 	const test = createContext();
+	const { runtime, capturedStates, getRemainingNowReads } = createRuntime([1_000, 2_000, 5_000, 6_000]);
+	runtime.events.sessionStart({ type: "session_start" }, test.ctx);
+	runtime.events.agentStart({ type: "agent_start" }, test.ctx);
+	const partial = assistant(50);
+	runtime.events.messageUpdate(messageUpdate(partial, "text_delta"), test.ctx);
+	runtime.events.messageUpdate(messageUpdate(partial, "text_delta"), test.ctx);
+	const renderBeforePrompt = test.getRenderRequests();
+	runtime.events.uiPromptStart({ type: "ui_prompt_start", reason: "ui_prompt", kind: "confirm", title: "Continue?" }, test.ctx);
+	runtime.events.messageUpdate(messageUpdate(partial, "text_delta"), test.ctx);
+	runtime.events.uiPromptEnd({ type: "ui_prompt_end", reason: "ui_prompt", kind: "confirm", title: "Continue?" }, test.ctx);
+	runtime.events.messageUpdate(messageUpdate(partial, "text_delta"), test.ctx);
+	runtime.events.messageUpdate(messageUpdate(partial, "text_delta"), test.ctx);
+	await runtime.events.messageEnd(messageEnd(assistant(50, {}, "stop", "prompt-split")), test.ctx);
+	const expected = expectedTurn(1_000, 6_000, 2_000, 50);
+	assert.deepEqual(slots(await captureState(runtime, test, capturedStates)), { lastRun: null, currentRun: expected }, "runtime should exclude blocking extension UI prompt spans from provisional model speed");
+	assert.equal(test.getRenderRequests() - renderBeforePrompt, 1, "UI prompt lifecycle should stay render-silent until model speed becomes visible at message_end");
+	assert.equal(getRemainingNowReads(), 0, "output updates delivered inside a UI prompt span should not consume the model-speed clock");
+}
+
+{
+	const test = createContext();
 	const { runtime, capturedStates } = createRuntime([1_000, 2_000, 3_000, 4_000]);
 	runtime.events.sessionStart({ type: "session_start" }, test.ctx);
 	runtime.events.agentStart({ type: "agent_start" }, test.ctx);

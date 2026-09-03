@@ -161,6 +161,14 @@ for (const matrixCase of [
 		invoke: (harness, test) => harness.runtime.events.messageUpdate({ message: assistantMessage({ usage: { output: 4, totalTokens: 4 } }), assistantMessageEvent: { type: "text_delta" } }, test.ctx as ExtensionContext),
 	},
 	{
+		name: "ui_prompt_start",
+		invoke: (harness, test) => harness.runtime.events.uiPromptStart({ reason: "ui_prompt", kind: "confirm" }, test.ctx as ExtensionContext),
+	},
+	{
+		name: "ui_prompt_end",
+		invoke: (harness, test) => harness.runtime.events.uiPromptEnd({ reason: "ui_prompt", kind: "confirm" }, test.ctx as ExtensionContext),
+	},
+	{
 		name: "assistant message_end",
 		invoke: (harness, test) => harness.runtime.events.messageEnd({ message: assistantMessage({ usage: { input: 2, output: 3, totalTokens: 5, cost: { total: 0.1 } } }) }, test.ctx as ExtensionContext),
 	},

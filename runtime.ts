@@ -16,6 +16,8 @@ import type {
 	ToolExecutionEndEvent,
 	TurnEndEvent,
 	TurnStartEvent,
+	UIPromptEndEvent,
+	UIPromptStartEvent,
 } from "@earendil-works/pi-coding-agent";
 import type { ConfigLoadResult } from "./config.js";
 import { GlanceEditor } from "./editor.js";
@@ -72,6 +74,8 @@ export interface GlanceRuntime {
 		sessionTree(event: SessionTreeEvent, ctx: ExtensionContext): Promise<void>;
 		sessionCompact(event: SessionCompactEvent, ctx: ExtensionContext): Promise<void>;
 		messageUpdate(event: MessageUpdateEvent, ctx: ExtensionContext): void;
+		uiPromptStart(event: UIPromptStartEvent, ctx: ExtensionContext): void;
+		uiPromptEnd(event: UIPromptEndEvent, ctx: ExtensionContext): void;
 		messageEnd(event: MessageEndEvent, ctx: ExtensionContext): Promise<void>;
 		turnEnd(event: TurnEndEvent, ctx: ExtensionContext): Promise<void>;
 		agentStart(event: AgentStartEvent, ctx: ExtensionContext): void;
@@ -339,6 +343,12 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 			},
 			messageUpdate: (event, _ctx) => {
 				refreshSession.messageUpdate(event);
+			},
+			uiPromptStart: (_event, _ctx) => {
+				refreshSession.uiPromptStart();
+			},
+			uiPromptEnd: (_event, _ctx) => {
+				refreshSession.uiPromptEnd();
 			},
 			messageEnd: async (event, ctx) => {
 				await refreshSession.messageEnd(event, ctx);

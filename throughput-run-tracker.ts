@@ -68,6 +68,7 @@ export class ModelSpeedRunTracker {
 	private activeStream: ActiveModelStream | null = null;
 	private completedStreams: ModelStreamSample[] = [];
 	private pendingFailure = false;
+	private uiPromptActive = false;
 	private completedMessageObjects = new WeakSet<object>();
 	private completedMessageKeys = new Set<string>();
 
@@ -89,7 +90,7 @@ export class ModelSpeedRunTracker {
 
 	/** Record timestamps only; rendering remains event-driven at message_end. */
 	messageUpdate(message: unknown, assistantMessageEvent: unknown, nowMs: ModelSpeedClock): ModelSpeedStateIntent {
-		if (!this.running || this.pendingFailure || !isAssistantMessage(message)) return NONE_INTENT;
+		if (!this.running || this.pendingFailure || this.uiPromptActive || !isAssistantMessage(message)) return NONE_INTENT;
 		if (isThinkingEvent(assistantMessageEvent)) {
 			if (this.activeStream) closeOutputSegment(this.activeStream);
 			return NONE_INTENT;
@@ -116,6 +117,18 @@ export class ModelSpeedRunTracker {
 		}
 		this.activeStream.lastOutputAtMs = eventAtMs;
 		return NONE_INTENT;
+	}
+
+	/** Pause timing around Pi's coalesced blocking extension UI prompt span. */
+	uiPromptStart(): void {
+		if (this.uiPromptActive) return;
+		this.uiPromptActive = true;
+		if (this.activeStream) closeOutputSegment(this.activeStream);
+	}
+
+	/** Resume timing lazily from the next measurable output delta. */
+	uiPromptEnd(): void {
+		this.uiPromptActive = false;
 	}
 
 	private claimMessage(message: AssistantLikeMessage): boolean {
@@ -183,17 +196,22 @@ export class ModelSpeedRunTracker {
 			const lastRun = calculateModelSpeed({ streams: this.completedStreams });
 			return lastRun ? { kind: "set-last-run-and-clear-current-run", lastRun } : { kind: "clear-current-run" };
 		} finally {
-			this.reset();
+			this.resetRunState();
 		}
 	}
 
-	reset(): ModelSpeedStateIntent {
+	private resetRunState(): void {
 		this.running = false;
 		this.activeStream = null;
 		this.completedStreams = [];
 		this.pendingFailure = false;
 		this.completedMessageObjects = new WeakSet<object>();
 		this.completedMessageKeys = new Set<string>();
+	}
+
+	reset(): ModelSpeedStateIntent {
+		this.resetRunState();
+		this.uiPromptActive = false;
 		return NONE_INTENT;
 	}
 }
