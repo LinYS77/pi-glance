@@ -263,7 +263,7 @@ const gitRows = assertRows(config, "git", [
 		id: "git.sha",
 		label: "SHA",
 		value: "off",
-		hint: "Keep branches quiet unless enabled.",
+		hint: "Show commit SHA for detached HEAD or alongside branches.",
 		kind: "cycle",
 	},
 	{

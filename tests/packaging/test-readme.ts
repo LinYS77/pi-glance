@@ -25,9 +25,9 @@ function assertIncludes(document: string, fragment: string, message: string): vo
 assert.ok(readme.length < 4_000, "the English README should remain a concise product page");
 assert.ok(chineseReadme.length < 4_000, "the Chinese README should remain a concise product page");
 
-assertIncludes(readme, "A calm input surface", "the English README should lead with the product position");
+assert.match(readme, /rounded editor/i, "the English README should describe the editor");
 assertIncludes(readme, "README.zh-CN.md", "the English README should link to Simplified Chinese");
-assertIncludes(chineseReadme, "一个简洁、安静的", "the Chinese README should lead with the translated product position");
+assertIncludes(chineseReadme, "圆角编辑器", "the Chinese README should describe the editor");
 assertIncludes(chineseReadme, "README.md", "the Chinese README should link back to English");
 
 for (const document of [readme, chineseReadme]) {
@@ -65,7 +65,7 @@ for (const implementationDetail of ["cacheRead /", "agent_settled", "sessionMana
 	assert.ok(!readme.includes(implementationDetail), `the product README should leave ${implementationDetail} to architecture docs`);
 }
 
-assert.equal(manifest.description, "A calm input surface for Pi with a rounded multiline editor and adaptive status glance.");
+assert.match(manifest.description ?? "", /editor.*status line.*Pi/, "package description should identify Pi and the editor/status line");
 assert.ok(manifest.files?.includes("README*.md"), "the npm package should include both language READMEs");
 assert.deepEqual(manifest.pi?.extensions, ["./index.ts"], "the Pi extension entry should remain unchanged");
 assert.equal(manifest.pi?.image, THEMES_GIF, "the Pi package gallery should use the animated GIF preview");

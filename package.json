@@ -1,7 +1,7 @@
 {
   "name": "pi-glance",
   "version": "0.6.6",
-  "description": "A calm input surface for Pi with a rounded multiline editor and adaptive status glance.",
+  "description": "A rounded editor and adaptive status line for Pi.",
   "keywords": [
     "pi-package",
     "pi",

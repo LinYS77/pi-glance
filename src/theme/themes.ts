@@ -32,7 +32,7 @@ type ThemeIdCatalog<Catalog extends readonly ThemeCatalogMetadataShape[]> = {
 	readonly [Index in keyof Catalog]: Catalog[Index] extends ThemeCatalogMetadataShape ? Catalog[Index]["id"] : never;
 };
 
-// Curated user-facing theme order; this is intentionally not a theme marketplace.
+// Theme order in the settings browser.
 export const GLANCE_THEMES = GLANCE_THEME_CATALOG.map(({ id, label, group, groupLabel, tone, tags, detailTags, description, detailDescription }) => ({
 	id,
 	label,

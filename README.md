@@ -2,10 +2,9 @@
 
 # ◌ pi-glance
 
-**A calm input surface for [Pi](https://github.com/earendil-works/pi).**
+**A rounded editor and status line for [Pi](https://github.com/earendil-works/pi).**
 
-A rounded multiline editor with an adaptive glance at<br>
-Git, cost, model speed, context, tokens, and model.
+Shows Git status, cost, model speed, context usage, tokens, and the current model.
 
 English · [简体中文](./README.zh-CN.md)
 
@@ -32,13 +31,14 @@ pi install npm:pi-glance
 
 Restart Pi or run `/reload`.
 
-## What it adds
+## Features
 
 - **Rounded editor** — keeps Pi's editing, history, autocomplete, and keybindings.
-- **Adaptive glance** — Git · Cost · Model speed · Context · Tokens · Model.
+- **Adaptive status line** — Git · Cost · Model speed · Context · Tokens · Model.
 - **22 palettes** — separate light and dark choices, previewed live.
-- **One settings pane** — everything display-related lives under `/glance`.
-- **Quiet by default** — plain icons, no telemetry, and no runtime dependencies.
+- **Settings** — use `/glance` to choose palettes, toggle segments, and change their order.
+
+Plain icons are enabled by default. There are no runtime dependencies and no telemetry.
 
 ## Configure
 
@@ -76,9 +76,9 @@ pi update npm:pi-glance
 
 ## Contributing
 
-Issues and pull requests are welcome. [CONTEXT.md](./CONTEXT.md) is the maintained source map and design reference.
+Issues and pull requests are welcome. See [CONTEXT.md](./CONTEXT.md) for the code layout and implementation notes.
 
-Implementation lives in `src/`; behavior tests and independent visual fixtures live in `tests/`. The Pi entry remains `index.ts`.
+Source is in `src/`, tests are in `tests/`, and the Pi extension entry is `index.ts`.
 
 ```bash
 npm ci

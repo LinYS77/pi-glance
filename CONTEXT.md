@@ -1,12 +1,12 @@
-# pi-glance Context
+# Implementation notes
 
 ## Purpose
 
-pi-glance is a calm **Pi input-surface extension**. It decorates Pi's existing editor with a rounded frame, workspace title, and a compact status line, and exposes `/glance` for display configuration.
+pi-glance adds a rounded frame, workspace title, and status line to Pi's editor. Display settings are available through `/glance`.
 
-It is not an independent terminal UI, dashboard framework, Pi theme manager, or replacement editor implementation.
+Pi still handles text editing and terminal layout. Glance does not provide a separate TUI or manage Pi themes.
 
-## Domain language
+## Data and terminology
 
 - **Input surface** — the Pi-owned editor area plus the Glance frame and inline status facts around it.
 - **Glance state** — the in-memory, render-ready facts consumed by the input surface.
@@ -15,26 +15,26 @@ It is not an independent terminal UI, dashboard framework, Pi theme manager, or 
 - **Model speed** — provider-reported non-reasoning output divided by measured active text/tool-call output-stream time for the settled logical run.
 - **Ambient tone** — `light`, `dark`, or `unknown`, derived only from the exact public Pi theme name.
 - **Theme slot** — the configured Glance palette selected for a light or dark ambient tone.
-- **Refresh session** — `RuntimeRefreshSession`, the deep module that owns lifecycle-to-state refresh semantics, usage dedupe, Model speed tracking, Git scheduling intent, and render decisions.
-- **Config store** — a path-bound file adapter created at extension construction; it owns load diagnostics and atomic replacement, not display rules.
+- **Refresh session** — `RuntimeRefreshSession` handles lifecycle events, usage deduplication, Model speed tracking, Git refresh scheduling, and render decisions.
+- **Config store** — reads a configuration file and replaces it atomically on save. Its path is supplied when the extension is created.
 - **Segment tone** — `normal`, `warning`, or `error`, supplied alongside display content by a segment feature. It is distinct from the light/dark ambient tone.
 
-## Product responsibilities
+## Responsibilities
 
-pi-glance owns:
+pi-glance handles:
 
 - the Glance editor frame and status line;
 - always-on adaptive segment fitting;
 - the `/glance` settings pane, bounded theme browser, and transient density preview;
-- injected Pi selection keybindings and hierarchy-preserving pane navigation;
+- Pi selection keybindings and category → setting → value navigation;
 - six display features: Git, Cost, Model speed, Context, Tokens, and Model;
-- its 22 curated Glance palettes;
+- its 22 palettes;
 - asynchronous cached Git status collection;
 - the global config at `~/.pi/agent/pi-glance/config.json`;
 - migration and validation of known config fields;
-- atomic config replacement and conservative load diagnostics.
+- atomic config replacement and load-error reporting.
 
-Pi owns:
+Pi handles:
 
 - editor text editing, history, autocomplete, cursor behavior, selection, IME, and app keybindings;
 - terminal/fullscreen layout and footer dock allocation;
@@ -42,27 +42,26 @@ Pi owns:
 - extension loading order and the single custom-editor slot;
 - Pi UI themes and theme switching.
 
-## Non-goals
+## Scope
 
-Do not add or revive:
+The following are outside Glance's scope:
 
 - Pi core/TUI patches or private deep imports;
 - a standalone/fullscreen Glance TUI;
-- fixed editor regions implemented outside Pi public seams;
+- fixed editor regions implemented outside Pi's public layout APIs;
 - generic duck-typed wrapping of arbitrary third-party editors;
 - Pi theme enumeration, installation, switching, or reimplementation of theme token-color rendering;
 - terminal background queries, ANSI inspection, or fuzzy light/dark inference;
 - render-time filesystem, process, or network work;
 - Model speed token estimation from text/content length;
 - Model speed timers, tickers, or notifications;
-- production `sessionManager.getBranch()` reads;
-- assistant-owned npm publication or credential collection.
+- production `sessionManager.getBranch()` reads.
 
 ## Runtime architecture
 
 ```text
 index.ts                              stable Pi package entry and path selection
-  -> src/config/store.ts              diagnosed reads and atomic writes
+  -> src/config/store.ts              config reads and atomic writes
        -> src/config/model.ts         defaults, validation, migration, transforms
   -> src/runtime/runtime.ts           Pi wiring and input-surface ownership
        -> refresh-session.ts          lifecycle semantics and render decisions
@@ -84,24 +83,24 @@ src/surface/editor.ts
              -> catalog.ts            setting rows and theme browser catalog
              -> src/surface/renderer.ts -> frame.ts
 
-src/theme/                            curated catalog, palette, style selection
-src/types.ts                          shared Glance fact/config/display vocabulary
+src/theme/                            palette data and style selection
+src/types.ts                          shared state, config, and display types
 tests/{config,runtime,surface,settings,segments,theme}/
                                       behavior tests grouped like production
-tests/architecture/                   recursive dependency and safety contracts
+tests/architecture/                   import and dependency checks
 tests/packaging/                      npm contents and public documentation
 tests/support/                        shared test adapters and fixture builders
 tests/fixtures/                       independent expected theme data
 scripts/                              developer utilities, not test implementations
 ```
 
-`src/runtime/runtime.ts` must remain orchestration-focused. It must not absorb state mutation, session usage accounting, or frame composition.
+`src/runtime/runtime.ts` connects Pi events to the refresh session and manages editor/footer installation. State updates belong in `state.ts`, session accounting in `refresh-session.ts`, and frame rendering in `src/surface/`.
 
-Configuration rules, the settings model/catalog, Git snapshot parsing, and Model speed calculation/tracking are transitively free of filesystem/process work and Pi runtime imports. State and render paths do not acquire Glance-owned IO through local helper imports; Pi's external editor/TUI implementation remains host-owned.
+Configuration rules, settings state and catalog, Git status parsing, and Model speed tracking have no file/process IO or Pi runtime imports, including through local dependencies. File access stays in `src/config/store.ts`; Git execution stays in `src/runtime/git.ts`.
 
-`RuntimeRefreshSession` exposes semantic lifecycle methods such as `modelSelect`, `sessionTree`, `messageEnd`, and `agentSettled`. Snapshot plans and ordering are implementation details, not caller-visible interfaces.
+`RuntimeRefreshSession` exposes lifecycle methods such as `modelSelect`, `sessionTree`, `messageEnd`, and `agentSettled`. It handles snapshot selection and update ordering internally.
 
-Segment features own display content, semantic tone, and any feature-specific icon spacing. The generic renderer maps tone to palette styles without parsing formatted text or branching on feature IDs. Context warning/error thresholds use Pi's unrounded public percentage (`>=75` / `>=90`) in every display mode; unknown percentage stays normal rather than being inferred from token counts.
+Each segment returns display content, a color level, and any custom icon spacing. The renderer applies palette colors without parsing display text. Context uses Pi's unrounded percentage for warning (`>=75`) and error (`>=90`) colors in every display mode. An unknown percentage keeps the normal color, even when token counts are available.
 
 ## Refresh and render rules
 
@@ -122,11 +121,11 @@ Segment features own display content, semantic tone, and any feature-specific ic
 - Vertical selection movement, paging, confirmation, and cancellation use the `KeybindingsManager` injected into `ctx.ui.custom()`.
 - Ctrl-C remains an unconditional pane cancel; extension-specific save/reset/reorder/density keys remain local commands.
 - The theme catalog remains complete, but `SelectList` renders only a terminal-height-aware 4–8 row viewport.
-- `GlanceConfigPane` translates input into model intents itself rather than calling `SelectList.handleInput()`, preserving the injected keybinding boundary on Pi 0.84.
+- `GlanceConfigPane` translates keys into model intents rather than calling `SelectList.handleInput()`, so it uses the keybindings supplied by Pi.
 - Preview density cycles through Auto, Full, Compact, and Minimal without entering `GlanceConfig` or dirty comparison.
 - Pane state is a discriminated union: theme browsing always carries its slot and restore state; normal settings cannot retain browser state. Rendering receives preview config, density, and edited slot through the view model, not raw navigation state.
 
-## Session fact semantics
+## Usage calculations
 
 Tokens and Cost use the whole persisted billed-session ledger:
 
@@ -153,7 +152,7 @@ active text + tool-call output-stream time
 
 It excludes pre-output waiting, reasoning spans, tool execution, and gaps between model calls. `message_end` is provisional; `agent_settled` is final.
 
-## Input-surface ownership
+## Editor integration
 
 Pi exposes one custom-editor factory slot.
 
@@ -161,17 +160,17 @@ When pi-glance installs its editor it records the previous factory. On disable o
 
 An enabled-to-enabled config save does not reinstall the editor or footer, preserving the live editor instance and Pi-owned editing state.
 
-Pi does not currently expose equivalent footer ownership or a zero-height hidden footer. The empty fullscreen footer dock row is therefore an accepted Pi limitation.
+Pi has no public footer getter or zero-height hidden footer. An empty footer row therefore remains in fullscreen mode.
 
-## Theme ownership
+## Theme selection
 
-Config uses a Glance-owned pair:
+Config stores two Glance palettes:
 
 ```ts
 { theme: { light: GlanceThemeName, dark: GlanceThemeName } }
 ```
 
-Ambient selection is deliberately conservative:
+Palette selection uses the exact Pi theme name:
 
 ```text
 Pi theme.name === "light" -> theme.light
@@ -179,13 +178,13 @@ Pi theme.name === "dark"  -> theme.dark
 otherwise                 -> theme.light
 ```
 
-Both slots can select any of the 22 Glance palettes. `/glance` does not manage Pi themes. Pi's public terminal capability is authoritative for color depth: truecolor output is used when available, otherwise palette RGB values are mapped to ANSI 256 colors without changing ambient-tone selection.
+Both slots can select any of the 22 palettes. `/glance` does not change Pi themes. Colors use Pi's reported terminal capability: RGB when truecolor is available, ANSI 256 otherwise.
 
-The live editor preserves one Pi-owned semantic cue: input whose `trimStart()` begins with `!` (including `!!`) uses the inherited public `borderColor` callback for frame borders. Pi owns updating that callback and executing the command. Normal prompts, workspace title, and status remain Glance-styled; unfocused chrome keeps its existing dimming. The status cache key does not change for a border-only override.
+For Bash input (`getText().trimStart().startsWith("!")`), the live frame uses the editor's public `borderColor` callback. Pi updates this callback when input mode or theme changes. Normal input, title, and status keep Glance colors; unfocused borders remain dimmed. Changing only the border does not invalidate the status cache.
 
-For extremely narrow frames, Glance gives the inherited editor enough layout room for a two-column grapheme and its padding/cursor reserve, then clips with the shared frame. This avoids Pi 0.84's one-column wide-grapheme recursion without changing editor text or patching its word wrapper.
+At extremely narrow widths, the inherited editor is given enough room for a two-column character plus padding and cursor space. Glance then clips the result to the frame width. This avoids Pi 0.84's one-column wrapping recursion without changing the text.
 
-## Config invariants
+## Configuration
 
 - Current on-disk schema version: `8`.
 - Legacy theme strings migrate to the same palette in both slots.
@@ -194,8 +193,8 @@ For extremely narrow frames, Glance gives the inherited editor enough layout roo
 - Missing config is a writable new-install state.
 - Invalid, unreadable, or newer-version config is diagnosed and treated as read-only.
 - Saves write a unique temporary file and atomically rename it over `config.json`.
-- `index.ts` resolves the Pi agent directory when the extension factory runs and creates a config store for the resulting path. Merely importing configuration rules or the extension never reads/binds a config file.
-- Config store tests use independent real temporary files, without resetting module caches or mutating environment variables.
+- `index.ts` resolves the Pi agent directory and creates the config store when the extension starts. Importing the modules does not read a config file.
+- File-store tests use separate temporary directories.
 
 ## Compatibility and packaging
 
@@ -203,13 +202,10 @@ For extremely narrow frames, Glance gives the inherited editor enough layout roo
 - Node floor: `>=22.19.0`.
 - Pi packages are wildcard peer dependencies supplied by Pi and are not bundled.
 - Production source is shipped directly as TypeScript: root `index.ts` plus `src/**/*.ts`. Tests and fixtures are not shipped.
-- CI and GitHub Release reuse one validation workflow on Node 22.19 and current Node 24. Branch CI does not run on tags; tagged releases retain their own validation gate.
-- Tests use production interfaces and named behavior scenarios. A shared recursive import graph enforces local acyclicity and transitive dependency rules; independent snapshots protect curated visuals without locking source expressions.
-- A packaging test checks the exact npm dry-run file tree against all production source files. Directory changes must not leave missing imports in the published package.
-- npm publication is performed manually by the project owner; automation and agents must not run `npm publish` or request credentials.
+- CI and GitHub Release share the Node 22.19/24 test workflow. Branch CI does not run on tags.
+- Tests import the project interfaces directly. Import-graph checks detect cycles and forbidden dependencies; separate fixtures verify palette data.
+- The package test compares `npm pack --dry-run` output with the full production file list.
 
-## Repository maintenance
+## Repository files
 
-This file is the maintained source map and design reference. Local design notes and historical ADRs under `docs/` are intentionally ignored and are not required to build, test, install, or contribute.
-
-Published release notes live in GitHub Releases. Only the next release's checked-in notes are needed by the tag workflow; past tags retain their historical files. Generated test output and npm tarballs are not source artifacts.
+`docs/` contains local notes and is ignored by Git. Published release notes are available in GitHub Releases; the tag workflow reads the current notes from `.github/release-notes/`. Test build output and npm tarballs are also ignored.

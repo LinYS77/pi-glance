@@ -86,7 +86,7 @@ export const gitSegmentFeature = {
 		{
 			id: "git.sha",
 			label: "SHA",
-			hint: "Keep branches quiet unless enabled.",
+			hint: "Show commit SHA for detached HEAD or alongside branches.",
 			kind: "cycle",
 			value: (config: GlanceConfig) => config.git.shaMode,
 			mutate: (config: GlanceConfig) => {

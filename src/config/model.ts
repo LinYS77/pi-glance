@@ -140,10 +140,8 @@ function parseIntAtLeast(value: unknown, fallback: number, min: number): number 
 	return Math.max(min, Math.floor(value));
 }
 
-// Preserve known segment order/enabled flags for configs that already contain the
-// current segment model, and append missing default segments for old configs.
-// If a segment list is too old/ambiguous (currently: no git segment), fall back
-// to the curated default order rather than guessing.
+// Preserve known segment order and enabled flags, appending missing defaults.
+// Lists without Git predate the current segment model and use the default order.
 function sameSegmentOrder(actual: readonly SegmentConfig[], expected: readonly SegmentId[]): boolean {
 	return actual.length === expected.length && actual.every((segment, index) => segment.id === expected[index]);
 }
@@ -185,10 +183,8 @@ function normalizeSegments(value: unknown): SegmentConfig[] {
 	return ordered;
 }
 
-// normalizeConfig() is the migration/validation boundary: preserve valid known
-// user values, fill missing/new fields from defaults, clamp numeric bounds, and
-// drop invalid/unknown values. Do not bump CONFIG_VERSION for comments/tests or
-// product-copy-only releases.
+// Migrate legacy values, validate known fields, and fill defaults.
+// CONFIG_VERSION changes only when the on-disk schema changes.
 export function normalizeConfig(raw: unknown): GlanceConfig {
 	const defaults = defaultConfig();
 	if (!raw || typeof raw !== "object") return defaults;

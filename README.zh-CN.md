@@ -2,10 +2,9 @@
 
 # ◌ pi-glance
 
-**一个简洁、安静的 [Pi](https://github.com/earendil-works/pi) 输入面板。**
+**[Pi](https://github.com/earendil-works/pi) 的圆角编辑器与状态栏。**
 
-圆角多行编辑器，以及会随宽度自动折叠的<br>
-Git、费用、模型速度、上下文、Tokens 与模型信息。
+显示 Git 状态、费用、模型速度、上下文用量、Tokens 和当前模型。
 
 [English](./README.md) · 简体中文
 
@@ -32,13 +31,14 @@ pi install npm:pi-glance
 
 重启 Pi，或执行 `/reload`。
 
-## 它带来了什么
+## 功能
 
 - **圆角编辑器** — 保留 Pi 原有的编辑、历史、自动补全和快捷键行为。
-- **自适应状态信息** — Git · 费用 · 模型速度 · 上下文 · Tokens · 模型。
+- **自适应状态栏** — Git · 费用 · 模型速度 · 上下文 · Tokens · 模型。
 - **22 套配色** — 可分别选择亮色与暗色方案，并实时预览。
-- **一个设置面板** — 所有显示选项都集中在 `/glance`。
-- **默认保持安静** — 使用普通字符图标，不收集遥测数据，也没有运行时依赖。
+- **设置** — 在 `/glance` 中选择配色、开关状态项或调整顺序。
+
+默认使用普通字符图标，没有额外的运行时依赖，也不收集遥测数据。
 
 ## 设置
 
@@ -76,9 +76,9 @@ pi update npm:pi-glance
 
 ## 参与贡献
 
-欢迎提交 Issue 和 Pull Request。[CONTEXT.md](./CONTEXT.md) 是持续维护的代码导览与设计说明。
+欢迎提交 Issue 和 Pull Request。代码结构与实现说明见 [CONTEXT.md](./CONTEXT.md)。
 
-生产代码位于 `src/`，行为测试与独立视觉快照位于 `tests/`。Pi 入口仍为 `index.ts`。
+源码位于 `src/`，测试位于 `tests/`，Pi 扩展入口为 `index.ts`。
 
 ```bash
 npm ci

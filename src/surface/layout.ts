@@ -154,7 +154,7 @@ export function safeSurfaceWidth(width: number): number {
 }
 
 export function renderSurfaceTopMargin(width: number, rows = 1): string[] {
-	// Pure string helper for input-surface breathing rows: no Text/widgets/private pi APIs or terminal side effects.
+	// Blank rows above the frame; the setting supports zero, one, or two.
 	const count = Math.max(0, Math.min(2, finiteFloor(rows, 0)));
 	const line = finiteFloor(width, 0) > 0 ? " " : "";
 	return Array.from({ length: count }, () => line);

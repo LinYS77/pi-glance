@@ -2,6 +2,10 @@ name: GitHub Release
 
 "on":
   push:
+    branches:
+      - main
+    paths:
+      - ".github/release-notes/*.md"
     tags:
       - "v*"
 
@@ -10,10 +14,35 @@ permissions:
 
 jobs:
   validate:
+    if: startsWith(github.ref, 'refs/tags/')
     uses: ./.github/workflows/validate.yml
+
+  update-notes:
+    name: Update release notes
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Update the existing release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="v$(node -p "require('./package.json').version")"
+          notes=".github/release-notes/${tag}.md"
+          test -f "$notes"
+          published_tags=$(gh release list --limit 100 --json tagName --jq '.[].tagName')
+          if grep -Fxq "$tag" <<< "$published_tags"; then
+            gh release edit "$tag" --notes-file "$notes"
+          fi
 
   release:
     name: Create GitHub Release
+    if: startsWith(github.ref, 'refs/tags/')
     needs: validate
     permissions:
       contents: write

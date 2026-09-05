@@ -14,7 +14,7 @@ export interface ConfigLoadResult {
 	diagnostic?: string;
 }
 
-/** One file, with no import-time environment or shared store state. */
+/** Read and atomically replace the config at the supplied path. */
 export function createConfigStore(configPath: string) {
 	function errorMessage(error: unknown): string {
 		return error instanceof Error && error.message ? error.message : String(error);
