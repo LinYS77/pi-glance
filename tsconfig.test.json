@@ -2,8 +2,8 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "noEmit": false,
-    "outDir": ".tmp-git-dev",
+    "outDir": ".tmp-test",
     "rootDir": "."
   },
-  "include": ["*.ts", "scripts/*.ts"]
+  "include": ["index.ts", "src/**/*.ts", "tests/**/*.ts", "scripts/*.ts"]
 }

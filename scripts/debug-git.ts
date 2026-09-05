@@ -1,5 +1,5 @@
-import { collectGitSnapshot } from "../git.js";
-import type { GitConfig } from "../types.js";
+import { collectGitSnapshot } from "../src/runtime/git.js";
+import type { GitConfig } from "../src/types.js";
 
 const config: GitConfig = {
 	showDirty: true,
