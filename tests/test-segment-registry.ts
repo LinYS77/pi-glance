@@ -9,7 +9,7 @@ import { GLANCE_THEME_IDS } from "../src/theme/themes.js";
 import { modelSegmentFeature } from "../src/segments/model.js";
 import { throughputSegmentFeature } from "../src/segments/throughput.js";
 import { tokensSegmentFeature } from "../src/segments/tokens.js";
-import type { SegmentConfig, SegmentDefinition, SegmentId } from "../src/types.js";
+import type { SegmentConfig, SegmentId } from "../src/types.js";
 
 const EXPECTED_SEGMENT_IDS = ["git", "cost", "throughput", "context", "tokens", "model"] as const satisfies readonly SegmentId[];
 type ExpectedSegmentId = (typeof EXPECTED_SEGMENT_IDS)[number];

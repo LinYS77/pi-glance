@@ -13,7 +13,7 @@ interface PackResult {
 
 test("npm package includes the complete source tree and excludes development files", async () => {
 	const manifest = JSON.parse(await readFile("package.json", "utf8"));
-	const { stdout } = await promisify(execFile)("npm", ["pack", "--dry-run", "--json", "--ignore-scripts"], { maxBuffer: 1024 * 1024 });
+	const { stdout } = await promisify(execFile)("npm", ["pack", "--dry-run", "--json", "--ignore-scripts"], { maxBuffer: 1024 * 1024, timeout: 120_000 });
 	const [pack] = JSON.parse(stdout) as PackResult[];
 	assert.ok(pack);
 	assert.equal(pack.name, "pi-glance");

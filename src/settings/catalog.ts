@@ -75,10 +75,6 @@ function cycleRow(
 	return { id, label, value, hint, kind: "cycle", ...options, apply };
 }
 
-function infoRow(id: string, label: string, value: string, hint: string): SettingsRow {
-	return { id, label, value, hint, kind: "info" };
-}
-
 export function getThemeCatalog(): readonly ThemeBrowserCatalogItem[] {
 	return GLANCE_THEMES;
 }

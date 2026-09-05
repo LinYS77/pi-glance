@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { emptyGitSnapshot, parseGitStatus } from "./git-snapshot.js";
 import type { GitConfig, GitSnapshot } from "../types.js";
 
 const GIT_ARGS = ["--no-optional-locks", "status", "--porcelain=v2", "--branch", "--show-stash"] as const;
@@ -6,8 +7,6 @@ const GIT_MAX_BUFFER = 512 * 1024;
 const DEFAULT_POLL_INTERVAL_MS = 5000;
 const MIN_POLL_INTERVAL_MS = 1000;
 const NO_REPO_RETRY_MS = 30_000;
-
-import { emptyGitSnapshot, parseGitStatus } from "./git-snapshot.js";
 
 export function collectGitSnapshot(cwd: string, config: GitConfig): Promise<GitSnapshot> {
 	return new Promise((resolve) => {

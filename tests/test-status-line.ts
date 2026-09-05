@@ -4,10 +4,10 @@ import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import { defaultConfig } from "../src/config/model.js";
 import { stripControls } from "../src/surface/format.js";
 import { PALETTES, fg, fg256 } from "../src/theme/palette.js";
-import { resolveBuiltInGlanceStyles, type GlanceRenderStyleContext } from "../src/theme/adapter.js";
+import { resolveBuiltInGlanceStyles } from "../src/theme/adapter.js";
 import { GLANCE_THEME_IDS } from "../src/theme/themes.js";
 import { testState } from "./helpers.js";
-import type { GlanceConfig, GlanceState, GlanceThemeName, SegmentId, WidthMode } from "../src/types.js";
+import type { GlanceConfig, GlanceState, GlanceThemeName, SegmentId } from "../src/types.js";
 
 import { renderGlanceLine } from "../src/surface/status-line.js";
 

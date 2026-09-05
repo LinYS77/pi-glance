@@ -1,8 +1,7 @@
 import { strict as assert } from "node:assert";
 import { cloneConfig, defaultConfig } from "../src/config/model.js";
 import { getSettingsCategories, getThemeCatalogForSlot } from "../src/settings/catalog.js";
-import { GLANCE_THEMES, themeLabel } from "../src/theme/themes.js";
-import type { GlanceThemeSlot } from "../src/theme/selection.js";
+import { themeLabel } from "../src/theme/themes.js";
 import type { GlanceConfig, GlanceThemeName, SegmentId } from "../src/types.js";
 
 import { createPaneModel, createPaneViewModel, paneIsDirty, updatePaneModel, type PaneFocus, type PaneMoveDirection as MoveDirection, type PaneModelState, type GlancePaneViewModel, type HelpShortcut } from "../src/settings/model.js";
@@ -57,10 +56,6 @@ function darkTheme(config: GlanceConfig): GlanceThemeName {
 
 function setLightTheme(config: GlanceConfig, theme: GlanceThemeName): void {
 	config.theme = { ...config.theme, light: theme };
-}
-
-function setDarkTheme(config: GlanceConfig, theme: GlanceThemeName): void {
-	config.theme = { ...config.theme, dark: theme };
 }
 
 function assertHelp(actual: HelpShortcut[], expected: HelpShortcut[], message: string): void {

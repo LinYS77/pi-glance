@@ -1,6 +1,31 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
-import { dependencyPath, parseSource, runtimeCycles } from "./source-graph.js";
+import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { dependencyPath, parseSource, readProductionSources, runtimeCycles } from "./source-graph.js";
+
+test("source discovery recurses through production folders but not test fixtures", async () => {
+	const root = await mkdtemp(join(tmpdir(), "pi-glance-source-graph-"));
+	try {
+		await mkdir(join(root, "src", "config"), { recursive: true });
+		await mkdir(join(root, "tests", "fixtures"), { recursive: true });
+		await writeFile(join(root, "index.ts"), 'import "./src/config/model.js";');
+		await writeFile(join(root, "src", "config", "model.ts"), 'export const enabled = true;');
+		await writeFile(join(root, "tests", "fixtures", "invalid.ts"), 'import "node:fs";');
+		const files = await readProductionSources(root);
+		assert.deepEqual(files.map((file) => file.path), ["index.ts", join("src", "config", "model.ts")]);
+		assert.equal(dependencyPath(files, "index.ts", (specifier) => specifier === "node:fs"), undefined);
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
+test("unresolved local imports fail rather than silently bypass architecture checks", () => {
+	const files = [parseSource("entry.ts", 'import "./missing.js";')];
+	assert.throws(() => dependencyPath(files, "entry.ts", () => false), /Unresolved local source/);
+	assert.throws(() => runtimeCycles(files), /Unresolved local source/);
+});
 
 test("dependency rules follow imports, re-exports and literal dynamic imports", () => {
 	const files = [

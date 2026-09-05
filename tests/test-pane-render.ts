@@ -6,7 +6,7 @@ import { showGlancePane, type GlancePaneOptions } from "../src/settings/pane.js"
 import { PALETTES, fg } from "../src/theme/palette.js";
 import { getThemeCatalogForSlot } from "../src/settings/catalog.js";
 import { resolveBuiltInGlanceStyles } from "../src/theme/adapter.js";
-import { GLANCE_THEMES, themeLabel } from "../src/theme/themes.js";
+import { GLANCE_THEMES } from "../src/theme/themes.js";
 import { testState } from "./helpers.js";
 import type { GlanceConfig, GlanceState } from "../src/types.js";
 

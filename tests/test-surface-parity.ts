@@ -155,10 +155,6 @@ function previewFrame(state: GlanceState, config: GlanceConfig, width: number, c
 	return renderInputSurface(state, config, width, { contentLines, focused }).map(stripAnsi);
 }
 
-function previewTop(state: GlanceState, config: GlanceConfig, width: number): string {
-	return findTopBorder(previewFrame(state, config, width, ["Ask pi to improve the input surface..."], true));
-}
-
 function previewBottom(state: GlanceState, config: GlanceConfig, width: number): string {
 	return previewFrame(state, config, width, ["Ask pi to improve the input surface..."], true).at(-1) ?? "";
 }
