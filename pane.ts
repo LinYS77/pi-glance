@@ -236,12 +236,12 @@ class GlanceConfigPane implements Component {
 			contentLines: ["Ask pi to improve the input surface..."],
 			focused: true,
 			...(this.options.renderStyleContext ?? {}),
-			...(model.previewDensity === "auto" ? {} : { previewDensity: model.previewDensity }),
-			...(this.model.themeBrowser ? { ambientTone: this.model.themeBrowser.slot } : {}),
+			...(model.preview.density === "auto" ? {} : { previewDensity: model.preview.density }),
+			...(model.preview.ambientTone ? { ambientTone: model.preview.ambientTone } : {}),
 		};
 		const preview = this.previewState
-			? renderInputSurface(this.previewState, this.model.draft, layout.width, previewOptions)
-			: renderInputSurfacePreview(this.model.draft, layout.width, previewOptions);
+			? renderInputSurface(this.previewState, model.preview.config, layout.width, previewOptions)
+			: renderInputSurfacePreview(model.preview.config, layout.width, previewOptions);
 		for (const previewLine of preview) {
 			lines.push(previewLine);
 		}

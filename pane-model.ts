@@ -42,7 +42,7 @@ export interface ThemeBrowserState {
 	returnSettingIndex: number;
 }
 
-export interface PaneModelState {
+interface PaneSharedState {
 	initial: GlanceConfig;
 	draft: GlanceConfig;
 	focus: PaneFocus;
@@ -50,9 +50,14 @@ export interface PaneModelState {
 	settingIndex: number;
 	status: string;
 	previewDensity: PanePreviewDensity;
-	subview: PaneSubview;
-	themeBrowser?: ThemeBrowserState;
 }
+
+export type PaneModelState = PaneSharedState & (
+	| { subview: "settings"; themeBrowser?: never }
+	| { subview: "themeBrowser"; themeBrowser: ThemeBrowserState }
+);
+
+type ThemeBrowserModel = Extract<PaneModelState, { subview: "themeBrowser" }>;
 
 export interface PaneUpdateResult {
 	model: PaneModelState;
@@ -125,6 +130,11 @@ export interface GlancePaneViewModel {
 	selectedHint?: string;
 	previewDensity: PanePreviewDensity;
 	previewDensityLabel: string;
+	preview: {
+		config: GlanceConfig;
+		density: PanePreviewDensity;
+		ambientTone?: GlanceThemeSlot;
+	};
 	themeBrowser?: ThemeBrowserViewModel;
 	help: HelpShortcut[];
 }
@@ -157,7 +167,7 @@ function selectedCategory(model: PaneModelState): SettingsCategory | undefined {
 	return categoriesFor(model)[model.categoryIndex];
 }
 
-function withModel(model: PaneModelState, changes: Partial<PaneModelState>): PaneModelState {
+function withModel<M extends PaneModelState>(model: M, changes: Partial<PaneSharedState>): M {
 	return { ...model, ...changes };
 }
 
@@ -226,10 +236,10 @@ function helpShortcuts(focus: PaneFocus, width: number): HelpShortcut[] {
 	}
 }
 
-function closeThemeBrowser(model: PaneModelState, draft: GlanceConfig, status: string): PaneModelState {
+function closeThemeBrowser(model: ThemeBrowserModel, draft: GlanceConfig, status: string): PaneModelState {
 	const browser = model.themeBrowser;
-	if (!browser) return model;
-	return withModel(model, {
+	return {
+		...model,
 		draft,
 		focus: browser.returnFocus,
 		categoryIndex: browser.returnCategoryIndex,
@@ -237,22 +247,19 @@ function closeThemeBrowser(model: PaneModelState, draft: GlanceConfig, status: s
 		status,
 		subview: "settings",
 		themeBrowser: undefined,
-	});
+	};
 }
 
-function acceptThemeBrowser(model: PaneModelState): PaneModelState {
-	if (!model.themeBrowser) return model;
+function acceptThemeBrowser(model: ThemeBrowserModel): PaneModelState {
 	const slot = model.themeBrowser.slot;
 	return closeThemeBrowser(model, model.draft, `${themeSlotLabel(slot)} theme → ${getThemeLabel(configTheme(model.draft, slot))}. Press S to save.`);
 }
 
-function restoreThemeBrowser(model: PaneModelState): PaneModelState {
-	if (!model.themeBrowser) return model;
+function restoreThemeBrowser(model: ThemeBrowserModel): PaneModelState {
 	return closeThemeBrowser(model, withConfigTheme(model.draft, model.themeBrowser.slot, model.themeBrowser.restoreTheme), "Theme preview discarded.");
 }
 
-function moveThemeBrowserHighlight(model: PaneModelState, direction: PaneMoveDirection, amount = 1): PaneModelState {
-	if (!model.themeBrowser) return model;
+function moveThemeBrowserHighlight(model: ThemeBrowserModel, direction: PaneMoveDirection, amount = 1): PaneModelState {
 	if (direction === "left") return restoreThemeBrowser(model);
 	if (direction === "right") return model;
 
@@ -262,13 +269,14 @@ function moveThemeBrowserHighlight(model: PaneModelState, direction: PaneMoveDir
 	const step = direction === "up" ? -distance : distance;
 	const highlightedThemeIndex = (model.themeBrowser.highlightedThemeIndex + step % count + count) % count;
 	const theme = getThemeIdByIndex(highlightedThemeIndex, slot) ?? configTheme(model.draft, slot);
-	return withModel(model, {
+	return {
+		...model,
 		draft: withConfigTheme(model.draft, slot, theme),
 		themeBrowser: {
 			...model.themeBrowser,
 			highlightedThemeIndex,
 		},
-	});
+	};
 }
 
 function moveFocus(model: PaneModelState, direction: PaneMoveDirection, amount = 1): PaneModelState {
@@ -317,7 +325,8 @@ function selectedRow(model: PaneModelState): SettingsRow | undefined {
 function openThemeBrowser(model: PaneModelState, row: SettingsRow): PaneModelState {
 	const slot = row.themeSlot ?? "light";
 	const highlightedThemeIndex = getThemeIndex(configTheme(model.draft, slot), slot);
-	return withModel(model, {
+	return {
+		...model,
 		subview: "themeBrowser",
 		themeBrowser: {
 			slot,
@@ -327,7 +336,7 @@ function openThemeBrowser(model: PaneModelState, row: SettingsRow): PaneModelSta
 			returnCategoryIndex: model.categoryIndex,
 			returnSettingIndex: model.settingIndex,
 		},
-	});
+	};
 }
 
 function activateCurrent(model: PaneModelState): PaneModelState {
@@ -393,7 +402,7 @@ export function paneIsDirty(model: PaneModelState): boolean {
 }
 
 function createThemeBrowserViewModel(model: PaneModelState): ThemeBrowserViewModel | undefined {
-	if (model.subview !== "themeBrowser" || !model.themeBrowser) return undefined;
+	if (model.subview !== "themeBrowser") return undefined;
 	const slot = model.themeBrowser.slot;
 	const savedTheme = configTheme(model.initial, slot);
 	const previewTheme = configTheme(model.draft, slot);
@@ -456,6 +465,11 @@ export function createPaneViewModel(model: PaneModelState, width: number): Glanc
 		selectedHint: settings[model.settingIndex]?.hint,
 		previewDensity: model.previewDensity,
 		previewDensityLabel: previewDensityLabel(model.previewDensity),
+		preview: {
+			config: model.draft,
+			density: model.previewDensity,
+			ambientTone: model.subview === "themeBrowser" ? model.themeBrowser.slot : undefined,
+		},
 		themeBrowser: createThemeBrowserViewModel(model),
 		help: model.subview === "themeBrowser" ? themeBrowserHelpShortcuts() : helpShortcuts(model.focus, width),
 	};
@@ -477,7 +491,8 @@ export function updatePaneModel(model: PaneModelState, intent: PaneIntent): Pane
 			return result(model, false, { action: "save", config: cloneConfig(model.draft) });
 		case "resetDefaults":
 			return result(
-				withModel(model, {
+				{
+					...model,
 					draft: defaultConfig(),
 					focus: "categories",
 					categoryIndex: 0,
@@ -485,7 +500,7 @@ export function updatePaneModel(model: PaneModelState, intent: PaneIntent): Pane
 					status: "Defaults restored locally. Press S to save or Esc to discard.",
 					subview: "settings",
 					themeBrowser: undefined,
-				}),
+				},
 				true,
 			);
 		case "cyclePreviewDensity":

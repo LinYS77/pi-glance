@@ -156,7 +156,7 @@ assertHelp(
 	"wide category help should include movement, save/reset, segment reorder, and cancel",
 );
 
-let densityModel = model;
+let densityModel: PaneModelState = model;
 for (const [density, label] of [
 	["full", "Full"],
 	["compact", "Compact"],
