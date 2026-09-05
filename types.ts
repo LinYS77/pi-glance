@@ -190,7 +190,11 @@ interface SegmentDisplay {
 	minimal?: string;
 }
 
+export type SegmentTone = "normal" | "warning" | "error";
+
 export interface SegmentData {
+	/** Semantic emphasis, independent of the chosen display text. */
+	tone?: SegmentTone;
 	primary: string;
 	secondary?: string;
 	display?: SegmentDisplay;
@@ -207,10 +211,12 @@ export interface SegmentRenderContext {
 export interface SegmentRenderResult {
 	id: SegmentId;
 	text: string;
+	tone: SegmentTone;
 }
 
 export interface SegmentDefinition {
 	id: SegmentId;
 	label: string;
+	iconSpacing?: Partial<Record<IconMode, number>>;
 	collect(ctx: SegmentRenderContext): SegmentData | undefined;
 }

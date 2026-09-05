@@ -9,7 +9,7 @@ function displayForMode(data: SegmentData, widthMode: SegmentRenderContext["widt
 }
 
 function iconGapForSegment(ctx: SegmentRenderContext, segment: SegmentDefinition): string {
-	return segment.id === "throughput" && ctx.config.icons === "nerd" ? "  " : " ";
+	return " ".repeat(segment.iconSpacing?.[ctx.config.icons] ?? 1);
 }
 
 function renderCollectedSegment(ctx: SegmentRenderContext, segment: SegmentDefinition, data: SegmentData): SegmentRenderResult {
@@ -18,6 +18,7 @@ function renderCollectedSegment(ctx: SegmentRenderContext, segment: SegmentDefin
 	const prefix = icon ? `${icon}${iconGapForSegment(ctx, segment)}` : "";
 	return {
 		id: segment.id,
+		tone: data.tone ?? "normal",
 		text: `${prefix}${value}`.trim(),
 	};
 }

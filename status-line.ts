@@ -12,13 +12,8 @@ interface GlanceLineRenderOptions extends GlanceRenderStyleContext {
 }
 
 function applyInlineSegmentStyle(segment: SegmentRenderResult, styles: ResolvedGlanceStyles, text: string): string {
-	if (segment.id === "context") {
-		const match = text.match(/([0-9]+(?:\.[0-9]+)?)%/);
-		const percent = match ? Number.parseFloat(match[1]!) : NaN;
-		if (Number.isFinite(percent) && percent >= 90) return styles.error(text);
-		if (Number.isFinite(percent) && percent >= 75) return styles.warn(text);
-		return styles.segments.context.fg(text);
-	}
+	if (segment.tone === "error") return styles.error(text);
+	if (segment.tone === "warning") return styles.warn(text);
 	return styles.segments[segment.id].fg(text);
 }
 

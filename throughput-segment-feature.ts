@@ -58,6 +58,7 @@ function collectThroughput(ctx: SegmentRenderContext): SegmentData | undefined {
 export const throughputSegmentFeature = {
 	id: "throughput",
 	label: "Model speed",
+	iconSpacing: { nerd: 2 },
 	defaultEnabled: true,
 	settings: [
 		{

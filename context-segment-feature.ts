@@ -45,7 +45,9 @@ function collectContext(ctx: SegmentRenderContext): SegmentData | undefined {
 	const primary = ctx.config.context.display === "tokens" ? contextTokenRatio(ctx) : formatPercent(ctx.state.context.percent);
 	const secondary = ctx.config.context.display === "percent+tokens" ? contextTokenRatio(ctx) : undefined;
 	const compact = contextCompactValue(ctx);
+	const percent = ctx.state.context.percent;
 	return {
+		tone: percent !== null && percent >= 90 ? "error" : percent !== null && percent >= 75 ? "warning" : "normal",
 		primary,
 		secondary,
 		display: {
