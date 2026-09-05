@@ -3,6 +3,7 @@ import {
 	EDITOR_TOP_MARGIN_ROW_VALUES,
 	ICON_MODE_VALUES,
 	WORKSPACE_LABEL_MODE_VALUES,
+	nextOption,
 } from "./config-options.js";
 import { getSegmentSettings, segmentLabel, type SegmentSettingDescriptor } from "./segment-registry.js";
 import { GLANCE_THEMES, GLANCE_THEME_IDS, themeLabel as glanceThemeLabel } from "./themes.js";
@@ -44,16 +45,6 @@ export interface ThemeBrowserCatalogItem {
 }
 
 const MIN_CONTENT_ROWS = [2, 3, 4] as const;
-
-function nextIn<T extends string>(current: T, values: readonly T[]): T {
-	const index = values.indexOf(current);
-	return values[(index + 1) % values.length] ?? values[0]!;
-}
-
-function nextNumber<T extends number>(current: number, values: readonly T[]): T {
-	const index = values.indexOf(current as T);
-	return values[(index + 1) % values.length] ?? values[0]!;
-}
 
 function withConfig(config: GlanceConfig, mutate: (next: GlanceConfig) => void): GlanceConfig {
 	const next = cloneConfig(config);
@@ -173,7 +164,7 @@ export function getSettingsRows(config: GlanceConfig, categoryId: SettingsCatego
 					"Palette used for light or unknown Pi theme tone.",
 					(draft) =>
 						withConfig(draft, (next) => {
-							next.theme.light = nextIn(next.theme.light, themeIdsForSlot("light"));
+							next.theme.light = nextOption(next.theme.light, themeIdsForSlot("light"));
 						}),
 					{ opensSubview: "themeBrowser", themeSlot: "light" },
 				),
@@ -184,28 +175,28 @@ export function getSettingsRows(config: GlanceConfig, categoryId: SettingsCatego
 					"Palette used for dark Pi theme tone.",
 					(draft) =>
 						withConfig(draft, (next) => {
-							next.theme.dark = nextIn(next.theme.dark, themeIdsForSlot("dark"));
+							next.theme.dark = nextOption(next.theme.dark, themeIdsForSlot("dark"));
 						}),
 					{ opensSubview: "themeBrowser", themeSlot: "dark" },
 				),
 				cycleRow("general.icons", "Icons", config.icons, "Plain text or Nerd Font icons with fallback.", (draft) =>
 					withConfig(draft, (next) => {
-						next.icons = nextIn(next.icons, ICON_MODE_VALUES);
+						next.icons = nextOption(next.icons, ICON_MODE_VALUES);
 					}),
 				),
 				cycleRow("general.minInputRows", "Min input rows", `${config.editor.minContentRows}`, "Set the resting editor height.", (draft) =>
 					withConfig(draft, (next) => {
-						next.editor.minContentRows = nextNumber(next.editor.minContentRows, MIN_CONTENT_ROWS);
+						next.editor.minContentRows = nextOption(next.editor.minContentRows, MIN_CONTENT_ROWS);
 					}),
 				),
 				cycleRow("general.topMarginRows", "Top spacing", topMarginRowsLabel(config.editor.topMarginRows), "Set breathing room above the editor.", (draft) =>
 					withConfig(draft, (next) => {
-						next.editor.topMarginRows = nextNumber(next.editor.topMarginRows, EDITOR_TOP_MARGIN_ROW_VALUES);
+						next.editor.topMarginRows = nextOption(next.editor.topMarginRows, EDITOR_TOP_MARGIN_ROW_VALUES);
 					}),
 				),
 				cycleRow("general.workspaceLabel", "Workspace label", config.display.workspaceLabel, "Show name, smart ~/ path, or safe path.", (draft) =>
 					withConfig(draft, (next) => {
-						next.display.workspaceLabel = nextIn(next.display.workspaceLabel, WORKSPACE_LABEL_MODE_VALUES);
+						next.display.workspaceLabel = nextOption(next.display.workspaceLabel, WORKSPACE_LABEL_MODE_VALUES);
 					}),
 				),
 			];

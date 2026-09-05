@@ -1,4 +1,4 @@
-import { TOKENS_CACHE_MODE_VALUES, TOKENS_DISPLAY_MODE_VALUES } from "./config-options.js";
+import { TOKENS_CACHE_MODE_VALUES, TOKENS_DISPLAY_MODE_VALUES, nextOption } from "./config-options.js";
 import { formatTokens } from "./segment-display-primitives.js";
 import type { SegmentFeature } from "./segment-feature.js";
 import type { GlanceConfig, SegmentData, SegmentRenderContext, UsageTotals } from "./types.js";
@@ -15,11 +15,6 @@ const TOKENS_CACHE_LABELS: Record<GlanceConfig["tokens"]["cache"], string> = {
 };
 
 const TOKEN_CACHE_RATE_NERD_ICON = "󰑐"; // nf-md-refresh (U+F0450)
-
-function nextIn<T extends string | number>(current: T, values: readonly T[]): T {
-	const index = values.indexOf(current);
-	return values[(index + 1) % values.length] ?? values[0]!;
-}
 
 function tokensDisplayLabel(mode: GlanceConfig["tokens"]["display"]): string {
 	return TOKENS_DISPLAY_LABELS[mode];
@@ -93,7 +88,7 @@ export const tokensSegmentFeature = {
 			kind: "cycle",
 			value: (config: GlanceConfig) => tokensDisplayLabel(config.tokens.display),
 			mutate: (config: GlanceConfig) => {
-				config.tokens.display = nextIn(config.tokens.display, TOKENS_DISPLAY_MODE_VALUES);
+				config.tokens.display = nextOption(config.tokens.display, TOKENS_DISPLAY_MODE_VALUES);
 			},
 		},
 		{
@@ -103,7 +98,7 @@ export const tokensSegmentFeature = {
 			kind: "cycle",
 			value: (config: GlanceConfig) => tokensCacheLabel(config.tokens.cache),
 			mutate: (config: GlanceConfig) => {
-				config.tokens.cache = nextIn(config.tokens.cache, TOKENS_CACHE_MODE_VALUES);
+				config.tokens.cache = nextOption(config.tokens.cache, TOKENS_CACHE_MODE_VALUES);
 			},
 		},
 	],

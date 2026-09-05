@@ -1,18 +1,8 @@
-import { GIT_SHA_MODE_VALUES } from "./config-options.js";
+import { GIT_SHA_MODE_VALUES, nextOption } from "./config-options.js";
 import type { SegmentFeature } from "./segment-feature.js";
 import type { GlanceConfig, SegmentData, SegmentRenderContext } from "./types.js";
 
 const POLL_INTERVALS = [2000, 5000, 10000, 30000] as const;
-
-function nextIn<T extends string | number>(current: T, values: readonly T[]): T {
-	const index = values.indexOf(current);
-	return values[(index + 1) % values.length] ?? values[0]!;
-}
-
-function nextNumber<T extends number>(current: number, values: readonly T[]): T {
-	const index = values.indexOf(current as T);
-	return values[(index + 1) % values.length] ?? values[0]!;
-}
 
 function onOff(value: boolean): string {
 	return value ? "on" : "off";
@@ -100,7 +90,7 @@ export const gitSegmentFeature = {
 			kind: "cycle",
 			value: (config: GlanceConfig) => config.git.shaMode,
 			mutate: (config: GlanceConfig) => {
-				config.git.shaMode = nextIn(config.git.shaMode, GIT_SHA_MODE_VALUES);
+				config.git.shaMode = nextOption(config.git.shaMode, GIT_SHA_MODE_VALUES);
 			},
 		},
 		{
@@ -110,7 +100,7 @@ export const gitSegmentFeature = {
 			kind: "cycle",
 			value: (config: GlanceConfig) => formatPolling(config.git.pollIntervalMs),
 			mutate: (config: GlanceConfig) => {
-				config.git.pollIntervalMs = nextNumber(config.git.pollIntervalMs, POLL_INTERVALS);
+				config.git.pollIntervalMs = nextOption(config.git.pollIntervalMs, POLL_INTERVALS);
 			},
 		},
 	],

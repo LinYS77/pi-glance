@@ -1,11 +1,6 @@
-import { MODEL_THINKING_MODE_VALUES, PROVIDER_DISPLAY_MODE_VALUES } from "./config-options.js";
+import { MODEL_THINKING_MODE_VALUES, PROVIDER_DISPLAY_MODE_VALUES, nextOption } from "./config-options.js";
 import type { SegmentFeature } from "./segment-feature.js";
 import type { GlanceConfig, SegmentData, SegmentRenderContext } from "./types.js";
-
-function nextIn<T extends string | number>(current: T, values: readonly T[]): T {
-	const index = values.indexOf(current);
-	return values[index + 1] ?? values[0]!;
-}
 
 function shouldShowThinking(ctx: SegmentRenderContext, thinking: string): boolean {
 	if (ctx.config.model.showThinking === "never") return false;
@@ -43,7 +38,7 @@ export const modelSegmentFeature = {
 			kind: "cycle",
 			value: (config: GlanceConfig) => config.display.showProvider,
 			mutate: (config: GlanceConfig) => {
-				config.display.showProvider = nextIn(config.display.showProvider, PROVIDER_DISPLAY_MODE_VALUES);
+				config.display.showProvider = nextOption(config.display.showProvider, PROVIDER_DISPLAY_MODE_VALUES);
 			},
 		},
 		{
@@ -53,7 +48,7 @@ export const modelSegmentFeature = {
 			kind: "cycle",
 			value: (config: GlanceConfig) => config.model.showThinking,
 			mutate: (config: GlanceConfig) => {
-				config.model.showThinking = nextIn(config.model.showThinking, MODEL_THINKING_MODE_VALUES);
+				config.model.showThinking = nextOption(config.model.showThinking, MODEL_THINKING_MODE_VALUES);
 			},
 		},
 	],

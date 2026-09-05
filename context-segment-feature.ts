@@ -1,4 +1,4 @@
-import { CONTEXT_DISPLAY_MODE_VALUES, CONTEXT_UNKNOWN_MODE_VALUES } from "./config-options.js";
+import { CONTEXT_DISPLAY_MODE_VALUES, CONTEXT_UNKNOWN_MODE_VALUES, nextOption } from "./config-options.js";
 import { formatPercent, formatTokens } from "./segment-display-primitives.js";
 import type { SegmentFeature } from "./segment-feature.js";
 import type { GlanceConfig, SegmentData, SegmentRenderContext } from "./types.js";
@@ -8,11 +8,6 @@ const CONTEXT_DISPLAY_LABELS: Record<GlanceConfig["context"]["display"], string>
 	percent: "percent",
 	tokens: "tokens",
 };
-
-function nextIn<T extends string | number>(current: T, values: readonly T[]): T {
-	const index = values.indexOf(current);
-	return values[(index + 1) % values.length] ?? values[0]!;
-}
 
 function contextDisplayLabel(mode: GlanceConfig["context"]["display"]): string {
 	return CONTEXT_DISPLAY_LABELS[mode];
@@ -70,7 +65,7 @@ export const contextSegmentFeature = {
 			kind: "cycle",
 			value: (config: GlanceConfig) => contextDisplayLabel(config.context.display),
 			mutate: (config: GlanceConfig) => {
-				config.context.display = nextIn(config.context.display, CONTEXT_DISPLAY_MODE_VALUES);
+				config.context.display = nextOption(config.context.display, CONTEXT_DISPLAY_MODE_VALUES);
 			},
 		},
 		{
@@ -80,7 +75,7 @@ export const contextSegmentFeature = {
 			kind: "cycle",
 			value: (config: GlanceConfig) => config.context.unknown,
 			mutate: (config: GlanceConfig) => {
-				config.context.unknown = nextIn(config.context.unknown, CONTEXT_UNKNOWN_MODE_VALUES);
+				config.context.unknown = nextOption(config.context.unknown, CONTEXT_UNKNOWN_MODE_VALUES);
 			},
 		},
 	],

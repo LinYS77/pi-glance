@@ -24,3 +24,11 @@ export const TOKENS_DISPLAY_MODE_VALUES: ReadonlyArray<TokensDisplayMode> = ["in
 export const TOKENS_CACHE_MODE_VALUES: ReadonlyArray<TokensCacheMode> = ["rate", "read-write", "hide"];
 export const MODEL_THINKING_MODE_VALUES: ReadonlyArray<ModelThinkingMode> = ["auto", "always", "never"];
 export const THROUGHPUT_PRECISION_VALUES: ReadonlyArray<ThroughputPrecision> = THROUGHPUT_PRECISION_DESCRIPTOR.values;
+
+/** Cycle a curated option list; an unrecognized current value starts at the first option. */
+export function nextOption<T extends string | number>(current: string | number, values: readonly T[]): T {
+	const first = values[0];
+	if (first === undefined) throw new Error("Cannot cycle an empty option list");
+	const index = values.findIndex((value) => value === current);
+	return values[index + 1] ?? first;
+}
