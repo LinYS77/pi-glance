@@ -1,3 +1,4 @@
+import { test } from "node:test";
 import { strict as assert } from "node:assert";
 import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import { defaultConfig } from "../config.js";
@@ -8,20 +9,9 @@ import { GLANCE_THEME_IDS } from "../themes.js";
 import { testState } from "./helpers.js";
 import type { GlanceConfig, GlanceState, GlanceThemeName, SegmentId, WidthMode } from "../types.js";
 
-type RenderGlanceLineOptions = GlanceRenderStyleContext & { widthMode?: WidthMode };
-type RenderGlanceLine = (state: GlanceState, config: GlanceConfig, width: number, providerCount?: number, options?: RenderGlanceLineOptions) => string;
+import { renderGlanceLine } from "../status-line.js";
 
 const RESET = "\x1b[0m";
-
-interface StatusLineModule {
-	renderGlanceLine?: unknown;
-}
-
-const statusLinePath = "../status-line.js";
-const statusLine = (await import(statusLinePath)) as StatusLineModule;
-const renderGlanceLine = statusLine.renderGlanceLine as RenderGlanceLine;
-
-assert.equal(typeof statusLine.renderGlanceLine, "function", "status-line.ts should export renderGlanceLine(state, config, width, providerCount?)");
 
 function configWithSegments(ids: SegmentId[], mutate?: (config: GlanceConfig) => void): GlanceConfig {
 	const config = defaultConfig();
@@ -109,7 +99,7 @@ for (const themeId of GLANCE_THEME_IDS) {
 	}
 }
 
-{
+await test("status-line should emit ANSI 256-color output when Pi reports truecolor unavailable", async () => {
 	const config = configWithSegments(["model"], (next) => {
 		useTheme(next, "light");
 	});
@@ -121,9 +111,9 @@ for (const themeId of GLANCE_THEME_IDS) {
 	);
 	assert.equal(ansi256.includes("\x1b[38;2;"), false, "ANSI 256-color status output should not retain truecolor escapes");
 	assert.ok(ansi256.includes("\x1b[38;5;"), "ANSI 256-color status output should use indexed foreground escapes");
-}
+});
 
-{
+await test("status-line should honor an injected shared style context instead of resolving config.theme independently", async () => {
 	const config = configWithSegments(["model"], (next) => {
 		useTheme(next, "light");
 	});
@@ -133,9 +123,9 @@ for (const themeId of GLANCE_THEME_IDS) {
 		`${fg(PALETTES.dark.segments.model.fg, "ai GPT 5.5")}${RESET}`,
 		"status-line should honor an injected shared style context instead of resolving config.theme independently",
 	);
-}
+});
 
-{
+await test("status-line should resolve a theme pair through the light slot for ambient light", async () => {
 	const config = configWithSegments(["model"], (next) => {
 		next.theme = { light: "one-light", dark: "tokyo-night" };
 	});
@@ -177,7 +167,7 @@ for (const themeId of GLANCE_THEME_IDS) {
 		`${fg(PALETTES.dark.segments.model.fg, "ai GPT 5.5")}${RESET}`,
 		"status-line explicit styles override should win over ambient tone selection",
 	);
-}
+});
 
 for (const themeId of ["light", "dark", "high-contrast-light"] as const) {
 	const palette = PALETTES[themeId];
@@ -214,13 +204,13 @@ for (const themeId of ["light", "dark"] as const) {
 	);
 }
 
-{
+await test("disabled config should render an empty status line", async () => {
 	const config = defaultConfig();
 	config.enabled = false;
 	assert.equal(renderGlanceLine(testState(), config, 120), "", "disabled config should render an empty status line");
-}
+});
 
-{
+await test("auto provider should hide provider when only one provider is available", async () => {
 	assert.equal(plainLine(["model"], modelState(1), 120, 1), "ai GPT 5.5", "auto provider should hide provider when only one provider is available");
 	assert.equal(
 		plainLine(["model"], modelState(2), 120, 2),
@@ -260,9 +250,9 @@ for (const themeId of ["light", "dark"] as const) {
 		"ai GPT 5.5",
 		"forced minimal preview density should fold provider and thinking detail without changing physical width",
 	);
-}
+});
 
-{
+await test("status line should follow configured segment order: cost before model", async () => {
 	const state = richState();
 	const full = plainLine(["cost", "model", "context", "git"], state, 160, 2);
 	assert.ok(full.indexOf("$0.042") < full.indexOf("ai openai/GPT 5.5 high"), "status line should follow configured segment order: cost before model");
@@ -276,9 +266,9 @@ for (const themeId of ["light", "dark"] as const) {
 	assert.ok(narrow.includes("ctx 23%"), "adaptive fitting should keep earlier context segment at narrow width");
 	assert.equal(narrow.includes("$0.042"), false, "adaptive fitting should drop later cost segment before earlier segments");
 	assert.equal(narrow.includes("git main"), false, "adaptive fitting should drop latest git segment first at narrow width");
-}
+});
 
-{
+await test("context below warn threshold should use normal context color", async () => {
 	const palette = PALETTES.light;
 	const normal = rawLine(
 		["context"],
@@ -325,9 +315,9 @@ for (const themeId of ["light", "dark"] as const) {
 	);
 	assert.equal(lastColorBefore(joined, joined.indexOf(" · ")), fgSeq(palette.separator), "separator should have separator color, not context warning/error bleed");
 	assert.equal(lastColorBefore(joined, joined.indexOf("ai GPT 5.5")), fgSeq(palette.segments.model.fg), "model segment should reset to model color after warning/error context");
-}
+});
 
-{
+await test("compact status should prioritize the configured Tokens cache rate with the same icon-plus-percent grammar as Context", async () => {
 	const reportedState = testState({
 		git: { ...testState().git, repo: true, branch: "main", status: "clean", dirty: false },
 		usage: { input: 20_000_000, output: 1_100_000, cacheRead: 320_000_000, cacheWrite: 0, cost: 302 },
@@ -344,9 +334,9 @@ for (const themeId of ["light", "dark"] as const) {
 		" main · 󰈸 $302.0 ·  ?/s · 󰔟 53% · 󰄨 94% · 󰚩 GPT 5.6 sol max",
 		"compact status should prioritize the configured Tokens cache rate with the same icon-plus-percent grammar as Context",
 	);
-}
+});
 
-{
+await test("tokens full plain mode should include cache rate without the CH abbreviation", async () => {
 	const state = richState();
 	assert.equal(plainLine(["tokens"], state, 96), "tok ↑12k ↓3.1k 6%", "tokens full plain mode should include cache rate without the CH abbreviation");
 	assert.equal(plainLine(["tokens"], state, 95), "tok 6%", "tokens compact rate mode should prioritize cache rate over absolute token amounts");
@@ -469,7 +459,7 @@ for (const themeId of ["light", "dark"] as const) {
 	assert.equal(plainLine(["model"], modelState(1, "high"), 96), "ai GPT 5.5 high", "model thinking auto should show thinking at full width");
 	assert.equal(plainLine(["model"], modelState(1, "high"), 64), "ai GPT 5.5 high", "model thinking auto should show thinking at compact width");
 	assert.equal(plainLine(["model"], modelState(1, "high"), 63), "ai GPT 5.5", "model thinking auto should hide thinking at minimal width");
-}
+});
 
 for (const icons of ["plain", "nerd"] as const) {
 	for (const width of [48, 80, 120]) {

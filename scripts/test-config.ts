@@ -38,7 +38,7 @@ assert.equal(normalizeConfig({ version: 999 }).version, 8, "future raw version s
 assert.deepEqual(defaults.theme, { light: "light", dark: "dark" }, "default theme pair should use light for light tone and dark for dark tone");
 assert.equal(defaults.tokens.cache, "rate", "new configs should default Tokens cache details to aggregate hit rate");
 assert.equal(defaults.throughput.precision, THROUGHPUT_PRECISION_DESCRIPTOR.defaultValue, "default config throughput precision should come from descriptor default");
-assert.deepEqual((defaults as unknown as { throughput?: unknown }).throughput, { precision: THROUGHPUT_PRECISION_DESCRIPTOR.defaultValue }, "default config should include throughput.precision=auto");
+assert.deepEqual((defaults).throughput, { precision: THROUGHPUT_PRECISION_DESCRIPTOR.defaultValue }, "default config should include throughput.precision=auto");
 
 for (const theme of GLANCE_THEME_IDS) {
 	assert.deepEqual(normalizeConfig({ theme }).theme, { light: theme, dark: theme }, `${theme} string theme should migrate to a same/same pair`);
@@ -116,10 +116,10 @@ for (const showThinking of MODEL_THINKING_MODE_VALUES) {
 	assert.equal(normalizeConfig({ model: { showThinking } }).model.showThinking, showThinking, `${showThinking} should normalize as a valid model thinking mode`);
 }
 for (const precision of THROUGHPUT_PRECISION_VALUES) {
-	assert.equal((normalizeConfig({ throughput: { precision } }) as unknown as { throughput: { precision: unknown } }).throughput.precision, precision, `${precision} should normalize as a valid throughput precision`);
+	assert.equal((normalizeConfig({ throughput: { precision } })).throughput.precision, precision, `${precision} should normalize as a valid throughput precision`);
 }
 for (const precision of ["1", "0", "manual", 2, -1, Number.NaN, null, undefined, true, false, {}, []]) {
-	assert.equal((normalizeConfig({ throughput: { precision } }) as unknown as { throughput: { precision: unknown } }).throughput.precision, THROUGHPUT_PRECISION_DESCRIPTOR.defaultValue, `${String(precision)} should fall back to descriptor default precision`);
+	assert.equal((normalizeConfig({ throughput: { precision } })).throughput.precision, THROUGHPUT_PRECISION_DESCRIPTOR.defaultValue, `${String(precision)} should fall back to descriptor default precision`);
 }
 
 const userConfig = normalizeConfig({
@@ -242,7 +242,7 @@ assert.deepEqual(sparseConfig.git, defaults.git, "missing git group should fill 
 assert.deepEqual(sparseConfig.context, defaults.context, "missing context group should fill defaults");
 assert.deepEqual(sparseConfig.cost, defaults.cost, "missing cost group should fill defaults");
 assert.deepEqual(sparseConfig.tokens, defaults.tokens, "missing tokens group should fill defaults");
-assert.deepEqual((sparseConfig as unknown as { throughput: unknown }).throughput, { precision: "auto" }, "missing throughput group should fill defaults");
+assert.deepEqual((sparseConfig).throughput, { precision: "auto" }, "missing throughput group should fill defaults");
 
 assert.deepEqual(normalizeConfig({ theme: "catppuccin-macchiato" }).theme, { light: "catppuccin-macchiato", dark: "catppuccin-macchiato" }, "curated Catppuccin Macchiato theme should normalize as valid old string migration");
 assert.deepEqual(normalizeConfig({ theme: "high-contrast-light" }).theme, { light: "high-contrast-light", dark: "high-contrast-light" }, "new counterpart High Contrast Light theme should normalize as valid old string migration");
@@ -259,9 +259,9 @@ assert.equal(normalizeConfig({ context: { unknown: "dim" } }).context.unknown, d
 assert.equal(normalizeConfig({ tokens: { display: "input" } }).tokens.display, defaults.tokens.display, "unknown tokens display mode should fall back to default");
 assert.equal(normalizeConfig({ tokens: { cache: "read" } }).tokens.cache, defaults.tokens.cache, "unknown tokens cache mode should fall back to default");
 assert.equal(normalizeConfig({ model: { showThinking: "maybe" } }).model.showThinking, defaults.model.showThinking, "unknown thinking mode should fall back to default");
-assert.equal((normalizeConfig({ throughput: { precision: "1" } }) as unknown as { throughput: { precision: unknown } }).throughput.precision, "auto", "string throughput precision should fall back to default");
-assert.equal((normalizeConfig({ throughput: { precision: 2 } }) as unknown as { throughput: { precision: unknown } }).throughput.precision, "auto", "unknown throughput precision should fall back to default");
-assert.equal((normalizeConfig({ throughput: { precision: null } }) as unknown as { throughput: { precision: unknown } }).throughput.precision, "auto", "non-number/string throughput precision should fall back to default");
+assert.equal((normalizeConfig({ throughput: { precision: "1" } })).throughput.precision, "auto", "string throughput precision should fall back to default");
+assert.equal((normalizeConfig({ throughput: { precision: 2 } })).throughput.precision, "auto", "unknown throughput precision should fall back to default");
+assert.equal((normalizeConfig({ throughput: { precision: null } })).throughput.precision, "auto", "non-number/string throughput precision should fall back to default");
 
 assert.equal(normalizeConfig({ editor: { minContentRows: 1 } }).editor.minContentRows, 2, "minContentRows should clamp to minimum 2");
 assert.equal(normalizeConfig({ editor: { minContentRows: 2.9 } }).editor.minContentRows, 2, "minContentRows should floor fractional values");

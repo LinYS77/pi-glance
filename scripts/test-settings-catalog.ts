@@ -450,7 +450,7 @@ assert.equal(rowById(modelRows, "model.enabled").apply!(config).segments.find((s
 assert.equal(rowById(modelRows, "model.providerLabel").apply!(config).display.showProvider, "always", "provider label should cycle auto -> always");
 assert.equal(rowById(modelRows, "model.thinkingLabel").apply!(config).model.showThinking, "always", "thinking label should cycle auto -> always");
 assert.equal(rowById(throughputRows, "throughput.enabled").apply!(config).segments.find((segment) => segment.id === "throughput")?.enabled, false, "throughput enabled should toggle off");
-assert.equal((rowById(throughputRows, "throughput.precision").apply!(config) as unknown as { throughput: { precision: unknown } }).throughput.precision, 1, "throughput precision should cycle auto -> 1 digit");
+assert.equal((rowById(throughputRows, "throughput.precision").apply!(config)).throughput.precision, 1, "throughput precision should cycle auto -> 1 digit");
 assert.equal(rowById(throughputRows, "throughput.precision").kind, "cycle", "throughput precision should be an editable cycle row");
 
 assertCycleUsesValues(
@@ -570,9 +570,9 @@ assertCycleUsesValues(
 	"throughput.precision",
 	"Model speed Precision",
 	(base, precision) => withTestConfig(base, (next) => {
-		(next as unknown as { throughput: { precision: typeof precision } }).throughput.precision = precision;
+		(next).throughput.precision = precision;
 	}),
-	(after) => (after as unknown as { throughput: { precision: (typeof THROUGHPUT_PRECISION_VALUES)[number] } }).throughput.precision,
+	(after) => (after).throughput.precision,
 );
 
 for (const categoryId of ["general", "git", "context", "cost", "tokens", "model", "throughput"] as const) {

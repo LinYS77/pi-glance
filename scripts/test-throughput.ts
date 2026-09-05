@@ -1,34 +1,7 @@
 import { strict as assert } from "node:assert";
 
-interface ThroughputUsageExpectation {
-	input: number;
-	output: number;
-	cacheRead: number;
-	cacheWrite: number;
-	totalTokens: number;
-	assistantMessages: number;
-}
-
-interface ModelSpeedExpectation {
-	startedAtMs: number;
-	endedAtMs: number;
-	elapsedMs: number;
-	tokensPerSecond: number;
-	usage: ThroughputUsageExpectation;
-}
-
-type ModelStreamSample = {
-	startedAtMs: number;
-	endedAtMs: number;
-	elapsedMs: number;
-	message: unknown;
-};
-
-type CalculateModelSpeed = (input: { streams: readonly ModelStreamSample[] }) => unknown;
-
-const throughputModule = (await import("../throughput.js")) as Record<string, unknown>;
-assert.equal(typeof throughputModule.calculateModelSpeed, "function", "throughput.ts should export calculateModelSpeed");
-const calculateModelSpeed = throughputModule.calculateModelSpeed as CalculateModelSpeed;
+import { calculateModelSpeed, type ModelStreamSample } from "../throughput.js";
+import type { ModelSpeedMeasurement as ModelSpeedExpectation } from "../types.js";
 
 function assistant(usage?: Record<string, unknown>, stopReason = "stop"): unknown {
 	return { role: "assistant", stopReason, usage };

@@ -1,3 +1,5 @@
+import { configToText, defaultConfig } from "../config.js";
+import piGlance from "../index.js";
 import { strict as assert } from "node:assert";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -126,14 +128,10 @@ async function main(): Promise<void> {
 	try {
 		const configDir = join(agentDir, "pi-glance");
 		const configPath = join(configDir, "config.json");
-		const { configToText, defaultConfig } = await import("../config.js");
 		const initialConfig = defaultConfig();
 		await mkdir(configDir, { recursive: true });
 		await writeFile(configPath, configToText(initialConfig), "utf8");
 
-		const { default: piGlance } = (await import(`../index.js?command-save=${process.pid}-${Date.now()}`)) as {
-			default: (pi: ExtensionAPI) => void;
-		};
 
 		const pi = createPi();
 		piGlance(pi.api);

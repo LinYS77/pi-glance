@@ -1,5 +1,4 @@
 import { strict as assert } from "node:assert";
-import { readFile } from "node:fs/promises";
 import { visibleWidth, type Component, type TUI } from "@earendil-works/pi-tui";
 import type { KeybindingsManager, Theme } from "@earendil-works/pi-coding-agent";
 import { defaultConfig } from "../config.js";
@@ -111,10 +110,6 @@ function assertContains(text: string, fragment: string, message?: string): void 
 
 function assertNotContains(text: string, fragment: string, message?: string): void {
 	assert.ok(!text.includes(fragment), message ?? `expected render not to include ${JSON.stringify(fragment)}`);
-}
-
-function assertSourceExcludes(path: string, source: string, snippet: string, message?: string): void {
-	assert.equal(source.includes(snippet), false, message ?? `${path} should not contain source snippet ${snippet}`);
 }
 
 function lineContainingAll(text: string, fragments: string[]): string | undefined {
@@ -322,7 +317,7 @@ const previewTurn = {
 };
 const provisionalPreviewPane = await makePane(
 	modelSpeedPreviewConfig,
-	testState({ throughput: { lastRun: null, currentRun: previewTurn } as unknown as GlanceState["throughput"] }),
+	testState({ throughput: { lastRun: null, currentRun: previewTurn } }),
 );
 assertContains(
 	plainText(provisionalPreviewPane.component, 160),
@@ -331,7 +326,7 @@ assertContains(
 );
 const finalPreviewPane = await makePane(
 	modelSpeedPreviewConfig,
-	testState({ throughput: { lastRun: previewTurn, currentRun: null } as unknown as GlanceState["throughput"] }),
+	testState({ throughput: { lastRun: previewTurn, currentRun: null } }),
 );
 assertContains(
 	plainText(finalPreviewPane.component, 160),
@@ -812,15 +807,6 @@ const selText3 = plainText(selPane.component);
 assertContains(selText3, "› General", "inactive selected category still has '›' marker");
 assertContains(selText3, "› Enabled", "inactive selected setting row has '›' marker");
 assertContains(selText3, "[ on ]", "active focused value has lightweight wrapper '[ value ]'");
-
-const paneSource = await readFile("pane.ts", "utf8");
-assertSourceExcludes("pane.ts", paneSource, "general.theme", "pane.ts should not know the Theme row id for browser activation");
-assertSourceExcludes("pane.ts", paneSource, "openThemeBrowser", "pane.ts should not translate Enter into a Theme-browser intent");
-assertSourceExcludes("pane.ts", paneSource, "displayThemeGroup", "pane.ts should not own Theme browser group labels");
-assertSourceExcludes("pane.ts", paneSource, "displayThemeDetailText", "pane.ts should not own Theme browser detail text rewrites");
-assertSourceExcludes("pane.ts", paneSource, "displayThemeTags", "pane.ts should not own Theme browser detail tag rewrites");
-assertSourceExcludes("pane.ts", paneSource, "case \"core\":", "pane.ts should not own Theme browser group mapping switch logic");
-assertSourceExcludes("pane.ts", paneSource, "low-light", "pane.ts should not own Theme browser friendly detail rewrites");
 
 for (const width of [56, 64, 72, 96, 120, 160]) {
 	const widthPane = await makePane();

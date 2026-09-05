@@ -1,3 +1,4 @@
+import { test } from "node:test";
 import { strict as assert } from "node:assert";
 import { truncateToWidth, visibleWidth, type AutocompleteItem, type AutocompleteProvider, type EditorTheme, type TUI } from "@earendil-works/pi-tui";
 import type { KeybindingsManager } from "@earendil-works/pi-coding-agent";
@@ -305,7 +306,7 @@ for (const themeId of RENDERER_STYLE_PARITY_THEMES) {
 	}
 }
 
-{
+await test("renderer should share an injected style instance with status-line instead of letting status resolve config.theme independently", async () => {
 	const lightConfig = defaultConfig();
 	useTheme(lightConfig, "light");
 	lightConfig.editor.topMarginRows = 0;
@@ -322,9 +323,9 @@ for (const themeId of RENDERER_STYLE_PARITY_THEMES) {
 		renderLegacyStyledInputSurface(dirtyState(), darkConfig, 56, { contentLines, focused: true }),
 		"renderer should share an injected style instance with status-line instead of letting status resolve config.theme independently",
 	);
-}
+});
 
-{
+await test("renderer adapter should preserve legacy border styling bytes", async () => {
 	const config = defaultConfig();
 	useTheme(config, "dark");
 	config.editor.topMarginRows = 0;
@@ -341,9 +342,9 @@ for (const themeId of RENDERER_STYLE_PARITY_THEMES) {
 	assert.ok(rendered.includes(fg(palette.dim, "› ")), "renderer adapter should preserve legacy focused-prefix dim styling bytes");
 	assert.ok(rendered.includes(fg(palette.text, "short")), "renderer adapter should preserve legacy content text styling bytes");
 	assert.ok(rendered.includes(fg(palette.dim, "…")), "renderer adapter should preserve legacy dim ellipsis bytes");
-}
+});
 
-{
+await test("renderer should use the light slot palette for ambient light", async () => {
 	const config = defaultConfig();
 	config.theme = { light: "one-light", dark: "tokyo-night" };
 	config.editor.topMarginRows = 0;
@@ -358,7 +359,7 @@ for (const themeId of RENDERER_STYLE_PARITY_THEMES) {
 	assert.ok(darkRendered.includes(fg(PALETTES["tokyo-night"].border, "╭")), "renderer should use the dark slot palette for ambient dark");
 	assert.ok(unknownRendered.includes(fg(PALETTES["one-light"].border, "╭")), "renderer should use the light slot palette for ambient unknown");
 	assert.ok(defaultRendered.includes(fg(PALETTES["one-light"].border, "╭")), "renderer should default missing ambient tone to the light slot palette");
-}
+});
 
 const EDITOR_STYLE_PARITY_THEMES = ["light", "dark", "high-contrast-light"] as const satisfies readonly GlanceThemeName[];
 const editorStyleState = testState({
@@ -402,7 +403,7 @@ for (const themeId of EDITOR_STYLE_PARITY_THEMES) {
 	}
 }
 
-{
+await test("initial live status should use light model bytes", async () => {
 	const state = editorStyleState;
 	const config = defaultConfig();
 	useTheme(config, "light");
@@ -416,9 +417,9 @@ for (const themeId of EDITOR_STYLE_PARITY_THEMES) {
 	const darkTop = rawTopBorder(editor.render(120));
 	assert.ok(darkTop.includes(fg(PALETTES.dark.segments.model.fg, "ai GPT 5.5")), "live status cache should invalidate when style cacheKey changes on the same config object");
 	assert.equal(darkTop.includes(fg(PALETTES.light.segments.model.fg, "ai GPT 5.5")), false, "live status cache should not reuse stale light ANSI after theme/cacheKey change");
-}
+});
 
-{
+await test("live editor should evaluate getAmbientTone during render for light status bytes", async () => {
 	const state = editorStyleState;
 	const config = defaultConfig();
 	config.theme = { light: "light", dark: "dark" };
@@ -442,9 +443,9 @@ for (const themeId of EDITOR_STYLE_PARITY_THEMES) {
 	const darkTop = rawTopBorder(editor.render(120));
 	assert.ok(darkTop.includes(fg(PALETTES.dark.segments.model.fg, "ai GPT 5.5")), "live editor should re-evaluate getAmbientTone on later renders and invalidate cache by style cacheKey");
 	assert.equal(darkTop.includes(fg(PALETTES.light.segments.model.fg, "ai GPT 5.5")), false, "live editor should not reuse stale light status bytes after ambient tone changes");
-}
+});
 
-{
+await test("live editor should initially render truecolor status bytes", async () => {
 	const state = editorStyleState;
 	const config = defaultConfig();
 	useTheme(config, "light");
@@ -468,9 +469,9 @@ for (const themeId of EDITOR_STYLE_PARITY_THEMES) {
 	const ansi256Top = rawTopBorder(editor.render(120));
 	assert.ok(ansi256Top.includes(fg256(PALETTES.light.segments.model.fg, "ai GPT 5.5")), "live editor should re-evaluate truecolor capability and render ANSI 256-color status bytes");
 	assert.equal(ansi256Top.includes(fg(PALETTES.light.segments.model.fg, "ai GPT 5.5")), false, "live editor status cache should not retain truecolor bytes after capability downgrade");
-}
+});
 
-{
+await test("injected built-in editor style context should style live status through the generic context", async () => {
 	const state = editorStyleState;
 	const config = defaultConfig();
 	useTheme(config, "light");
@@ -496,7 +497,7 @@ for (const themeId of EDITOR_STYLE_PARITY_THEMES) {
 	const secondTop = rawTopBorder(editor.render(120));
 	assert.ok(secondTop.includes(fg(PALETTES.light.segments.model.fg, "ai GPT 5.5")), "live status cache should invalidate when an injected built-in style cacheKey changes");
 	assert.equal(secondTop.includes(fg(PALETTES.dark.segments.model.fg, "ai GPT 5.5")), false, "live status cache should not reuse stale injected built-in ANSI after context cacheKey change");
-}
+});
 
 interface Scenario {
 	name: string;
@@ -610,7 +611,7 @@ for (const width of Array.from({ length: 13 }, (_, index) => index + 4)) {
 	}
 }
 
-{
+await test("GlanceEditor should invoke the thinking-cycle callback exactly once for the matching key", async () => {
 	const config = defaultConfig();
 	config.editor.topMarginRows = 0;
 	config.editor.minContentRows = 2;
@@ -643,9 +644,9 @@ for (const width of Array.from({ length: 13 }, (_, index) => index + 4)) {
 	for (const line of frame) {
 		assert.ok(visibleWidth(line) <= 48, `unicode editor frame line should fit width 48: ${line}`);
 	}
-}
+});
 
-{
+await test("GlanceEditor should delegate app.interrupt to CustomEditor onEscape exactly once", async () => {
 	const config = defaultConfig();
 	const interruptEditor = makeLiveEditor(dirtyState(), config, true, 40, keybindingsWith({ "app.interrupt": ["\u001b"] }));
 	let interrupts = 0;
@@ -706,9 +707,9 @@ for (const width of Array.from({ length: 13 }, (_, index) => index + 4)) {
 		{ editorOptions: { autocompleteMaxVisible: 7 } },
 	);
 	assert.equal(optionsEditor.getAutocompleteMaxVisible(), 7, "GlanceEditor should forward Pi 0.84 EditorOptions without mixing them with Glance render options");
-}
+});
 
-{
+await test("autocomplete suggestions with CJK text should render below GlanceEditor frame", async () => {
 	const config = defaultConfig();
 	config.editor.topMarginRows = 0;
 	const editor = makeLiveEditor(dirtyState(), config, true, 40, keybindingsWith({ "tui.input.tab": ["\t"] }));
@@ -757,7 +758,7 @@ for (const width of Array.from({ length: 13 }, (_, index) => index + 4)) {
 			assert.ok(visibleWidth(line) <= width, `Pi 0.84 narrow autocomplete line should fit width ${width}: ${line}`);
 		}
 	}
-}
+});
 
 for (const topMarginRows of [0, 1, 2] as const) {
 	for (const minContentRows of [2, 3, 4]) {

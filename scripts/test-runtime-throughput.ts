@@ -1,3 +1,4 @@
+import { test } from "node:test";
 import { strict as assert } from "node:assert";
 import type { ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import { defaultConfig } from "../config.js";
@@ -9,25 +10,8 @@ interface TestContext {
 	getRenderRequests(): number;
 }
 
-interface RuntimeRecord {
-	events: Record<string, (event: unknown, ctx: ExtensionCommandContext) => unknown>;
-	commands: { openPane(args: string, ctx: ExtensionCommandContext): Promise<void> };
-}
-
-interface ModelSpeedExpectation {
-	startedAtMs: number;
-	endedAtMs: number;
-	elapsedMs: number;
-	tokensPerSecond: number;
-	usage: {
-		input: number;
-		output: number;
-		cacheRead: number;
-		cacheWrite: number;
-		totalTokens: number;
-		assistantMessages: number;
-	};
-}
+import type { RuntimeHarnessRuntime as RuntimeRecord } from "./runtime-harness.js";
+import type { ModelSpeedMeasurement as ModelSpeedExpectation, GlanceState } from "../types.js";
 
 function cloneConfig(config: GlanceConfig): GlanceConfig {
 	return JSON.parse(JSON.stringify(config)) as GlanceConfig;
@@ -98,8 +82,8 @@ function createContext(): TestContext {
 	return { ctx, getRenderRequests: () => renderRequests };
 }
 
-function createRuntime(nowValues: number[]): { runtime: RuntimeRecord; capturedStates: unknown[]; getRemainingNowReads(): number } {
-	const capturedStates: unknown[] = [];
+function createRuntime(nowValues: number[]): { runtime: RuntimeRecord; capturedStates: GlanceState[]; getRemainingNowReads(): number } {
+	const capturedStates: GlanceState[] = [];
 	const pendingNowValues = [...nowValues];
 	const config = defaultConfig();
 	const adapters = {
@@ -107,8 +91,9 @@ function createRuntime(nowValues: number[]): { runtime: RuntimeRecord; capturedS
 		loadConfigSync: () => ({ config: cloneConfig(config), status: "loaded" as const, writable: true }),
 		loadConfig: async () => ({ config: cloneConfig(config), status: "loaded" as const, writable: true }),
 		saveConfig: async (_config: GlanceConfig) => {},
-		showPane: async (_initial: GlanceConfig, _ctx: ExtensionCommandContext, previewState?: unknown) => {
-			capturedStates.push(JSON.parse(JSON.stringify(previewState)) as unknown);
+		showPane: async (_initial: GlanceConfig, _ctx: ExtensionCommandContext, previewState?: GlanceState) => {
+			assert.ok(previewState);
+			capturedStates.push(structuredClone(previewState));
 			return { action: "cancel" as const };
 		},
 		createGitRefresher: () => ({ schedule: (_immediate?: boolean) => {}, dispose: () => {} }),
@@ -118,18 +103,20 @@ function createRuntime(nowValues: number[]): { runtime: RuntimeRecord; capturedS
 		},
 	};
 	return {
-		runtime: createGlanceRuntime(adapters) as unknown as RuntimeRecord,
+		runtime: createGlanceRuntime(adapters) as RuntimeRecord,
 		capturedStates,
 		getRemainingNowReads: () => pendingNowValues.length,
 	};
 }
 
-async function captureState(runtime: RuntimeRecord, test: TestContext, capturedStates: unknown[]): Promise<any> {
+async function captureState(runtime: RuntimeRecord, test: TestContext, capturedStates: GlanceState[]): Promise<GlanceState> {
 	await runtime.commands.openPane("", test.ctx);
-	return capturedStates.at(-1) as any;
+	const state = capturedStates.at(-1);
+	assert.ok(state);
+	return state;
 }
 
-function slots(state: any): { lastRun: unknown; currentRun: unknown } {
+function slots(state: GlanceState): GlanceState["throughput"] {
 	return state.throughput;
 }
 
@@ -150,7 +137,7 @@ function expectedTurn(startedAtMs: number, endedAtMs: number, elapsedMs: number,
 	};
 }
 
-{
+await test("message_end should expose provisional model speed with the current-run slot", async () => {
 	const test = createContext();
 	const { runtime, capturedStates, getRemainingNowReads } = createRuntime([1_000, 2_250]);
 	runtime.events.sessionStart({ type: "session_start" }, test.ctx);
@@ -167,9 +154,9 @@ function expectedTurn(startedAtMs: number, endedAtMs: number, elapsedMs: number,
 	runtime.events.agentSettled({ type: "agent_settled" }, test.ctx);
 	assert.deepEqual(slots(await captureState(runtime, test, capturedStates)), { lastRun: expected, currentRun: null }, "agent_settled should be the only final model-speed boundary");
 	assert.equal(getRemainingNowReads(), 0, "settlement should not add task wall time to model speed");
-}
+});
 
-{
+await test("mixed text/tool-call output should use one aligned non-reasoning numerator and output-stream denominator", async () => {
 	const test = createContext();
 	const { runtime, capturedStates, getRemainingNowReads } = createRuntime([1_000, 1_500, 2_000, 2_500]);
 	runtime.events.sessionStart({ type: "session_start" }, test.ctx);
@@ -185,9 +172,9 @@ function expectedTurn(startedAtMs: number, endedAtMs: number, elapsedMs: number,
 	const expected = expectedTurn(1_000, 2_500, 1_500, 80, { totalTokens: 100 });
 	assert.deepEqual(slots(await captureState(runtime, test, capturedStates)), { lastRun: null, currentRun: expected }, "mixed text/tool-call output should use one aligned non-reasoning numerator and output-stream denominator");
 	assert.equal(getRemainingNowReads(), 0, "text/tool-call boundary events should not read timing clocks");
-}
+});
 
-{
+await test("runtime should exclude blocking extension UI prompt spans from provisional model speed", async () => {
 	const test = createContext();
 	const { runtime, capturedStates, getRemainingNowReads } = createRuntime([1_000, 2_000, 5_000, 6_000]);
 	runtime.events.sessionStart({ type: "session_start" }, test.ctx);
@@ -206,9 +193,9 @@ function expectedTurn(startedAtMs: number, endedAtMs: number, elapsedMs: number,
 	assert.deepEqual(slots(await captureState(runtime, test, capturedStates)), { lastRun: null, currentRun: expected }, "runtime should exclude blocking extension UI prompt spans from provisional model speed");
 	assert.equal(test.getRenderRequests() - renderBeforePrompt, 1, "UI prompt lifecycle should stay render-silent until model speed becomes visible at message_end");
 	assert.equal(getRemainingNowReads(), 0, "output updates delivered inside a UI prompt span should not consume the model-speed clock");
-}
+});
 
-{
+await test("failed attempt should not create trusted or provisional speed", async () => {
 	const test = createContext();
 	const { runtime, capturedStates } = createRuntime([1_000, 2_000, 3_000, 4_000]);
 	runtime.events.sessionStart({ type: "session_start" }, test.ctx);
@@ -228,9 +215,9 @@ function expectedTurn(startedAtMs: number, endedAtMs: number, elapsedMs: number,
 	const state = await captureState(runtime, test, capturedStates);
 	assert.deepEqual(slots(state), { lastRun: expectedTurn(3_000, 4_000, 1_000, 40, { input: 20 }), currentRun: null }, "successful retry should finalize only its measurable successful response");
 	assert.deepEqual(state.usage, { input: 30, output: 45, cacheRead: 0, cacheWrite: 0, cost: 3 }, "billed-session usage should still include both failed and successful provider calls");
-}
+});
 
-{
+await test("recoverable length response should be provisional until Pi announces compaction retry", async () => {
 	const test = createContext();
 	const { runtime, capturedStates } = createRuntime([1_000, 2_000, 3_000, 4_000]);
 	runtime.events.sessionStart({ type: "session_start" }, test.ctx);
@@ -262,9 +249,9 @@ function expectedTurn(startedAtMs: number, endedAtMs: number, elapsedMs: number,
 	const state = await captureState(runtime, test, capturedStates);
 	assert.deepEqual(slots(state), { lastRun: expectedTurn(3_000, 4_000, 1_000, 30, { input: 2 }), currentRun: null }, "settled speed should contain the replacement response, not the recoverable truncated response");
 	assert.deepEqual(state.usage, { input: 10, output: 138, cacheRead: 0, cacheWrite: 0, cost: 1.8 }, "complete session usage should retain truncated response, compaction, and replacement billing");
-}
+});
 
-{
+await test("first core run should remain provisional while a continuation can be queued", async () => {
 	const test = createContext();
 	const { runtime, capturedStates } = createRuntime([1_000, 2_000, 5_000, 6_000]);
 	runtime.events.sessionStart({ type: "session_start" }, test.ctx);
@@ -288,9 +275,9 @@ function expectedTurn(startedAtMs: number, endedAtMs: number, elapsedMs: number,
 		{ lastRun: expectedTurn(1_000, 6_000, 2_000, 80, { totalTokens: 80, assistantMessages: 2 }), currentRun: null },
 		"queued follow-up calls should aggregate under one settled-run measurement while excluding their gap",
 	);
-}
+});
 
-{
+await test("toolResult usage and turn lifecycle alone should not synthesize model speed without assistant stream timing", async () => {
 	const test = createContext();
 	const { runtime, capturedStates, getRemainingNowReads } = createRuntime([1_000]);
 	runtime.events.sessionStart({ type: "session_start" }, test.ctx);
@@ -306,6 +293,6 @@ function expectedTurn(startedAtMs: number, endedAtMs: number, elapsedMs: number,
 	assert.deepEqual(slots(state), { lastRun: null, currentRun: null }, "toolResult usage and turn lifecycle alone should not synthesize model speed without assistant stream timing");
 	assert.deepEqual(state.usage, { input: 4, output: 5, cacheRead: 6, cacheWrite: 7, cost: 0.8 }, "usage-bearing tools should still enter the complete billed-session ledger");
 	assert.equal(getRemainingNowReads(), 1, "non-assistant and lifecycle events should not consume model-stream clocks");
-}
+});
 
 console.log("✓ runtime model-speed checks passed");

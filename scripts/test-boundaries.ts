@@ -1,7 +1,8 @@
 import { strict as assert } from "node:assert";
-import { readFile, readdir } from "node:fs/promises";
-import { basename, join } from "node:path";
-import ts from "typescript";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+import { test } from "node:test";
+import { dependencyPath, importsFrom, IO_NETWORK_PROCESS_IMPORTS, readProductionSources, runtimeCycles, type SourceFile } from "./source-graph.js";
 
 const ROOT = process.cwd();
 const LEGACY_NAMESPACE = ["@mariozechner", ""].join("/");
@@ -9,30 +10,6 @@ const ALLOWED_PI_IMPORTS = new Set([
 	"@earendil-works/pi-ai",
 	"@earendil-works/pi-coding-agent",
 	"@earendil-works/pi-tui",
-]);
-const IO_NETWORK_PROCESS_IMPORTS = new Set([
-	"fs",
-	"fs/promises",
-	"node:fs",
-	"node:fs/promises",
-	"child_process",
-	"node:child_process",
-	"process",
-	"node:process",
-	"http",
-	"node:http",
-	"https",
-	"node:https",
-	"net",
-	"node:net",
-	"tls",
-	"node:tls",
-	"dgram",
-	"node:dgram",
-	"dns",
-	"node:dns",
-	"undici",
-	"ws",
 ]);
 const RENDER_MODULES = new Set([
 	"editor.ts",
@@ -46,49 +23,8 @@ const RENDER_MODULES = new Set([
 	"settings-catalog.ts",
 ]);
 
-interface SourceFile {
-	path: string;
-	text: string;
-	ast: ts.SourceFile;
-}
-
-interface ImportRecord {
-	specifier: string;
-	typeOnly: boolean;
-}
-
-async function readRootSourceFiles(): Promise<SourceFile[]> {
-	const entries = await readdir(ROOT, { withFileTypes: true });
-	return Promise.all(
-		entries
-			.filter((entry) => entry.isFile() && entry.name.endsWith(".ts"))
-			.map(async (entry) => {
-				const text = await readFile(join(ROOT, entry.name), "utf8");
-				return {
-					path: entry.name,
-					text,
-					ast: ts.createSourceFile(entry.name, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS),
-				};
-			}),
-	);
-}
-
 function fail(message: string): never {
 	assert.fail(message);
-}
-
-function importsFrom(file: SourceFile): ImportRecord[] {
-	const records: ImportRecord[] = [];
-	for (const statement of file.ast.statements) {
-		if (ts.isImportDeclaration(statement) && ts.isStringLiteral(statement.moduleSpecifier)) {
-			records.push({ specifier: statement.moduleSpecifier.text, typeOnly: statement.importClause?.isTypeOnly === true });
-			continue;
-		}
-		if (ts.isExportDeclaration(statement) && statement.moduleSpecifier && ts.isStringLiteral(statement.moduleSpecifier)) {
-			records.push({ specifier: statement.moduleSpecifier.text, typeOnly: statement.isTypeOnly });
-		}
-	}
-	return records;
 }
 
 function assertCompatibilityBaseline(packageText: string, lockText: string): void {
@@ -217,17 +153,36 @@ function assertNativeTestRunner(packageText: string): void {
 	assert.ok(testDev.includes(".tmp-git-dev/scripts/test-*.js"), "test:dev should discover compiled tests through one glob");
 }
 
-const files = await readRootSourceFiles();
+const files = await readProductionSources();
 const packageText = await readFile(join(ROOT, "package.json"), "utf8");
 const lockText = await readFile(join(ROOT, "package-lock.json"), "utf8");
 
 assert.equal(files.some((file) => file.text.includes(LEGACY_NAMESPACE)), false, "production source must not contain the legacy Pi namespace");
-assertCompatibilityBaseline(packageText, lockText);
-assertPublicPiImports(files);
-assertNoCorePatching(files);
-assertProductGuardrails(files);
-assertRenderPathsStayIoFree(files);
-assertHighValueImportRules(files);
-assertNativeTestRunner(packageText);
+test("Pi dependency baseline and peer packaging", () => assertCompatibilityBaseline(packageText, lockText));
+test("only public Pi imports", () => assertPublicPiImports(files));
+test("no Pi or global monkey-patching", () => assertNoCorePatching(files));
+test("input-surface product scope", () => assertProductGuardrails(files));
+test("render paths do not perform IO", () => assertRenderPathsStayIoFree(files));
+test("runtime and state responsibilities", () => assertHighValueImportRules(files));
+test("native test runner", () => assertNativeTestRunner(packageText));
 
 console.log("✓ public dependency and product guardrails passed");
+
+test("runtime local imports form an acyclic graph", () => {
+	assert.deepEqual(runtimeCycles(files), []);
+});
+
+test("pure models stay transitively free of IO and Pi runtime dependencies", () => {
+	for (const path of ["config.ts", "pane-model.ts", "settings-catalog.ts", "git-snapshot.ts", "throughput.ts", "throughput-run-tracker.ts"]) {
+		const forbidden = dependencyPath(files, path, (specifier) => IO_NETWORK_PROCESS_IMPORTS.has(specifier) || specifier.startsWith("@earendil-works/pi-"));
+		assert.equal(forbidden, undefined, forbidden?.join(" -> "));
+	}
+	assert.equal(dependencyPath(files, "state.ts", (specifier) => IO_NETWORK_PROCESS_IMPORTS.has(specifier)), undefined);
+});
+
+test("render imports stay transitively free of IO outside the Pi host", () => {
+	for (const file of files.filter((file) => RENDER_MODULES.has(file.path) || file.path.endsWith("-segment-feature.ts"))) {
+		const forbidden = dependencyPath(files, file.path, (specifier) => IO_NETWORK_PROCESS_IMPORTS.has(specifier));
+		assert.equal(forbidden, undefined, forbidden?.join(" -> "));
+	}
+});

@@ -2,8 +2,7 @@ import { strict as assert } from "node:assert";
 import { cloneConfig, configFromText, configToText, defaultConfig, normalizeConfig } from "../config.js";
 import { THROUGHPUT_PRECISION_DESCRIPTOR } from "../config-schema.js";
 
-type SegmentLike = { id: string; enabled: boolean };
-type ThroughputPrecision = "auto" | 0 | 1;
+import type { SegmentConfig as SegmentLike, ThroughputPrecision, GlanceConfig } from "../types.js";
 
 function segmentSummary(config: { segments: readonly SegmentLike[] }): SegmentLike[] {
 	return config.segments.map((segment) => ({ id: segment.id, enabled: segment.enabled }));
@@ -13,8 +12,8 @@ function assertSegments(actual: readonly SegmentLike[], expected: readonly Segme
 	assert.deepEqual(segmentSummary({ segments: actual }), expected, message);
 }
 
-function precisionOf(config: unknown): ThroughputPrecision | undefined {
-	return (config as { throughput?: { precision?: ThroughputPrecision } }).throughput?.precision;
+function precisionOf(config: GlanceConfig): ThroughputPrecision {
+	return config.throughput.precision;
 }
 
 const defaults = defaultConfig();
@@ -23,7 +22,7 @@ assert.equal(defaults.version, 8, "defaultConfig should use the current config s
 assert.equal(normalizeConfig({ version: 0 }).version, 8, "old raw versions should normalize to schema version 8");
 assert.equal(normalizeConfig({ version: 999 }).version, 8, "future raw versions should normalize to current schema version 8");
 assert.equal(defaults.throughput.precision, THROUGHPUT_PRECISION_DESCRIPTOR.defaultValue, "defaultConfig should use descriptor throughput precision default");
-assert.deepEqual((defaults as unknown as { throughput?: unknown }).throughput, { precision: THROUGHPUT_PRECISION_DESCRIPTOR.defaultValue }, "defaultConfig should include throughput.precision=auto");
+assert.deepEqual((defaults).throughput, { precision: THROUGHPUT_PRECISION_DESCRIPTOR.defaultValue }, "defaultConfig should include throughput.precision=auto");
 
 for (const precision of THROUGHPUT_PRECISION_DESCRIPTOR.values) {
 	assert.equal(precisionOf(normalizeConfig({ throughput: { precision } })), precision, `${precision} should normalize as a valid throughput precision`);
@@ -38,8 +37,8 @@ assert.equal(precisionOf(normalizeConfig({})), THROUGHPUT_PRECISION_DESCRIPTOR.d
 	const config = normalizeConfig({ throughput: { precision: 1 } });
 	const cloned = cloneConfig(config);
 	assert.deepEqual(cloned, config, "cloneConfig should preserve throughput config");
-	assert.notEqual((cloned as unknown as { throughput: unknown }).throughput, (config as unknown as { throughput: unknown }).throughput, "cloneConfig should deep-clone throughput config");
-	(cloned as unknown as { throughput: { precision: ThroughputPrecision } }).throughput.precision = 0;
+	assert.notEqual((cloned).throughput, (config).throughput, "cloneConfig should deep-clone throughput config");
+	(cloned).throughput.precision = 0;
 	assert.equal(precisionOf(config), 1, "mutating cloned throughput config should not mutate source config");
 }
 

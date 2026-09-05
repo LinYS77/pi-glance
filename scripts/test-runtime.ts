@@ -1,3 +1,4 @@
+import { test } from "node:test";
 import { strict as assert } from "node:assert";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { defaultConfig } from "../config.js";
@@ -202,7 +203,7 @@ for (const matrixCase of [
 	await assertRuntimeScanMatrixCase(matrixCase, { entries: "same", branch: "same" });
 }
 
-{
+await test("sessionStart should stay synchronous for enabled config", async () => {
 	const config = defaultConfig();
 	const git = createGitHarness();
 	const test = createContext();
@@ -213,9 +214,9 @@ for (const matrixCase of [
 	assert.deepEqual(test.surfaceCalls, ["setFooter:install", "setEditorComponent:install"], "enabled TUI sessionStart should synchronously install footer before editor");
 	assert.deepEqual(git.schedules, [true], "enabled sessionStart should schedule an immediate git refresh through the adapter");
 	assert.equal(harness.getLoadConfigCalls(), 0, "sessionStart should not call the async loadConfig adapter");
-}
+});
 
-{
+await test("stable no-tool lifecycle should render only the assistant usage change", async () => {
 	const git = createGitHarness();
 	const test = createContext();
 	const harness = createRuntimeHarness({ loadConfigSyncConfig: defaultConfig(), git });
@@ -233,9 +234,9 @@ for (const matrixCase of [
 
 	assert.equal(test.getRenderRequests() - renderBaseline, 1, "stable no-tool lifecycle should render only the assistant usage change");
 	assert.deepEqual(git.schedules.slice(scheduleBaseline), [], "stable no-tool lifecycle should not add Git refreshes after the initial session refresh");
-}
+});
 
-{
+await test("disabling only the Git segment should keep the rest of the input surface installed", async () => {
 	const config = defaultConfig();
 	config.segments = config.segments.map((segment) => segment.id === "git" ? { ...segment, enabled: false } : segment);
 	const git = createGitHarness();
@@ -248,9 +249,9 @@ for (const matrixCase of [
 	await harness.runtime.events.toolExecutionEnd({}, test.ctx as ExtensionContext);
 	await harness.runtime.events.modelSelect({}, test.ctx as ExtensionContext);
 	assert.equal(git.created, 0, "lifecycle events should not start Git polling while the Git segment remains disabled");
-}
+});
 
-{
+await test("sessionStart should stay synchronous for disabled config", async () => {
 	const existingEditorFactory = (() => ({ kind: "existing-editor" })) as TestContext["editorFactories"][number];
 	const git = createGitHarness();
 	const test = createContext({ initialEditorFactory: existingEditorFactory });
@@ -262,9 +263,9 @@ for (const matrixCase of [
 	assert.equal(test.getCurrentEditorFactory(), existingEditorFactory, "disabled TUI sessionStart should preserve an existing custom editor");
 	assert.equal(git.created, 0, "disabled sessionStart should not create a git refresher");
 	assert.equal(harness.getLoadConfigCalls(), 0, "disabled sessionStart should not call the async loadConfig adapter");
-}
+});
 
-{
+await test("enabled sessionStart should replace the previous editor with pi-glance's owned factory", async () => {
 	const previousEditorFactory = (() => ({ kind: "previous-editor" })) as TestContext["editorFactories"][number];
 	const git = createGitHarness();
 	const test = createContext({ initialEditorFactory: previousEditorFactory });
@@ -277,9 +278,9 @@ for (const matrixCase of [
 	await harness.runtime.events.sessionShutdown({}, test.ctx as ExtensionContext);
 	assert.equal(test.getCurrentEditorFactory(), previousEditorFactory, "sessionShutdown should restore the editor factory that pi-glance replaced");
 	assert.deepEqual(test.surfaceCalls.slice(-2), ["setEditorComponent:install", "setFooter:clear"], "restoring a previous custom editor should use its original factory before clearing pi-glance's footer");
-}
+});
 
-{
+await test("shutdown should leave a newer third-party editor factory untouched", async () => {
 	const previousEditorFactory = (() => ({ kind: "previous-editor" })) as TestContext["editorFactories"][number];
 	const externalEditorFactory = (() => ({ kind: "external-editor" })) as TestContext["editorFactories"][number];
 	const git = createGitHarness();
@@ -293,9 +294,9 @@ for (const matrixCase of [
 
 	assert.equal(test.getCurrentEditorFactory(), externalEditorFactory, "shutdown should leave a newer third-party editor factory untouched");
 	assert.deepEqual(test.surfaceCalls.slice(surfaceBaseline), ["setFooter:clear"], "shutdown should not call setEditorComponent after pi-glance loses editor ownership");
-}
+});
 
-{
+await test("a new session should replace pi-glance's own factory for the new context", async () => {
 	const previousEditorFactory = (() => ({ kind: "previous-editor" })) as TestContext["editorFactories"][number];
 	const git = createGitHarness();
 	const test = createContext({ initialEditorFactory: previousEditorFactory });
@@ -309,9 +310,9 @@ for (const matrixCase of [
 
 	await harness.runtime.events.sessionShutdown({}, test.ctx as ExtensionContext);
 	assert.equal(test.getCurrentEditorFactory(), previousEditorFactory, "reinstalling for a new session should retain the original predecessor for restoration");
-}
+});
 
-{
+await test("runtime editor should honor Pi's false truecolor capability with ANSI 256-color frame output", async () => {
 	const config = defaultConfig();
 	config.editor.topMarginRows = 0;
 	const git = createGitHarness();
@@ -334,9 +335,9 @@ for (const matrixCase of [
 	await harness.runtime.commands.openPane("", test.ctx);
 	const paneRenderStyleContext = assertAmbientPaneOptions(harness.showPaneOptions[0], "terminal capability override");
 	assert.equal(paneRenderStyleContext.getTrueColor?.(), false, "/glance preview should receive the same lazy false truecolor capability");
-}
+});
 
-{
+await test("TUI install should not eagerly read UI theme tone before render", async () => {
 	const currentPiTheme = fakePiTheme("light");
 	const git = createGitHarness();
 	const test = createContext({ uiTheme: currentPiTheme });
@@ -377,9 +378,9 @@ for (const matrixCase of [
 	}).join("\n");
 	assert.ok(panePreview.includes(fg(PALETTES.dark.border, "╭")), "/glance preview should receive lazy dark ambient tone through Glance palettes");
 	assert.equal(panePreview.includes("<<pi-theme:"), false, "/glance preview should not activate Pi token color styles");
-}
+});
 
-{
+await test("model_select counter baseline should include the session_start entries read", async () => {
 	const config = defaultConfig();
 	config.model.customNames["claude-opus-4"] = "Opus Custom";
 	const git = createGitHarness();
@@ -416,9 +417,9 @@ for (const matrixCase of [
 	assert.equal(previewState.context.percent, 24.6912, "preview state should refresh context percent after model_select");
 	assert.equal(test.getEntryReads(), entryBaseline, "opening /glance after model_select should not hide a session entries scan");
 	assert.equal(test.getBranchReads(), branchBaseline, "opening /glance after model_select should not hide a session branch scan");
-}
+});
 
-{
+await test("thinking_level_select counter baseline should include the session_start entries read", async () => {
 	const config = defaultConfig();
 	config.model.customNames["claude-opus-4"] = "Opus Custom";
 	let thinkingLevel = "off";
@@ -466,9 +467,9 @@ for (const matrixCase of [
 	assert.equal(previewState.context.percent, 0.077, "thinking_level_select should not overwrite context percent when the plan does not refresh context usage");
 	assert.equal(test.getEntryReads(), entryBaseline, "opening /glance after thinking_level_select should not hide a session entries scan");
 	assert.equal(test.getBranchReads(), branchBaseline, "opening /glance after thinking_level_select should not hide a session branch scan");
-}
+});
 
-{
+await test("enabled sessionStart should register one editor factory for editor thinking-cycle coverage", async () => {
 	const config = defaultConfig();
 	config.model.customNames["gpt-5"] = "GPT Custom";
 	let thinkingLevel = "off";
@@ -526,9 +527,9 @@ for (const matrixCase of [
 	assert.equal(previewState.context.percent, 0.321, "editor_thinking_cycle should not overwrite context percent when the plan does not refresh context usage");
 	assert.equal(test.getEntryReads(), entryBaseline, "opening /glance after editor_thinking_cycle should not hide a session entries scan");
 	assert.equal(test.getBranchReads(), branchBaseline, "opening /glance after editor_thinking_cycle should not hide a session branch scan");
-}
+});
 
-{
+await test("turn_start counter baseline should include the session_start entries read", async () => {
 	const git = createGitHarness();
 	const test = createContext({ cwd: "/repo" });
 	const harness = createRuntimeHarness({ loadConfigSyncConfig: defaultConfig(), showPaneResults: [{ action: "cancel" }], git });
@@ -569,9 +570,9 @@ for (const matrixCase of [
 	assert.equal(previewState.git.status, "dirty", "preview state should include git snapshot status after workspace refresh");
 	assert.equal(test.getEntryReads(), entryBaseline, "opening /glance after turn_start should not hide a session entries scan");
 	assert.equal(test.getBranchReads(), branchBaseline, "opening /glance after turn_start should not hide a session branch scan");
-}
+});
 
-{
+await test("tool_execution_end counter baseline should include the session_start entries read", async () => {
 	const git = createGitHarness();
 	const test = createContext({
 		cwd: "/repo",
@@ -618,9 +619,9 @@ for (const matrixCase of [
 	assert.equal(previewState.git.branch, "tool-preview-branch", "tool_execution_end should accept matching new-cwd git snapshots");
 	assert.equal(test.getEntryReads(), entryBaseline, "opening /glance after tool_execution_end should not hide a session entries scan");
 	assert.equal(test.getBranchReads(), branchBaseline, "opening /glance after tool_execution_end should not hide a session branch scan");
-}
+});
 
-{
+await test("session_tree should remain a structural full entries reconciliation", async () => {
 	const git = createGitHarness();
 	const test = createContext();
 	const harness = createRuntimeHarness({ loadConfigSyncConfig: defaultConfig(), git });
@@ -636,9 +637,9 @@ for (const matrixCase of [
 	await harness.runtime.events.sessionCompact({ compactionEntry: sessionCompaction() }, test.ctx as ExtensionContext);
 	assert.equal(test.getEntryReads(), entryAfterTree, "session_compact should apply its public event delta without rescanning entries");
 	assert.equal(test.getBranchReads(), branchAfterTree, "session_compact should use ctx.getContextUsage instead of directly scanning the branch");
-}
+});
 
-{
+await test("session_compact public-facts test baseline should include session_start entries read", async () => {
 	const git = createGitHarness();
 	const test = createContext({
 		model: { id: "initial-compact-model", provider: "openai", contextWindow: 100_000 },
@@ -729,9 +730,9 @@ for (const matrixCase of [
 	assert.deepEqual(previewState.usage, { input: 18, output: 20, cacheRead: 0, cacheWrite: 0, cost: 0.7 }, "session_tree should reconcile branch-summary billed usage from the session ledger");
 	assert.equal(previewState.context.tokens, 66_000, "session_tree should trust public context tokens regardless of raw branch shape");
 	assert.equal(previewState.context.percent, 33, "session_tree should trust public context percent regardless of raw branch shape");
-}
+});
 
-{
+await test("assistant message_end counter baseline should include the session_start entries read", async () => {
 	const git = createGitHarness();
 	const test = createContext();
 	const harness = createRuntimeHarness({
@@ -829,9 +830,9 @@ for (const matrixCase of [
 	assert.equal(previewState.workspace.path, "/workspace/agent-end-repo", "agent_end should still refresh workspace through the lifecycle path");
 	assert.equal(previewState.context.tokens, 33_000, "agent_end should still refresh context tokens through the lifecycle path");
 	assert.deepEqual(previewState.usage, { input: 20, output: 23, cacheRead: 26, cacheWrite: 29, cost: 2.6 }, "agent_end should preserve complete incremental session usage without full entries reconciliation");
-}
+});
 
-{
+await test("save failure should notify the exact error copy", async () => {
 	const initialConfig = defaultConfig();
 	const nextConfig = disabledConfig(initialConfig);
 	const git = createGitHarness();
@@ -862,9 +863,9 @@ for (const matrixCase of [
 	assert.deepEqual(harness.showPaneInitials[1], initialConfig, "after failed save, the active config should still be the previous config");
 	assert.equal(harness.showPanePreviewStates[1]?.git.branch, "after-enabled-save-failure", "later pane opens after failed save should receive the current preview state");
 	assertAmbientPaneOptions(harness.showPaneOptions[1], "after failed save");
-}
+});
 
-{
+await test("invalid config load should notify its diagnostic once at session start", async () => {
 	const diagnostic = "pi-glance configuration is invalid; using defaults without replacing the broken file";
 	const initialConfig = defaultConfig();
 	const nextConfig = disabledConfig(initialConfig);
@@ -890,9 +891,9 @@ for (const matrixCase of [
 	);
 	assert.equal(test.notifications.filter((notification) => notification.message === diagnostic).length, 1, "opening /glance should not repeat an already reported load diagnostic");
 	assert.deepEqual(test.surfaceCalls.slice(surfaceBaseline), [], "blocked save should preserve the active input surface");
-}
+});
 
-{
+await test("future config load should warn without treating known fields as a runtime failure", async () => {
 	const diagnostic = "pi-glance configuration version 9 is newer than supported version 8";
 	const initialConfig = defaultConfig();
 	const git = createGitHarness();
@@ -907,9 +908,9 @@ for (const matrixCase of [
 	assert.equal(hasNotification(test.notifications, diagnostic, "warning"), true, "future config load should warn without treating known fields as a runtime failure");
 	await harness.runtime.commands.openPane("", test.ctx);
 	assert.equal(test.notifications.filter((notification) => notification.message === diagnostic).length, 1, "future config warning should be emitted only once for the loaded config");
-}
+});
 
-{
+await test("saveConfig should receive the pane result config before active config is swapped", async () => {
 	const initialConfig = defaultConfig();
 	const nextConfig = nextEnabledConfig(initialConfig);
 	const git = createGitHarness();
@@ -951,9 +952,9 @@ for (const matrixCase of [
 	await harness.runtime.commands.openPane("", test.ctx);
 	assert.deepEqual(harness.showPaneInitials[1], nextConfig, "after successful save, later pane opens should receive the next active config");
 	assertAmbientPaneOptions(harness.showPaneOptions[1], "later pane open after save");
-}
+});
 
-{
+await test("Git on->off should not rebuild the enabled input surface", async () => {
 	const initialConfig = defaultConfig();
 	const nextConfig = cloneConfig(initialConfig);
 	nextConfig.segments = nextConfig.segments.map((segment) => segment.id === "git" ? { ...segment, enabled: false } : segment);
@@ -975,9 +976,9 @@ for (const matrixCase of [
 	assert.deepEqual(git.schedules.slice(scheduleBaseline), [], "Git on->off should not schedule another refresh after the new config becomes active");
 	await harness.runtime.events.toolExecutionEnd({}, test.ctx as ExtensionContext);
 	assert.equal(git.created, 1, "later lifecycle events should not recreate Git polling while the segment is disabled");
-}
+});
 
-{
+await test("Git-disabled session should begin without a refresher", async () => {
 	const initialConfig = defaultConfig();
 	initialConfig.segments = initialConfig.segments.map((segment) => segment.id === "git" ? { ...segment, enabled: false } : segment);
 	const nextConfig = cloneConfig(initialConfig);
@@ -999,9 +1000,9 @@ for (const matrixCase of [
 	assert.equal(git.created, 1, "Git off->on should create the background refresher after persistence succeeds");
 	assert.deepEqual(git.schedules, [true], "Git off->on should schedule one immediate refresh");
 	assert.deepEqual(git.options?.getConfig(), nextConfig.git, "new Git refresher should read the newly active Git settings");
-}
+});
 
-{
+await test("enabled->disabled active config should remain enabled while disk save is pending", async () => {
 	const initialConfig = defaultConfig();
 	const nextConfig = disabledConfig(initialConfig);
 	const git = createGitHarness();
@@ -1032,9 +1033,9 @@ for (const matrixCase of [
 	await harness.runtime.commands.openPane("", test.ctx);
 	assert.deepEqual(harness.showPaneInitials[1], nextConfig, "after enabled->disabled save, later pane opens should receive disabled active config");
 	assertAmbientPaneOptions(harness.showPaneOptions[1], "disabled active config pane open");
-}
+});
 
-{
+await test("disabled->enabled save should not create a git refresher before disk save succeeds", async () => {
 	const initialConfig = disabledConfig();
 	const nextConfig = nextEnabledConfig(initialConfig);
 	const git = createGitHarness();
@@ -1063,9 +1064,9 @@ for (const matrixCase of [
 	await harness.runtime.commands.openPane("", test.ctx);
 	assert.deepEqual(harness.showPaneInitials[1], nextConfig, "after disabled->enabled save, later pane opens should receive enabled active config");
 	assertAmbientPaneOptions(harness.showPaneOptions[1], "enabled active config pane open");
-}
+});
 
-{
+await test("disabled-start save failure should notify the exact error copy", async () => {
 	const initialConfig = disabledConfig();
 	const nextConfig = nextEnabledConfig(initialConfig);
 	const git = createGitHarness();
@@ -1089,7 +1090,7 @@ for (const matrixCase of [
 	await harness.runtime.commands.openPane("", test.ctx);
 	assert.deepEqual(harness.showPaneInitials[1], initialConfig, "after disabled-start failed save, later pane opens should receive the previous disabled config");
 	assertAmbientPaneOptions(harness.showPaneOptions[1], "failed disabled-start save pane open");
-}
+});
 
 for (const startingEnabled of [true, false] as const) {
 	const initialConfig = startingEnabled ? defaultConfig() : disabledConfig();
@@ -1119,7 +1120,7 @@ for (const startingEnabled of [true, false] as const) {
 	assert.deepEqual(harness.showPaneInitials[1], initialConfig, `${startingEnabled ? "enabled" : "disabled"} cancel should preserve active config for later pane opens`);
 }
 
-{
+await test("initial install should register one footer factory", async () => {
 	const initialConfig = defaultConfig();
 	const nextConfig = nextEnabledConfig(initialConfig);
 	const git = createGitHarness();
@@ -1142,9 +1143,9 @@ for (const startingEnabled of [true, false] as const) {
 	assert.equal(footerRenders, 2, "enabled save should render updated config through the existing footer owner");
 	git.options?.onSnapshot("/repo", gitSnapshot("after-enabled-save"));
 	assert.equal(footerRenders, 3, "existing footer owner should keep receiving renders after enabled save");
-}
+});
 
-{
+await test("initial install should register one editor factory", async () => {
 	const initialConfig = defaultConfig();
 	const nextConfig = nextEnabledConfig(initialConfig);
 	const git = createGitHarness();
@@ -1169,9 +1170,9 @@ for (const startingEnabled of [true, false] as const) {
 	assert.equal(editorRenders, 2, "enabled save should render updated config through the existing editor owner");
 	git.options?.onSnapshot("/repo", gitSnapshot("after-enabled-editor-save"));
 	assert.equal(editorRenders, 3, "existing editor owner should keep receiving renders after enabled save");
-}
+});
 
-{
+await test("latest initial editor factory should own render before disabled clear", async () => {
 	const initialConfig = defaultConfig();
 	const nextConfig = disabledConfig(initialConfig);
 	const git = createGitHarness();
@@ -1199,9 +1200,9 @@ for (const startingEnabled of [true, false] as const) {
 	git.options?.onSnapshot("/repo", gitSnapshot("after-disabled-clear"));
 	assert.equal(staleFooterRenders, 0, "stale footer factory should not revive render ownership after disabled clear");
 	assert.equal(staleEditorRenders, 1, "stale editor factory should not revive render ownership after disabled clear");
-}
+});
 
-{
+await test("latest initial editor factory should own render before shutdown", async () => {
 	const initialConfig = defaultConfig();
 	const git = createGitHarness();
 	const test = createContext({ invokeFooterFactory: false });
@@ -1222,9 +1223,9 @@ for (const startingEnabled of [true, false] as const) {
 	assert.equal(staleFooterRenders, 0, "stale footer factory should not revive render ownership after shutdown");
 	assert.equal(staleEditorRenders, 1, "stale editor factory should not revive render ownership after shutdown");
 	assert.equal(git.disposeCount, 1, "shutdown should still dispose the runtime git refresher");
-}
+});
 
-{
+await test("enabled sessionStart should create one git refresher through the adapter", async () => {
 	const initialConfig = defaultConfig();
 	const git = createGitHarness();
 	const test = createContext({ cwd: "/repo" });
@@ -1244,9 +1245,9 @@ for (const startingEnabled of [true, false] as const) {
 
 	await harness.runtime.events.sessionShutdown({}, test.ctx as ExtensionContext);
 	assert.equal(git.disposeCount, 1, "sessionShutdown should dispose the runtime git refresher");
-}
+});
 
-{
+await test("RPC mode should not install custom TUI footer/editor even though ctx.hasUI is true", async () => {
 	const git = createGitHarness();
 	const test = createContext({ mode: "rpc", hasUI: true });
 	const harness = createRuntimeHarness({ loadConfigSyncConfig: defaultConfig(), git });
@@ -1256,7 +1257,7 @@ for (const startingEnabled of [true, false] as const) {
 	assert.equal(git.created, 0, "RPC mode should not start the TUI-only git refresher/input surface");
 	await harness.runtime.events.sessionShutdown({}, test.ctx as ExtensionContext);
 	assert.deepEqual(test.surfaceCalls, [], "RPC shutdown should not clear custom TUI components that were never installed");
-}
+});
 
 {
 	for (const mode of ["json", "print"] as const) {
@@ -1297,7 +1298,7 @@ for (const mode of ["rpc", "json", "print"] as const) {
 	assert.equal(hasNotification(test.notifications, "pi-glance configuration pane requires TUI mode", "error"), true, `${mode} /glance should notify that the pane requires TUI mode`);
 }
 
-{
+await test("TUI /glance should still open after provider-count snapshot setup", async () => {
 	const test = createContext({ availableProviders: ["openai", "anthropic", "openai"] });
 	const harness = createRuntimeHarness({ loadConfigSyncConfig: defaultConfig(), showPaneResults: [{ action: "cancel" }] });
 
@@ -1306,6 +1307,6 @@ for (const mode of ["rpc", "json", "print"] as const) {
 	assert.equal(harness.showPaneInitials.length, 1, "TUI /glance should still open after provider-count snapshot setup");
 	assert.equal(harness.showPanePreviewStates[0]?.providers.availableCount, 2, "showPane preview state should include current unique provider count");
 	assertAmbientPaneOptions(harness.showPaneOptions[0], "provider-count snapshot pane open");
-}
+});
 
 console.log("✓ runtime seam checks passed");

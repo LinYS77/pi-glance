@@ -1,3 +1,4 @@
+import piGlance from "../index.js";
 import { strict as assert } from "node:assert";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -66,11 +67,6 @@ async function main(): Promise<void> {
 	process.env.PI_CODING_AGENT_DIR = agentDir;
 
 	try {
-		// CONFIG_PATH is computed when config.js is imported, so import pi-glance only
-		// after pointing pi at the isolated test agent directory.
-		const { default: piGlance } = (await import(`../index.js?session-start-order=${process.pid}-${Date.now()}`)) as {
-			default: (pi: ExtensionAPI) => void;
-		};
 
 		const enabledPi = createPi();
 		piGlance(enabledPi.api);

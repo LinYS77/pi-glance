@@ -21,12 +21,12 @@ function rowSummary(row: { id: string; label: string; value: string; hint: strin
 }
 
 function setPrecision(config: GlanceConfig, precision: ThroughputPrecision): GlanceConfig {
-	(config as unknown as { throughput: { precision: ThroughputPrecision } }).throughput = { precision };
+	(config).throughput = { precision };
 	return config;
 }
 
 function precisionOf(config: GlanceConfig): ThroughputPrecision | undefined {
-	return (config as unknown as { throughput?: { precision?: ThroughputPrecision } }).throughput?.precision;
+	return (config).throughput?.precision;
 }
 
 const config = defaultConfig();

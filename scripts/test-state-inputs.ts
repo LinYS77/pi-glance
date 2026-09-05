@@ -201,8 +201,8 @@ assert.deepEqual(
 	usageTotalsFromEntries([
 		message("assistant", { usage: { input: 1, output: 2, cacheRead: 3, cacheWrite: 4, cost: { total: 0.1 } } }),
 		message("toolResult", { usage: { input: 10, output: 20, cacheRead: 30, cacheWrite: 40, cost: { total: 1 } } }),
-		{ type: "compaction", usage: { input: 100, output: 200, cacheRead: 300, cacheWrite: 400, cost: { total: 10 } } } as unknown as StateSessionEntry,
-		{ type: "branch_summary", usage: { input: 1000, output: 2000, cacheRead: 3000, cacheWrite: 4000, cost: { total: 100 } } } as unknown as StateSessionEntry,
+		{ type: "compaction", usage: { input: 100, output: 200, cacheRead: 300, cacheWrite: 400, cost: { total: 10 } } },
+		{ type: "branch_summary", usage: { input: 1000, output: 2000, cacheRead: 3000, cacheWrite: 4000, cost: { total: 100 } } },
 	]),
 	{ input: 1111, output: 2222, cacheRead: 3333, cacheWrite: 4444, cost: 111.1 },
 	"usage totals should match Pi 0.84 billed-session semantics across assistant, toolResult, compaction, and branch-summary usage",

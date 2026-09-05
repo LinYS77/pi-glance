@@ -1,5 +1,4 @@
 import { strict as assert } from "node:assert";
-import { readFile } from "node:fs/promises";
 import { defaultConfig } from "../config.js";
 import { contextSegmentFeature } from "../context-segment-feature.js";
 import { ICONS, PALETTES } from "../palette.js";
@@ -42,91 +41,7 @@ const EXPECTED_SEGMENT_SETTING_IDS: Record<ExpectedSegmentId, string[]> = {
 	throughput: ["throughput.precision"],
 };
 
-const FORBIDDEN_REGISTRY_SOURCE_SNIPPETS = [
-	"./config-options.js",
-	"SEGMENT_SETTINGS",
-	"POLL_INTERVALS",
-	"CONTEXT_DISPLAY_LABELS",
-	"TOKENS_DISPLAY_LABELS",
-	"function nextIn",
-	"function nextNumber",
-	"function onOff",
-	"function formatPolling",
-	"function formatTokens",
-	"function formatCost",
-	"function formatPercent",
-	"function throughputPrecisionLabel",
-	"function fixedPrecision",
-	"function formatScaledThroughputRate",
-	"function formatThroughputRate",
-	"function validThroughput",
-	"function gitBranchLabel",
-	"function gitStatusMark",
-	"function gitDetailParts",
-	"function contextDisplayLabel",
-	"function tokensDisplayLabel",
-	"function contextTokenRatio",
-	"function contextIsUnknown",
-	"function contextDisplayValue",
-	"function contextCompactValue",
-	"function shouldShowTokenCache",
-	"function tokenCacheParts",
-	"function tokenPrimary",
-	"function shouldShowThinking",
-	"function collectGit",
-	"function collectCost",
-	"function collectThroughput",
-	"function collectContext",
-	"function collectTokens",
-	"function collectModel",
-] as const;
-
-type SegmentSettingDescriptor = {
-	id: string;
-	label: string;
-	hint: string;
-	kind: "toggle" | "cycle" | "info";
-};
-
-type SegmentCoverage = {
-	missing: SegmentId[];
-	extra: string[];
-};
-
-type SegmentRegistryEntry = SegmentDefinition & {
-	defaultEnabled: boolean;
-	settings?: readonly SegmentSettingDescriptor[];
-};
-
-interface SegmentRegistryModule {
-	SEGMENT_IDS: readonly SegmentId[];
-	SEGMENT_BY_ID: ReadonlyMap<SegmentId, SegmentRegistryEntry>;
-	defaultSegmentConfigs(): SegmentConfig[];
-	isSegmentId(value: unknown): value is SegmentId;
-	segmentLabel(id: SegmentId): string;
-	segmentRecordCoverage(record: Record<string, unknown>): SegmentCoverage;
-	getSegmentSettings(id: SegmentId): readonly SegmentSettingDescriptor[];
-}
-
-const segmentRegistryPath: string = "../segment-registry.js";
-const registry = (await import(segmentRegistryPath)) as SegmentRegistryModule;
-const registrySource = await readFile("segment-registry.ts", "utf8");
-
-for (const snippet of FORBIDDEN_REGISTRY_SOURCE_SNIPPETS) {
-	assert.equal(registrySource.includes(snippet), false, `segment-registry.ts should not contain segment-specific source snippet ${snippet}`);
-}
-
-for (const [name, exported] of Object.entries({
-	SEGMENT_IDS: registry.SEGMENT_IDS,
-	SEGMENT_BY_ID: registry.SEGMENT_BY_ID,
-	defaultSegmentConfigs: registry.defaultSegmentConfigs,
-	isSegmentId: registry.isSegmentId,
-	segmentLabel: registry.segmentLabel,
-	segmentRecordCoverage: registry.segmentRecordCoverage,
-	getSegmentSettings: registry.getSegmentSettings,
-})) {
-	assert.ok(exported, `${name} should be exported by segment-registry.ts`);
-}
+import * as registry from "../segment-registry.js";
 
 assert.deepEqual(registry.SEGMENT_IDS, EXPECTED_SEGMENT_IDS, "SEGMENT_IDS should preserve the canonical segment order");
 assert.equal(new Set(registry.SEGMENT_IDS).size, registry.SEGMENT_IDS.length, "SEGMENT_IDS should be unique");

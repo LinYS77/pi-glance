@@ -1,9 +1,6 @@
 import { strict as assert } from "node:assert";
-import { readFile, readdir } from "node:fs/promises";
-import { join } from "node:path";
-import ts from "typescript";
+import { importsFrom, IO_NETWORK_PROCESS_IMPORTS, readProductionSources } from "./source-graph.js";
 
-const ROOT = process.cwd();
 const MODEL_SPEED_FILES = [
 	"throughput.ts",
 	"throughput-run-tracker.ts",
@@ -13,44 +10,7 @@ const MODEL_SPEED_FILES = [
 ] as const;
 const PURE_MODEL_SPEED_FILES = new Set(["throughput.ts", "throughput-run-tracker.ts"]);
 const NO_NOTIFY_MODEL_SPEED_FILES = new Set(["throughput.ts", "throughput-run-tracker.ts", "throughput-segment-feature.ts"]);
-const IO_NETWORK_PROCESS_IMPORTS = new Set([
-	"fs",
-	"fs/promises",
-	"node:fs",
-	"node:fs/promises",
-	"child_process",
-	"node:child_process",
-	"http",
-	"node:http",
-	"https",
-	"node:https",
-	"net",
-	"node:net",
-	"tls",
-	"node:tls",
-	"undici",
-	"ws",
-]);
-
-interface SourceFile {
-	path: string;
-	text: string;
-	ast: ts.SourceFile;
-}
-
-async function readRootSources(): Promise<SourceFile[]> {
-	const entries = await readdir(ROOT, { withFileTypes: true });
-	return Promise.all(
-		entries
-			.filter((entry) => entry.isFile() && entry.name.endsWith(".ts"))
-			.map(async (entry) => {
-				const text = await readFile(join(ROOT, entry.name), "utf8");
-				return { path: entry.name, text, ast: ts.createSourceFile(entry.name, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS) };
-			}),
-	);
-}
-
-const files = await readRootSources();
+const files = await readProductionSources();
 const byPath = new Map(files.map((file) => [file.path, file]));
 const modelSpeedFiles = MODEL_SPEED_FILES.map((path) => {
 	const file = byPath.get(path);
@@ -71,9 +31,7 @@ for (const file of modelSpeedFiles) {
 
 	if (!PURE_MODEL_SPEED_FILES.has(file.path)) continue;
 	assert.equal(/\bDate\.now\s*\(/.test(file.text), false, `${file.path}: pure Model speed logic should use injected timestamps`);
-	for (const statement of file.ast.statements) {
-		if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) continue;
-		const specifier = statement.moduleSpecifier.text;
+	for (const { specifier } of importsFrom(file)) {
 		assert.equal(specifier.startsWith("@earendil-works/pi-"), false, `${file.path}: pure Model speed logic must not import Pi`);
 		assert.equal(IO_NETWORK_PROCESS_IMPORTS.has(specifier), false, `${file.path}: pure Model speed logic must not import ${specifier}`);
 	}
