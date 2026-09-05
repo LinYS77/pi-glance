@@ -120,6 +120,12 @@ const clampedFrame = assertFullscreenFrame(120, "model-clamped /thinking state")
 assert.ok(clampedFrame.includes("ai Mini"), "thinking-level clamp event should refresh the current model through Pi's cheap selector path");
 assert.equal(clampedFrame.includes("Mini max"), false, "thinking-level clamp to off should remove the prior max label");
 
+editor.setText("  !!pwd");
+const bashBorder = (text: string) => `\x1b[38;5;208m${text}\x1b[39m`;
+editor.borderColor = bashBorder;
+assertFullscreenFrame(120, "Pi Bash mode in fullscreen");
+assert.ok(fullscreen.render(120)[0]!.startsWith(bashBorder("╭")), "fullscreen Glance frame should retain the public Pi Bash border cue");
+
 editor.setText("x");
 for (const width of [4, 16, 56, 80]) {
 	assertFullscreenFrame(width, `Pi fullscreen width ${width}`);

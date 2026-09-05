@@ -76,7 +76,11 @@ export class GlanceEditor extends CustomEditor {
 	}
 
 	private currentStyles(config: GlanceConfig = this.getConfig()): ResolvedGlanceStyles {
-		return resolveGlanceRenderStyles(config.theme, this.glanceOptions?.renderStyleContext);
+		const styles = resolveGlanceRenderStyles(config.theme, this.glanceOptions?.renderStyleContext);
+		// Pi owns Bash detection/execution and updates this public callback on input
+		// and theme changes. Preserve its cue only on the live Bash frame; title and
+		// status remain Glance-owned, so their cache key must not change.
+		return this.getText().trimStart().startsWith("!") ? { ...styles, border: this.borderColor } : styles;
 	}
 
 	private renderStatus(width: number, styles: ResolvedGlanceStyles): string {
@@ -113,7 +117,11 @@ export class GlanceEditor extends CustomEditor {
 
 		const styles = this.currentStyles(config);
 		const metrics = measureInputSurfaceFrame(width);
-		const lines = super.render(metrics.editorContentWidth);
+		// Pi 0.84's word wrapper recurses on a wide grapheme in a one-column
+		// layout. Give the inherited editor room for a two-column glyph (plus
+		// its public padding/cursor reserve), then clip through our frame as usual.
+		const editorWidth = Math.max(metrics.editorContentWidth, 3, 2 + this.getPaddingX() * 2);
+		const lines = super.render(editorWidth);
 		if (lines.length < 2) return lines;
 
 		const isFocused = this.focused;
