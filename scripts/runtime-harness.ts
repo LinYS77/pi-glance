@@ -1,6 +1,7 @@
 import { strict as assert } from "node:assert";
 import type { ExtensionCommandContext, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { defaultConfig, type ConfigLoadResult } from "../config.js";
+import { defaultConfig } from "../config.js";
+import type { ConfigLoadResult } from "../config-store.js";
 import { createGlanceRuntime, type CreateGitRefresherOptions, type GlancePaneResult, type GlanceRuntimeAdapters, type RuntimeGitRefresher, type RuntimeShowPaneOptions } from "../runtime.js";
 import type { StateSessionEntry } from "../runtime-snapshot.js";
 import type { GitSnapshot, GlanceConfig, GlanceState } from "../types.js";

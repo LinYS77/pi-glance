@@ -1,5 +1,5 @@
 import { displayDirectory, shortenModel } from "./format.js";
-import { emptyGitSnapshot } from "./git.js";
+import { emptyGitSnapshot } from "./git-snapshot.js";
 import type { StateInputs } from "./runtime-snapshot.js";
 import type { GitSnapshot, GlanceConfig, GlanceState, ModelSpeedMeasurement, UsageTotals } from "./types.js";
 

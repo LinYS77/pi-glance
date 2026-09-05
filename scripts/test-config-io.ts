@@ -2,26 +2,10 @@ import { strict as assert } from "node:assert";
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { test } from "node:test";
+import { configFromText, configToText, defaultConfig, normalizeConfig } from "../config.js";
+import { createConfigStore, type ConfigLoadResult, type ConfigLoadStatus } from "../config-store.js";
 import type { GlanceConfig } from "../types.js";
-
-type ConfigLoadStatus = "loaded" | "missing" | "invalid" | "unreadable" | "future";
-
-interface ConfigLoadResult {
-	config: GlanceConfig;
-	status: ConfigLoadStatus;
-	writable: boolean;
-	diagnostic?: string;
-}
-
-interface ConfigModule {
-	defaultConfig(): GlanceConfig;
-	normalizeConfig(raw: unknown): GlanceConfig;
-	configFromText(text: string): GlanceConfig;
-	configToText(config: GlanceConfig): string;
-	loadConfigSync(): ConfigLoadResult;
-	loadConfig(): Promise<ConfigLoadResult>;
-	saveConfig(config: GlanceConfig): Promise<void>;
-}
 
 async function writeConfigText(configPath: string, text: string): Promise<void> {
 	await mkdir(dirname(configPath), { recursive: true });
@@ -40,18 +24,13 @@ function assertLoadResult(
 	else assert.equal(actual.diagnostic, undefined, `${message}: diagnostic should stay absent`);
 }
 
-async function main(): Promise<void> {
-	const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
+test("config store diagnoses reads and atomically saves through an explicit path", async () => {
 	const agentDir = await mkdtemp(join(tmpdir(), "pi-glance-config-io-"));
-	process.env.PI_CODING_AGENT_DIR = agentDir;
 
 	try {
-		// CONFIG_PATH is computed when config.js is imported, so set the isolated
-		// agent dir before this dynamic import to avoid touching real user config.
-		const configModule = (await import(`../config.js?config-io=${process.pid}-${Date.now()}`)) as ConfigModule;
-		const { configFromText, configToText, defaultConfig, loadConfig, loadConfigSync, normalizeConfig, saveConfig } = configModule;
 		const configDir = join(agentDir, "pi-glance");
 		const configPath = join(configDir, "config.json");
+		const { loadConfig, loadConfigSync, saveConfig } = createConfigStore(configPath);
 
 		assertLoadResult(loadConfigSync(), { config: defaultConfig(), status: "missing", writable: true }, "missing sync config should use writable defaults");
 		assertLoadResult(await loadConfig(), { config: defaultConfig(), status: "missing", writable: true }, "missing async config should use writable defaults");
@@ -141,11 +120,22 @@ async function main(): Promise<void> {
 		await assert.rejects(() => saveConfig(validConfig), "rename failure should reject atomic save");
 		assert.deepEqual(await readdir(configDir), ["config.json"], "failed atomic save should clean up its temporary file");
 	} finally {
-		if (previousAgentDir === undefined) delete process.env.PI_CODING_AGENT_DIR;
-		else process.env.PI_CODING_AGENT_DIR = previousAgentDir;
 		await rm(agentDir, { recursive: true, force: true });
 	}
-}
+});
 
-await main();
-console.log("✓ config IO diagnostics and atomic-save checks passed");
+test("two config stores in one process remain independent", async () => {
+	const dir = await mkdtemp(join(tmpdir(), "pi-glance-config-stores-"));
+	try {
+		const first = createConfigStore(join(dir, "first.json"));
+		const second = createConfigStore(join(dir, "second.json"));
+		await first.saveConfig(normalizeConfig({ enabled: false }));
+		assert.equal(first.loadConfigSync().config.enabled, false);
+		assert.equal(second.loadConfigSync().status, "missing");
+		await second.saveConfig(defaultConfig());
+		assert.equal((await first.loadConfig()).config.enabled, false);
+		assert.equal((await second.loadConfig()).config.enabled, true);
+	} finally {
+		await rm(dir, { recursive: true, force: true });
+	}
+});

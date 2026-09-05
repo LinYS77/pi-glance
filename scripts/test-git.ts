@@ -2,7 +2,8 @@ import { strict as assert } from "node:assert";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { collectGitSnapshot, nextGitRefreshDelay, parseGitStatus } from "../git.js";
+import { collectGitSnapshot, nextGitRefreshDelay } from "../git.js";
+import { parseGitStatus } from "../git-snapshot.js";
 import type { GitConfig, GitSnapshot } from "../types.js";
 
 type ExpectedSnapshot = Partial<Omit<GitSnapshot, "updatedAt">>;

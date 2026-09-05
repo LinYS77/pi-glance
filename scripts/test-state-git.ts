@@ -1,5 +1,5 @@
 import { strict as assert } from "node:assert";
-import { parseGitStatus } from "../git.js";
+import { parseGitStatus } from "../git-snapshot.js";
 import { refreshWorkspace, setGitSnapshot } from "../state.js";
 import { testState } from "./helpers.js";
 

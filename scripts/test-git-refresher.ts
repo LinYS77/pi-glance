@@ -1,5 +1,6 @@
 import { strict as assert } from "node:assert";
-import { emptyGitSnapshot, GitRefresher, parseGitStatus } from "../git.js";
+import { GitRefresher } from "../git.js";
+import { emptyGitSnapshot, parseGitStatus } from "../git-snapshot.js";
 import type { GitConfig, GitSnapshot } from "../types.js";
 
 const config: GitConfig = {

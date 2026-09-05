@@ -1,4 +1,4 @@
-import { emptyGitSnapshot } from "../git.js";
+import { emptyGitSnapshot } from "../git-snapshot.js";
 import type { GlanceState } from "../types.js";
 
 export function testState(overrides: Partial<GlanceState> = {}): GlanceState {

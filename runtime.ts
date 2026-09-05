@@ -19,7 +19,7 @@ import type {
 	UIPromptEndEvent,
 	UIPromptStartEvent,
 } from "@earendil-works/pi-coding-agent";
-import type { ConfigLoadResult } from "./config.js";
+import type { ConfigLoadResult } from "./config-store.js";
 import { GlanceEditor } from "./editor.js";
 import { GlanceFooter } from "./footer.js";
 import { GitRefresher } from "./git.js";

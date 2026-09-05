@@ -1,8 +1,3 @@
-import { randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
-import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
-import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import {
 	CONTEXT_DISPLAY_MODE_VALUES,
 	CONTEXT_UNKNOWN_MODE_VALUES,
@@ -33,18 +28,8 @@ import type {
 	WorkspaceLabelMode,
 } from "./types.js";
 
-const CONFIG_PATH = join(getAgentDir(), "pi-glance", "config.json");
 // CONFIG_VERSION is the on-disk config schema version, not the npm package version.
-const CONFIG_VERSION = 8 as const;
-
-export type ConfigLoadStatus = "loaded" | "missing" | "invalid" | "unreadable" | "future";
-
-export interface ConfigLoadResult {
-	config: GlanceConfig;
-	status: ConfigLoadStatus;
-	writable: boolean;
-	diagnostic?: string;
-}
+export const CONFIG_VERSION = 8 as const;
 
 const ICON_MODES = new Set<IconMode>(ICON_MODE_VALUES);
 const PROVIDER_MODES = new Set<GlanceConfig["display"]["showProvider"]>(PROVIDER_DISPLAY_MODE_VALUES);
@@ -273,88 +258,6 @@ export function configFromText(text: string): GlanceConfig {
 
 export function configToText(config: GlanceConfig): string {
 	return `${JSON.stringify(normalizeConfig(config), null, "\t")}\n`;
-}
-
-function errorMessage(error: unknown): string {
-	return error instanceof Error && error.message ? error.message : String(error);
-}
-
-function isMissingConfigError(error: unknown): boolean {
-	return typeof error === "object" && error !== null && "code" in error && (error as { code?: unknown }).code === "ENOENT";
-}
-
-function configLoadResultFromText(text: string): ConfigLoadResult {
-	let raw: unknown;
-	try {
-		raw = JSON.parse(text);
-	} catch (error) {
-		return {
-			config: defaultConfig(),
-			status: "invalid",
-			writable: false,
-			diagnostic: `pi-glance configuration is invalid; using defaults and blocking saves until ${CONFIG_PATH} is fixed or removed (${errorMessage(error)})`,
-		};
-	}
-
-	if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-		return {
-			config: defaultConfig(),
-			status: "invalid",
-			writable: false,
-			diagnostic: `pi-glance configuration must be a JSON object; using defaults and blocking saves until ${CONFIG_PATH} is fixed or removed`,
-		};
-	}
-
-	const rawVersion = (raw as Record<string, unknown>).version;
-	if (typeof rawVersion === "number" && Number.isFinite(rawVersion) && rawVersion > CONFIG_VERSION) {
-		return {
-			config: normalizeConfig(raw),
-			status: "future",
-			writable: false,
-			diagnostic: `pi-glance configuration version ${rawVersion} is newer than supported version ${CONFIG_VERSION}; using known fields without overwriting the file`,
-		};
-	}
-
-	return { config: normalizeConfig(raw), status: "loaded", writable: true };
-}
-
-function configReadErrorResult(error: unknown): ConfigLoadResult {
-	if (isMissingConfigError(error)) return { config: defaultConfig(), status: "missing", writable: true };
-	return {
-		config: defaultConfig(),
-		status: "unreadable",
-		writable: false,
-		diagnostic: `pi-glance configuration could not be read; using defaults and blocking saves until ${CONFIG_PATH} is accessible (${errorMessage(error)})`,
-	};
-}
-
-export function loadConfigSync(): ConfigLoadResult {
-	try {
-		return configLoadResultFromText(readFileSync(CONFIG_PATH, "utf8"));
-	} catch (error) {
-		return configReadErrorResult(error);
-	}
-}
-
-export async function loadConfig(): Promise<ConfigLoadResult> {
-	try {
-		return configLoadResultFromText(await readFile(CONFIG_PATH, "utf8"));
-	} catch (error) {
-		return configReadErrorResult(error);
-	}
-}
-
-export async function saveConfig(config: GlanceConfig): Promise<void> {
-	const configDir = dirname(CONFIG_PATH);
-	const temporaryPath = join(configDir, `.config.json.${process.pid}.${randomUUID()}.tmp`);
-	await mkdir(configDir, { recursive: true });
-	try {
-		await writeFile(temporaryPath, configToText(config), { encoding: "utf8", flag: "wx", mode: 0o600 });
-		await rename(temporaryPath, CONFIG_PATH);
-	} catch (error) {
-		await rm(temporaryPath, { force: true }).catch(() => undefined);
-		throw error;
-	}
 }
 
 export function moveSegment(config: GlanceConfig, id: SegmentId, direction: -1 | 1): GlanceConfig {

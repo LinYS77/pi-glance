@@ -190,10 +190,9 @@ function assertRenderPathsStayIoFree(files: SourceFile[]): void {
 function assertHighValueImportRules(files: SourceFile[]): void {
 	const index = files.find((file) => file.path === "index.ts");
 	assert.ok(index, "index.ts should exist");
-	const allowedIndexImports = new Set(["@earendil-works/pi-coding-agent", "./config.js", "./pane.js", "./runtime.js"]);
+	const allowedIndexImports = new Set(["node:path", "@earendil-works/pi-coding-agent", "./config-store.js", "./pane.js", "./runtime.js"]);
 	for (const record of importsFrom(index)) {
 		if (!allowedIndexImports.has(record.specifier)) fail(`index.ts: thin wiring must not import ${record.specifier}`);
-		if (record.specifier === "@earendil-works/pi-coding-agent" && !record.typeOnly) fail("index.ts: Pi import must stay type-only");
 	}
 
 	const state = files.find((file) => file.path === "state.ts");
