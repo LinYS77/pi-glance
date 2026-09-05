@@ -32,9 +32,6 @@ type ThemeIdCatalog<Catalog extends readonly ThemeCatalogMetadataShape[]> = {
 	readonly [Index in keyof Catalog]: Catalog[Index] extends ThemeCatalogMetadataShape ? Catalog[Index]["id"] : never;
 };
 
-export type GlanceThemeGroup = (typeof GLANCE_THEME_CATALOG)[number]["group"];
-export type GlanceThemeTone = (typeof GLANCE_THEME_CATALOG)[number]["tone"];
-
 // Curated user-facing theme order; this is intentionally not a theme marketplace.
 export const GLANCE_THEMES = GLANCE_THEME_CATALOG.map(({ id, label, group, groupLabel, tone, tags, detailTags, description, detailDescription }) => ({
 	id,
@@ -48,7 +45,6 @@ export const GLANCE_THEMES = GLANCE_THEME_CATALOG.map(({ id, label, group, group
 	detailDescription,
 })) as unknown as ThemeMetadataCatalog<typeof GLANCE_THEME_CATALOG>;
 
-export type GlanceThemeMetadata = (typeof GLANCE_THEMES)[number];
 export type GlanceThemeName = (typeof GLANCE_THEME_CATALOG)[number]["id"];
 
 export const GLANCE_THEME_IDS = GLANCE_THEME_CATALOG.map((theme) => theme.id) as unknown as ThemeIdCatalog<typeof GLANCE_THEME_CATALOG>;

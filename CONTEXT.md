@@ -50,7 +50,7 @@ Do not add or revive:
 - a standalone/fullscreen Glance TUI;
 - fixed editor regions implemented outside Pi public seams;
 - generic duck-typed wrapping of arbitrary third-party editors;
-- Pi theme enumeration, installation, switching, or token-color rendering;
+- Pi theme enumeration, installation, switching, or reimplementation of theme token-color rendering;
 - terminal background queries, ANSI inspection, or fuzzy light/dark inference;
 - render-time filesystem, process, or network work;
 - Model speed token estimation from text/content length;
@@ -86,7 +86,11 @@ src/surface/editor.ts
 
 src/theme/                            curated catalog, palette, style selection
 src/types.ts                          shared Glance fact/config/display vocabulary
-tests/                                behavior and architecture tests
+tests/{config,runtime,surface,settings,segments,theme}/
+                                      behavior tests grouped like production
+tests/architecture/                   recursive dependency and safety contracts
+tests/packaging/                      npm contents and public documentation
+tests/support/                        shared test adapters and fixture builders
 tests/fixtures/                       independent expected theme data
 scripts/                              developer utilities, not test implementations
 ```
@@ -177,6 +181,10 @@ otherwise                 -> theme.light
 
 Both slots can select any of the 22 Glance palettes. `/glance` does not manage Pi themes. Pi's public terminal capability is authoritative for color depth: truecolor output is used when available, otherwise palette RGB values are mapped to ANSI 256 colors without changing ambient-tone selection.
 
+The live editor preserves one Pi-owned semantic cue: input whose `trimStart()` begins with `!` (including `!!`) uses the inherited public `borderColor` callback for frame borders. Pi owns updating that callback and executing the command. Normal prompts, workspace title, and status remain Glance-styled; unfocused chrome keeps its existing dimming. The status cache key does not change for a border-only override.
+
+For extremely narrow frames, Glance gives the inherited editor enough layout room for a two-column grapheme and its padding/cursor reserve, then clips with the shared frame. This avoids Pi 0.84's one-column wide-grapheme recursion without changing editor text or patching its word wrapper.
+
 ## Config invariants
 
 - Current on-disk schema version: `8`.
@@ -200,13 +208,8 @@ Both slots can select any of the 22 Glance palettes. `/glance` does not manage P
 - A packaging test checks the exact npm dry-run file tree against all production source files. Directory changes must not leave missing imports in the published package.
 - npm publication is performed manually by the project owner; automation and agents must not run `npm publish` or request credentials.
 
-## Accepted decisions
+## Repository maintenance
 
-See [`docs/adr/`](docs/adr/):
+This file is the maintained source map and design reference. Local design notes and historical ADRs under `docs/` are intentionally ignored and are not required to build, test, install, or contribute.
 
-1. Input surface, not a second TUI.
-2. Public Pi interfaces and ownership-safe integration.
-3. Session facts, context truth, and settled Model speed.
-4. Glance-owned light/dark palette pairs.
-5. A deep refresh session with change-driven rendering.
-6. Localize configuration IO, display semantics, and state invariants.
+Published release notes live in GitHub Releases. Only the next release's checked-in notes are needed by the tag workflow; past tags retain their historical files. Generated test output and npm tarballs are not source artifacts.

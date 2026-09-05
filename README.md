@@ -65,6 +65,7 @@ Changes preview live. Press `D` to see how the status line folds at full, compac
 - Built and tested with Pi 0.84.4 on Node.js 22.19.0 or newer.
 - Glance follows Pi's terminal truecolor capability and falls back to ANSI 256 colors.
 - Context warning colors follow Pi's reported percentage, including in tokens-only display.
+- Bash input (`!` / `!!`) retains Pi's native border color; normal prompts keep the selected Glance palette.
 - Uses only public Pi extension APIs.
 
 ## Update
@@ -75,7 +76,7 @@ pi update npm:pi-glance
 
 ## Contributing
 
-Issues and pull requests are welcome. For implementation details, see [CONTEXT.md](./CONTEXT.md) and the [architecture decisions](./docs/adr/).
+Issues and pull requests are welcome. [CONTEXT.md](./CONTEXT.md) is the maintained source map and design reference.
 
 Implementation lives in `src/`; behavior tests and independent visual fixtures live in `tests/`. The Pi entry remains `index.ts`.
 

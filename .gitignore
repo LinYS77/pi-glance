@@ -21,11 +21,8 @@ coverage/
 tmp/
 .cache/
 
-# Local planning notes stay ignored; accepted ADRs are tracked.
-docs/*
-!docs/adr/
-docs/adr/*
-!docs/adr/*.md
+# Local design notes and historical ADRs are not repository deliverables.
+docs/
 
 # pi local config if this repo is opened as a project
 .pi/

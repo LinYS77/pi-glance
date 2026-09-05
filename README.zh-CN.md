@@ -65,6 +65,7 @@ pi install npm:pi-glance
 - 基于 Pi 0.84.4 开发并测试，需要 Node.js 22.19.0 或更高版本。
 - Glance 会遵循 Pi 的终端真彩色能力，并在不可用时回退到 ANSI 256 色。
 - Context 告警颜色依据 Pi 报告的百分比，包括仅显示 Tokens 的模式。
+- Bash 输入（`!` / `!!`）保留 Pi 原生边框颜色，普通提示词继续使用所选 Glance 配色。
 - 只使用 Pi 公开的扩展 API。
 
 ## 更新
@@ -75,7 +76,7 @@ pi update npm:pi-glance
 
 ## 参与贡献
 
-欢迎提交 Issue 和 Pull Request。实现细节请参阅 [CONTEXT.md](./CONTEXT.md) 与[架构决策记录](./docs/adr/)。
+欢迎提交 Issue 和 Pull Request。[CONTEXT.md](./CONTEXT.md) 是持续维护的代码导览与设计说明。
 
 生产代码位于 `src/`，行为测试与独立视觉快照位于 `tests/`。Pi 入口仍为 `index.ts`。
 
