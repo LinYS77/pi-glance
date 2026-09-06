@@ -32,6 +32,7 @@ interface DisplayConfig {
 }
 
 interface EditorConfig {
+	workingSweep: boolean;
 	minContentRows: number;
 	topMarginRows: EditorTopMarginRows;
 }
@@ -64,7 +65,7 @@ interface ThroughputConfig {
 }
 
 export interface GlanceConfig {
-	version: 8;
+	version: 9;
 	enabled: boolean;
 	theme: GlanceThemePair;
 	icons: IconMode;

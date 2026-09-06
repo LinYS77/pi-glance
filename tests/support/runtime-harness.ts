@@ -30,6 +30,7 @@ export interface RuntimeMutableContextUsage {
 }
 
 export interface RuntimeTestContextOptions {
+	idle?: boolean;
 	cwd?: string;
 	mode?: RuntimeMode;
 	hasUI?: boolean;
@@ -50,6 +51,8 @@ export interface RuntimeTestContext {
 	notifications: RuntimeNotification[];
 	footerFactories: RuntimeCapturedFooterFactory[];
 	editorFactories: RuntimeCapturedEditorFactory[];
+	workingVisibility: boolean[];
+	setIdle(idle: boolean): void;
 	getRenderRequests(): number;
 	getThemeReads(): number;
 	getEntryReads(): number;
@@ -74,6 +77,9 @@ export interface RuntimeGitHarness {
 }
 
 export interface RuntimeHarnessOptions {
+	workingSweepNowMs?: () => number;
+	nowMs?: () => number;
+	scheduleSweepFrame?: GlanceRuntimeAdapters["scheduleSweepFrame"];
 	loadConfigSyncConfig?: GlanceConfig;
 	loadConfigConfig?: GlanceConfig;
 	loadConfigSyncResult?: ConfigLoadResult;
@@ -225,6 +231,8 @@ export function createRuntimeTestContext(options: RuntimeTestContextOptions = {}
 	const notifications: RuntimeNotification[] = [];
 	const footerFactories: RuntimeCapturedFooterFactory[] = [];
 	const editorFactories: RuntimeCapturedEditorFactory[] = [];
+	const workingVisibility: boolean[] = [];
+	let idle = options.idle ?? true;
 	let renderRequests = 0;
 	let themeReads = 0;
 	let entryReads = 0;
@@ -247,6 +255,7 @@ export function createRuntimeTestContext(options: RuntimeTestContextOptions = {}
 	const ctx = {
 		mode,
 		hasUI,
+		isIdle: () => idle,
 		get cwd() {
 			return cwd;
 		},
@@ -271,6 +280,7 @@ export function createRuntimeTestContext(options: RuntimeTestContextOptions = {}
 			},
 		},
 		ui: {
+			setWorkingVisible: (visible: boolean) => { workingVisibility.push(visible); },
 			get theme() {
 				themeReads++;
 				return uiTheme;
@@ -299,6 +309,8 @@ export function createRuntimeTestContext(options: RuntimeTestContextOptions = {}
 		notifications,
 		footerFactories,
 		editorFactories,
+		workingVisibility,
+		setIdle: (value) => { idle = value; },
 		getRenderRequests: () => renderRequests,
 		getThemeReads: () => themeReads,
 		getEntryReads: () => entryReads,
@@ -366,6 +378,9 @@ export function createRuntimeHarness(options: RuntimeHarnessOptions = {}): Runti
 	const loadConfigResult = options.loadConfigResult ?? loadedConfigResult(loadConfigConfig);
 	const showPaneResults = [...(options.showPaneResults ?? [])];
 	const adapters: GlanceRuntimeAdapters = {
+		workingSweepNowMs: options.workingSweepNowMs,
+		nowMs: options.nowMs,
+		scheduleSweepFrame: options.scheduleSweepFrame ?? (() => () => {}),
 		getThinkingLevel: options.getThinkingLevel ?? (() => "off"),
 		getTrueColor: options.getTrueColor ?? (() => true),
 		loadConfigSync: () => loadConfigSyncResult,

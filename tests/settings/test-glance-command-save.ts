@@ -68,6 +68,7 @@ function createContext(customResults: PaneResult[]): TestContext {
 	const ctx = {
 		mode: "tui",
 		hasUI: true,
+		isIdle: () => true,
 		cwd: process.cwd(),
 		model: { id: "test-model", provider: "test-provider", contextWindow: 200_000 },
 		modelRegistry: {
@@ -79,6 +80,7 @@ function createContext(customResults: PaneResult[]): TestContext {
 			getBranch: () => [],
 		},
 		ui: {
+			setWorkingVisible: (_visible: boolean) => {},
 			notify: (message: string, type?: "info" | "warning" | "error") => {
 				notifications.push({ message, type });
 			},

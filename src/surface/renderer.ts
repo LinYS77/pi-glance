@@ -4,6 +4,7 @@ import { resolveGlanceRenderStyles, type GlanceRenderStyleContext } from "../the
 import type { GlanceConfig, GlanceState, WidthMode } from "../types.js";
 
 interface InputSurfaceRenderOptions extends GlanceRenderStyleContext {
+	workingElapsedMs?: number;
 	contentLines?: string[];
 	focused?: boolean;
 	showTitle?: boolean;
@@ -65,6 +66,7 @@ export function renderInputSurface(
 			showPromptIndicator: Boolean(options.focused),
 		},
 		chrome: {
+			workingElapsedMs: options.workingElapsedMs,
 			showTitle: options.showTitle,
 		},
 		status,

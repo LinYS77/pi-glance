@@ -38,6 +38,7 @@ function createContext(calls: string[], mode: "tui" | "rpc" | "json" | "print" =
 	let currentEditorFactory: unknown;
 	return {
 		mode,
+		isIdle: () => true,
 		hasUI: mode === "tui" || mode === "rpc",
 		cwd: process.cwd(),
 		model: { id: "test-model", provider: "test-provider", contextWindow: 200_000 },
@@ -50,6 +51,7 @@ function createContext(calls: string[], mode: "tui" | "rpc" | "json" | "print" =
 			getBranch: () => [],
 		},
 		ui: {
+			setWorkingVisible: (_visible: boolean) => {},
 			setFooter: (factory: unknown) => calls.push(factory ? "setFooter:install" : "setFooter:clear"),
 			setEditorComponent: (factory: unknown) => {
 				currentEditorFactory = factory;

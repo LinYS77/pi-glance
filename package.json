@@ -1,6 +1,6 @@
 {
   "name": "pi-glance",
-  "version": "0.6.6",
+  "version": "0.6.7",
   "description": "A rounded editor and adaptive status line for Pi.",
   "keywords": [
     "pi-package",
@@ -76,6 +76,7 @@
     "test:readme": "npm run build:dev --silent && node .tmp-test/tests/packaging/test-readme.js",
     "test:pane:model": "npm run build:dev --silent && node .tmp-test/tests/settings/test-pane-model.js",
     "test:pane": "npm run build:dev --silent && node .tmp-test/tests/settings/test-pane-model.js && node .tmp-test/tests/settings/test-pane-render.js",
+    "preview:working": "npm run build:dev --silent && node .tmp-test/scripts/preview-working.js",
     "debug:git": "npm run build:dev --silent && node .tmp-test/scripts/debug-git.js",
     "pack:dry": "npm pack --dry-run"
   }

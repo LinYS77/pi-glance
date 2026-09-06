@@ -235,6 +235,13 @@ const generalRows = assertRows(config, "general", [
 		hint: "Show name, smart ~/ path, or safe path.",
 		kind: "cycle",
 	},
+	{
+		id: "general.workingSweep",
+		label: "Working animation",
+		value: "on",
+		hint: "Animate the path while Pi works. Off uses Pi's Working indicator.",
+		kind: "toggle",
+	},
 ]);
 
 const gitRows = assertRows(config, "git", [

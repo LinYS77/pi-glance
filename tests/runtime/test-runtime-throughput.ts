@@ -59,6 +59,7 @@ function createContext(): TestContext {
 	const ctx = {
 		mode: "tui",
 		hasUI: true,
+		isIdle: () => true,
 		cwd: "/repo",
 		model: { id: "test-model", provider: "test-provider", contextWindow: 200_000 },
 		modelRegistry: { getAvailable: () => [{ provider: "test-provider", id: "test-model" }] },
@@ -68,6 +69,7 @@ function createContext(): TestContext {
 			getBranch: () => [],
 		},
 		ui: {
+			setWorkingVisible: (_visible: boolean) => {},
 			setFooter: (factory: unknown) => {
 				if (factory) (factory as (tui: unknown, theme: unknown) => unknown)(fakeTui, fakeTheme);
 			},
@@ -97,6 +99,7 @@ function createRuntime(nowValues: number[]): { runtime: RuntimeRecord; capturedS
 			return { action: "cancel" as const };
 		},
 		createGitRefresher: () => ({ schedule: (_immediate?: boolean) => {}, dispose: () => {} }),
+		scheduleSweepFrame: () => () => {},
 		nowMs: () => {
 			assert.ok(pendingNowValues.length > 0, "runtime should read injected time only for text/tool-call output deltas");
 			return pendingNowValues.shift()!;
@@ -191,7 +194,7 @@ await test("runtime should exclude blocking extension UI prompt spans from provi
 	await runtime.events.messageEnd(messageEnd(assistant(50, {}, "stop", "prompt-split")), test.ctx);
 	const expected = expectedTurn(1_000, 6_000, 2_000, 50);
 	assert.deepEqual(slots(await captureState(runtime, test, capturedStates)), { lastRun: null, currentRun: expected }, "runtime should exclude blocking extension UI prompt spans from provisional model speed");
-	assert.equal(test.getRenderRequests() - renderBeforePrompt, 1, "UI prompt lifecycle should stay render-silent until model speed becomes visible at message_end");
+	assert.equal(test.getRenderRequests() - renderBeforePrompt, 3, "title pause/resume and message_end each request a render");
 	assert.equal(getRemainingNowReads(), 0, "output updates delivered inside a UI prompt span should not consume the model-speed clock");
 });
 

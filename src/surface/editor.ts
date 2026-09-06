@@ -8,6 +8,7 @@ import { resolveGlanceRenderStyles, type GlanceRenderStyleContext, type Resolved
 import type { GlanceConfig, GlanceState } from "../types.js";
 
 export interface GlanceEditorOptions {
+	readonly getWorkingElapsedMs?: () => number | undefined;
 	readonly editorOptions?: EditorOptions;
 	readonly renderStyleContext?: GlanceRenderStyleContext;
 }
@@ -144,6 +145,7 @@ export class GlanceEditor extends CustomEditor {
 			styles,
 			body: { kind: "editor", lines: contentLines },
 			chrome: {
+				workingElapsedMs: this.glanceOptions?.getWorkingElapsedMs?.(),
 				focus: isFocused ? "focused" : "unfocused",
 				topScrollIndicator: this.extractScrollIndicator(topOriginal, metrics.safeWidth),
 				bottomScrollIndicator: this.extractScrollIndicator(bottomOriginal, metrics.safeWidth),

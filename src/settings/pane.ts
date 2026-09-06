@@ -23,6 +23,7 @@ import {
 	type SettingViewModel,
 	type ThemeBrowserThemeViewModel,
 } from "./model.js";
+import { WorkingSweep, type ScheduleSweepFrame } from "../runtime/working-sweep.js";
 import { renderInputSurface, renderInputSurfacePreview } from "../surface/renderer.js";
 import type { GlanceRenderStyleContext } from "../theme/adapter.js";
 import type { GlanceConfig, GlanceState } from "../types.js";
@@ -32,6 +33,8 @@ type Done = (result: GlanceConfig | null) => void;
 type Tone = (text: string) => string;
 
 export interface GlancePaneOptions {
+	readonly previewNowMs?: () => number;
+	readonly schedulePreviewFrame?: ScheduleSweepFrame;
 	readonly renderStyleContext?: GlanceRenderStyleContext;
 }
 
@@ -198,6 +201,8 @@ function paneIntentFromKey(data: string, keybindings: KeybindingsManager | undef
 
 class GlanceConfigPane implements Component {
 	private model: PaneModelState;
+	private readonly workingPreview: WorkingSweep;
+	private disposed = false;
 
 	constructor(
 		initial: GlanceConfig,
@@ -210,11 +215,25 @@ class GlanceConfigPane implements Component {
 		private readonly options: GlancePaneOptions = {},
 	) {
 		this.model = createPaneModel(initial);
+		this.workingPreview = new WorkingSweep({
+			nowMs: options.previewNowMs ?? (() => performance.now()),
+			ownsEditor: () => !this.disposed,
+			requestRender,
+			setWorkingVisible: () => {},
+			schedule: options.schedulePreviewFrame,
+		});
+		this.workingPreview.attach();
+	}
+
+	dispose(): void {
+		this.disposed = true;
+		this.workingPreview.dispose();
 	}
 
 	invalidate(): void {}
 
 	handleInput(data: string): void {
+		if (this.disposed) return;
 		const pageSize = this.model.subview === "themeBrowser" ? themeViewportRows(this.getTerminalRows()) : 5;
 		const intent = paneIntentFromKey(data, this.keybindings, pageSize);
 		if (!intent) return;
@@ -223,16 +242,21 @@ class GlanceConfigPane implements Component {
 		this.model = update.model;
 
 		if (update.completion) {
+			this.dispose();
 			this.done(update.completion.action === "cancel" ? null : update.completion.config);
 			return;
 		}
 
+		// Focus controls the demo; browsing unrelated settings does not run an animation.
+		if (createPaneViewModel(this.model, 80).preview.working) this.workingPreview.start();
+		else this.workingPreview.settle();
 		if (update.requestRender) this.requestRender();
 	}
 
 	private renderPreview(lines: string[], model: GlancePaneViewModel, layout: PaneLayout, colors: PaneColors): void {
-		lines.push(paneLine(layout, [colors.dim(`Preview · density ${model.previewDensityLabel} · [D] cycle`)]));
+		lines.push(paneLine(layout, [colors.dim(`Preview · density ${model.previewDensityLabel} · [D] cycle${model.preview.working ? " · Working" : ""}`)]));
 		const previewOptions = {
+			workingElapsedMs: model.preview.working ? this.workingPreview.elapsedMs() : undefined,
 			contentLines: ["Ask pi to improve the input surface..."],
 			focused: true,
 			...(this.options.renderStyleContext ?? {}),

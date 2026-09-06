@@ -156,6 +156,7 @@ for (const themeId of GLANCE_THEME_IDS) {
 		const styles = resolveBuiltInGlanceStyles(themeId, colorMode);
 		const secondStyles = resolveBuiltInGlanceStyles(themeId, colorMode);
 		assert.equal(styles.cacheKey, `glance:${themeId}:${colorMode}`, `${themeId} ${colorMode} resolved style cacheKey should be stable and capability-specific`);
+		assert.equal(secondStyles, styles, "theme and color depth reuse the same immutable style resources");
 		assert.equal(secondStyles.cacheKey, styles.cacheKey, `${themeId} ${colorMode} resolved style cacheKey should be stable across calls`);
 		styleCacheKeys.add(styles.cacheKey);
 

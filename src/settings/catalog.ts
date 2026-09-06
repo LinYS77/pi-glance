@@ -195,6 +195,11 @@ export function getSettingsRows(config: GlanceConfig, categoryId: SettingsCatego
 						next.display.workspaceLabel = nextOption(next.display.workspaceLabel, WORKSPACE_LABEL_MODE_VALUES);
 					}),
 				),
+				toggleRow("general.workingSweep", "Working animation", config.editor.workingSweep, "Animate the path while Pi works. Off uses Pi's Working indicator.", (draft) =>
+					withConfig(draft, (next) => {
+						next.editor.workingSweep = !next.editor.workingSweep;
+					}),
+				),
 			];
 		case "git":
 		case "context":

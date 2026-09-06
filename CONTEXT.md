@@ -162,6 +162,16 @@ An enabled-to-enabled config save does not reinstall the editor or footer, prese
 
 Pi has no public footer getter or zero-height hidden footer. An empty footer row therefore remains in fullscreen mode.
 
+## Working animation
+
+`editor.workingSweep` defaults to `true`, including when older configs omit the field. `/glance` → General → Working animation controls it. Saving changes takes effect on the current editor without replacing its factory or clearing input. Cancelling the pane, a failed save, or a read-only config leaves the active setting unchanged. The settings pane animates its preview only while this row is focused and enabled, and disposes the preview clock on close. `npm run preview:working` remains a standalone development preview without model calls or installation changes.
+
+The beam crosses only the left region, in a 2–3.6 second cycle with a broad bold core and feathered edges. Title and connector use the same intensity. The palette adapter chooses a contrasting neutral peak using the theme's declared light/dark tone and the actual RGB/ANSI256 foreground. Contrast tests cover all 22 themes, including already-dark/light high-contrast colors. Black/white reference backgrounds are used for these tests; no terminal-background query is made. Unlit text retains its original color. All right-hand status bytes, their trailing border, corners, scroll labels, the editor body, bottom edge, and Pi's Bash border callback stay unchanged.
+
+`src/runtime/working-sweep.ts` owns the 30 FPS display clock and ordinary Working-row visibility. It runs only while Glance owns the editor, pauses for blocking UI, and stops at `agent_settled` when Pi is idle. Disabling the effect or Glance restores the native Working row. Re-enabling during a prompt waits for `ui_prompt_end` before animating. Retry and compaction notices remain Pi-owned. Pi has no getter for Working-row visibility, so Glance cannot restore a different extension's prior hidden-row preference.
+
+The live editor retains its original status-string cache; animation does not recolor or collect status facts. `src/surface/top-edge-sweep.ts` shades only glyphs near the beam and emits unlit text in bulk. Unicode measurements have a bounded cache (32 strings, at most 1,024 UTF-16 units each); palette/gradient resources are reused by theme and color mode. The width stops before the status area. Animation does not share the Model speed clock, invalidate its data, or replay missed frames after a blocked event loop.
+
 ## Theme selection
 
 Config stores two Glance palettes:
@@ -186,7 +196,8 @@ At extremely narrow widths, the inherited editor is given enough room for a two-
 
 ## Configuration
 
-- Current on-disk schema version: `8`.
+- Current on-disk schema version: `9`.
+- Missing or invalid `editor.workingSweep` defaults to `true`; explicit `false` is preserved. Migration is in memory and writes only on an explicit save.
 - Legacy theme strings migrate to the same palette in both slots.
 - Legacy Tokens Cache values migrate as `auto -> rate` and `show -> read-write`.
 - Adaptive width is always on; legacy `display.adaptive` is discarded.

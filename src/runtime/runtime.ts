@@ -23,6 +23,7 @@ import type { ConfigLoadResult } from "../config/store.js";
 import { GlanceEditor } from "../surface/editor.js";
 import { GlanceFooter } from "../surface/footer.js";
 import { GitRefresher } from "./git.js";
+import { WorkingSweep, type ScheduleSweepFrame } from "./working-sweep.js";
 import { RuntimeRefreshSession } from "./refresh-session.js";
 import type { GlanceRenderStyleContext } from "../theme/adapter.js";
 import { readPiAmbientTone } from "../theme/tone.js";
@@ -46,6 +47,8 @@ export interface RuntimeShowPaneOptions {
 }
 
 export interface GlanceRuntimeAdapters {
+	workingSweepNowMs?: () => number;
+	scheduleSweepFrame?: ScheduleSweepFrame;
 	getThinkingLevel(): string;
 	loadConfigSync(): ConfigLoadResult;
 	loadConfig(): Promise<ConfigLoadResult>;
@@ -110,6 +113,8 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 	let previousEditorFactory: EditorFactory | undefined;
 	let gitRefresher: RuntimeGitRefresher | undefined;
 	let requestRender: (() => void) | undefined;
+	let workingSweep: WorkingSweep | undefined;
+	let waitingForUi = false;
 	let uiGeneration = 0;
 	const nowMs = adapters.nowMs ?? (() => performance.now());
 	const getTrueColor = adapters.getTrueColor ?? (() => getCapabilities().trueColor);
@@ -190,6 +195,8 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 	}
 
 	function invalidateUiOwnership(): number {
+		workingSweep?.dispose();
+		workingSweep = undefined;
 		uiGeneration++;
 		requestRender = undefined;
 		clearFooter();
@@ -227,6 +234,12 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 		ctx.ui.setFooter(undefined);
 	}
 
+	function reconcileWorkingSweep(ctx: ExtensionContext): void {
+		if (!isTuiMode(ctx)) return;
+		if (getConfig().enabled && getConfig().editor.workingSweep) workingSweep?.attach(!ctx.isIdle(), waitingForUi);
+		else workingSweep?.dispose();
+	}
+
 	function installInputSurface(ctx: ExtensionContext): void {
 		if (!isTuiMode(ctx)) return;
 		refreshSession.ensureState(ctx);
@@ -251,6 +264,13 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 
 		const currentEditorFactory = ctx.ui.getEditorComponent();
 		if (currentEditorFactory !== ownedEditorFactory) previousEditorFactory = currentEditorFactory;
+		const sweep = new WorkingSweep({
+			nowMs: adapters.workingSweepNowMs ?? (() => performance.now()),
+			ownsEditor: () => isCurrentUiGeneration(generation) && getConfig().enabled && ctx.ui.getEditorComponent() === nextEditorFactory,
+			requestRender: () => requestRender?.(),
+			setWorkingVisible: (visible) => ctx.ui.setWorkingVisible(visible),
+			schedule: adapters.scheduleSweepFrame,
+		});
 		const nextEditorFactory: EditorFactory = (tui, theme, keybindings) => {
 			setUiRequestRender(generation, () => tui.requestRender());
 			return new GlanceEditor(
@@ -262,11 +282,13 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 				() => {
 					void refreshSession.editorThinkingCycle(ctx);
 				},
-				{ renderStyleContext },
+				{ renderStyleContext, getWorkingElapsedMs: () => sweep.elapsedMs() },
 			);
 		};
 		ownedEditorFactory = nextEditorFactory;
 		ctx.ui.setEditorComponent(nextEditorFactory);
+		workingSweep = sweep;
+		reconcileWorkingSweep(ctx);
 	}
 
 	return {
@@ -304,7 +326,10 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 				configDiagnostic = undefined;
 				configDiagnosticStatus = "loaded";
 				configDiagnosticNotified = false;
-				if (previousConfig.enabled && nextConfig.enabled) reconcileGitRefresher();
+				if (previousConfig.enabled && nextConfig.enabled) {
+					reconcileGitRefresher();
+					reconcileWorkingSweep(ctx);
+				}
 				await refreshSession.configSaved(
 					ctx,
 					previousConfig.enabled === nextConfig.enabled ? undefined : () => installInputSurface(ctx),
@@ -314,12 +339,14 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 		},
 		events: {
 			sessionStart: (_event, ctx) => {
+				waitingForUi = false;
 				acceptConfigLoad(adapters.loadConfigSync());
 				notifyConfigDiagnostic(ctx);
 				refreshSession.sessionStart(ctx);
 				installInputSurface(ctx);
 			},
 			sessionShutdown: async (_event, ctx) => {
+				waitingForUi = false;
 				refreshSession.sessionShutdown();
 				clearUI(ctx);
 			},
@@ -345,10 +372,14 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 				refreshSession.messageUpdate(event);
 			},
 			uiPromptStart: (_event, _ctx) => {
+				waitingForUi = true;
 				refreshSession.uiPromptStart();
+				workingSweep?.setWaiting(true);
 			},
 			uiPromptEnd: (_event, _ctx) => {
+				waitingForUi = false;
 				refreshSession.uiPromptEnd();
+				workingSweep?.setWaiting(false);
 			},
 			messageEnd: async (event, ctx) => {
 				await refreshSession.messageEnd(event, ctx);
@@ -358,12 +389,14 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 			},
 			agentStart: (_event, _ctx) => {
 				refreshSession.agentStart();
+				workingSweep?.start();
 			},
 			agentEnd: async (event, ctx) => {
 				await refreshSession.agentEnd(event, ctx);
 			},
-			agentSettled: (_event, _ctx) => {
+			agentSettled: (_event, ctx) => {
 				refreshSession.agentSettled();
+				if (workingSweep && ctx.isIdle()) workingSweep.settle();
 			},
 		},
 	};

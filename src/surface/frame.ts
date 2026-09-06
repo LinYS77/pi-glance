@@ -1,5 +1,6 @@
 import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import { renderGlanceLine } from "./status-line.js";
+import { createTopEdgeSweep } from "./top-edge-sweep.js";
 import {
 	planSurfaceBottomFrame,
 	planSurfaceRow,
@@ -29,6 +30,7 @@ export type InputSurfaceFrameBody =
 	| { kind: "editor"; lines: readonly string[] };
 
 export interface InputSurfaceFrameChrome {
+	workingElapsedMs?: number;
 	focus?: InputSurfaceChromeFocus;
 	showTitle?: boolean;
 	topScrollIndicator?: string;
@@ -100,13 +102,24 @@ function renderTopFrame(input: InputSurfaceFrameInput, metrics: Pick<InputSurfac
 	const left = topLeftPlan(input, metrics);
 	const statusBudget = planSurfaceStatusBudget(metrics.innerWidth, left.width);
 	const status = resolveStatus(input, statusBudget);
-	const rendered = renderSurfaceChunks(planSurfaceTopFrame({ width: metrics.safeWidth, left, status }).chunks, {
-		border,
-		title,
-		status: identity,
-		text: identity,
-		dim: border,
-	});
+	const plan = planSurfaceTopFrame({ width: metrics.safeWidth, left, status });
+	const elapsed = dimChrome ? undefined : input.chrome?.workingElapsedMs;
+	const sweepWidth = plan.leftWidth + plan.fillerWidth;
+	const sweep = elapsed === undefined ? undefined : createTopEdgeSweep(sweepWidth, elapsed, input.styles);
+	let column = 0;
+	const rendered = plan.chunks.map((chunk) => {
+		const start = column;
+		column += visibleWidth(chunk.text);
+		if (chunk.role === "status") return chunk.text;
+		if (chunk.role === "title") return sweep ? sweep(chunk.text, title, start - 1) : title(chunk.text);
+		if (chunk.role === "border" || chunk.role === "dim") {
+			// Only the path's connecting line moves, never the corner or status-side tail.
+			return sweep && start >= 1 && start < 1 + sweepWidth && /^─+$/.test(chunk.text)
+				? sweep(chunk.text, border, start - 1)
+				: border(chunk.text);
+		}
+		return chunk.text;
+	}).join("");
 	return truncateToWidth(rendered, metrics.safeWidth, border("…"));
 }
 

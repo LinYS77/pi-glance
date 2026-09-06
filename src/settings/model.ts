@@ -131,6 +131,7 @@ export interface GlancePaneViewModel {
 	previewDensity: PanePreviewDensity;
 	previewDensityLabel: string;
 	preview: {
+		working: boolean;
 		config: GlanceConfig;
 		density: PanePreviewDensity;
 		ambientTone?: GlanceThemeSlot;
@@ -466,6 +467,8 @@ export function createPaneViewModel(model: PaneModelState, width: number): Glanc
 		previewDensity: model.previewDensity,
 		previewDensityLabel: previewDensityLabel(model.previewDensity),
 		preview: {
+			working: model.draft.enabled && model.draft.editor.workingSweep && model.subview === "settings"
+				&& model.focus !== "categories" && settings[model.settingIndex]?.id === "general.workingSweep",
 			config: model.draft,
 			density: model.previewDensity,
 			ambientTone: model.subview === "themeBrowser" ? model.themeBrowser.slot : undefined,

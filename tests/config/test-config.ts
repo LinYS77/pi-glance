@@ -32,9 +32,9 @@ for (const raw of [undefined, null, false, true, 0, 1, "", "{}", []]) {
 }
 
 assert.equal(defaults.editor.topMarginRows, 1, "default editor top margin rows should preserve the one-row breathing room");
-assert.equal(defaults.version, 8, "simplifying Tokens cache modes should bump CONFIG_VERSION to 8");
-assert.equal(normalizeConfig({ version: 0 }).version, 8, "old raw version should normalize to current schema version");
-assert.equal(normalizeConfig({ version: 999 }).version, 8, "future raw version should normalize to current schema version");
+assert.equal(defaults.version, 9, "Working animation uses config schema v9");
+assert.equal(normalizeConfig({ version: 0 }).version, 9, "old raw version should normalize to current schema version");
+assert.equal(normalizeConfig({ version: 999 }).version, 9, "future raw version should normalize to current schema version");
 assert.deepEqual(defaults.theme, { light: "light", dark: "dark" }, "default theme pair should use light for light tone and dark for dark tone");
 assert.equal(defaults.tokens.cache, "rate", "new configs should default Tokens cache details to aggregate hit rate");
 assert.equal(defaults.throughput.precision, THROUGHPUT_PRECISION_DESCRIPTOR.defaultValue, "default config throughput precision should come from descriptor default");
@@ -177,13 +177,14 @@ const userConfig = normalizeConfig({
 assert.deepEqual(
 	userConfig,
 	{
-		version: 8,
+		version: 9,
 		enabled: false,
 		theme: { light: "tokyo-night", dark: "tokyo-night" },
 		icons: "nerd",
 		editor: {
 			minContentRows: 4,
 			topMarginRows: 2,
+			workingSweep: true,
 		},
 		display: {
 			showProvider: "always",
