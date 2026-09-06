@@ -4,8 +4,6 @@
 
 **A rounded editor and status line for [Pi](https://github.com/earendil-works/pi).**
 
-Shows Git status, cost, model speed, context usage, tokens, and the current model.
-
 English · [简体中文](./README.zh-CN.md)
 
 [![npm](https://img.shields.io/npm/v/pi-glance?style=flat-square&color=blue)](https://www.npmjs.com/package/pi-glance)
@@ -33,21 +31,16 @@ Restart Pi or run `/reload`.
 
 ## Features
 
-- **Rounded editor** — keeps Pi's editing, history, autocomplete, and keybindings.
-- **Adaptive status line** — Git · Cost · Model speed · Context · Tokens · Model.
-- **Working animation** — a moving highlight on the path and connecting line, enabled by default. Status values stay still.
-- **22 palettes** — separate light and dark choices, previewed live.
-- **Settings** — use `/glance` to choose palettes, toggle segments, and change their order.
+- **Rounded editor** — Pi's editing, history, autocomplete, and keybindings stay the same.
+- **Adaptive status line** — Git · Cost · Model speed · Context · Tokens · Model. Folds as the terminal narrows.
+- **Working animation** — a sweep across the workspace title and connecting line while Pi works.
+- **22 palettes** — separate light and dark choices with live preview.
 
-Plain icons are enabled by default. There are no runtime dependencies and no telemetry.
+No runtime dependencies. No telemetry.
 
 ## Configure
 
-Run:
-
-```text
-/glance
-```
+Run `/glance` to choose palettes, toggle status items, and change their order. Changes preview live; press `S` to save.
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/LinYS77/pi-glance/main/assets/settings.png" alt="pi-glance settings pane">
@@ -57,19 +50,11 @@ Run:
   <img src="https://raw.githubusercontent.com/LinYS77/pi-glance/main/assets/themes.gif" alt="pi-glance theme preview">
 </p>
 
-Changes preview live. Press `D` to see how the status line folds at full, compact, and minimal widths.
-
-Use **General → Working animation** to turn the sweep off and restore Pi's Working indicator. Select this setting to preview the animation; press `S` to save. Changing it takes effect without replacing the editor or clearing your input.
-
 ## Notes
 
-- Plain icons work with normal terminal fonts. Nerd Font icons are optional in `/glance` → **General** → **Icons**.
-- Pi provides one custom-editor slot, so the last editor extension loaded wins.
-- Built and tested with Pi 0.84.4 and 0.85.1 on Node.js 22.19.0 or newer.
-- Glance follows Pi's terminal truecolor capability and falls back to ANSI 256 colors.
-- Context warning colors follow Pi's reported percentage, including in tokens-only display.
-- Bash input (`!` / `!!`) retains Pi's native border color; normal prompts keep the selected Glance palette.
-- Uses only public Pi extension APIs.
+- Nerd Font icons are enabled by default. For regular fonts, select `plain` in `/glance` → **General** → **Icons**.
+- Pi has one custom-editor slot; the last editor extension loaded wins.
+- Tested with Pi 0.84.4 and 0.85.1. Requires Node.js 22.19.0 or newer.
 
 ## Update
 
@@ -79,16 +64,7 @@ pi update npm:pi-glance
 
 ## Contributing
 
-Issues and pull requests are welcome. See [CONTEXT.md](./CONTEXT.md) for the code layout and implementation notes.
-
-Source is in `src/`, tests are in `tests/`, and the Pi extension entry is `index.ts`.
-
-```bash
-npm ci
-npm run check
-npm test
-npm run pack:dry
-```
+Issues and pull requests are welcome. See [CONTEXT.md](./CONTEXT.md) for development notes.
 
 ## License
 

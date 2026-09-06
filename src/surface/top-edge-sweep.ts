@@ -49,7 +49,7 @@ function lowerBound(values: readonly number[], target: number): number {
 export function sweepProfile(width: number, elapsedMs: number): { center: number; radius: number; periodMs: number } {
 	const columns = Number.isFinite(width) ? Math.max(0, width) : 0;
 	const elapsed = Number.isFinite(elapsedMs) ? Math.max(0, elapsedMs) : 0;
-	const radius = Math.max(7, Math.min(24, columns * 0.12));
+	const radius = Math.max(9, Math.min(28, columns * 0.16));
 	const periodMs = Math.max(2000, Math.min(3600, 1200 + columns * 10));
 	return { radius, periodMs, center: -radius + (columns + radius * 2) * (elapsed % periodMs) / periodMs };
 }
@@ -75,7 +75,7 @@ export function createTopEdgeSweep(width: number, elapsedMs: number, styles: Res
 		for (let index = first; index < end; index++) {
 			const cellCenter = measured ? measured.centers[index]! : index + 0.5;
 			const distance = Math.abs(column + cellCenter - center) / radius;
-			const strength = Math.max(0, Math.min(1, (1 - distance) / 0.65));
+			const strength = Math.max(0, Math.min(1, (1 - distance) / 0.55));
 			const smooth = strength * strength * (3 - 2 * strength);
 			const next = styles.highlight(style, smooth);
 			if (next !== previous && run) {

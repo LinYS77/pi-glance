@@ -73,7 +73,17 @@ function joinSegments(styles: ResolvedGlanceStyles, segments: SegmentRenderResul
 function fitSegments(styles: ResolvedGlanceStyles, segments: SegmentRenderResult[], width: number): JoinedSegments {
 	const fitted = [...segments];
 	let joined = joinSegments(styles, fitted);
-	while (fitted.length > 1 && joined.width > width) {
+	while (fitted.length > 0 && joined.width > width) {
+		// Preserve configured priority: try shortening the trailing segment before
+		// removing it, without sacrificing earlier facts to keep later ones.
+		const last = fitted.at(-1)!;
+		const remaining = width - (joined.width - visibleWidth(last.text));
+		const shorter = last.fit?.(remaining);
+		if (shorter !== undefined) {
+			fitted[fitted.length - 1] = { ...last, text: shorter };
+			return joinSegments(styles, fitted);
+		}
+		if (fitted.length === 1) break;
 		fitted.pop();
 		joined = joinSegments(styles, fitted);
 	}

@@ -39,7 +39,7 @@ assert.deepEqual(
 		{ id: "cost", label: "Cost", enabled: true },
 		{ id: "throughput", label: "Model speed", enabled: true },
 		{ id: "context", label: "Context", enabled: true },
-		{ id: "tokens", label: "Tokens", enabled: false },
+		{ id: "tokens", label: "Tokens", enabled: true },
 		{ id: "model", label: "Model", enabled: true },
 	],
 	"settings categories should expose Model speed enabled by default between Cost and Context, with Model last",

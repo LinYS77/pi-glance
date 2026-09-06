@@ -22,8 +22,8 @@ function assertIncludes(document: string, fragment: string, message: string): vo
 	assert.ok(document.includes(fragment), message);
 }
 
-assert.ok(readme.length < 4_000, "the English README should remain a concise product page");
-assert.ok(chineseReadme.length < 4_000, "the Chinese README should remain a concise product page");
+assert.ok(readme.length < 3_000, "the English README should remain a concise product page");
+assert.ok(chineseReadme.length < 2_400, "the Chinese README should remain a concise product page");
 
 assert.match(readme, /rounded editor/i, "the English README should describe the editor");
 assertIncludes(readme, "README.zh-CN.md", "the English README should link to Simplified Chinese");
@@ -33,8 +33,7 @@ assertIncludes(chineseReadme, "README.md", "the Chinese README should link back 
 for (const document of [readme, chineseReadme]) {
 	assert.ok(!document.includes("docs/adr"), "public READMEs must not link to ignored local ADRs");
 	assertIncludes(document, "CONTEXT.md", "both READMEs should link to the maintained design reference");
-	assertIncludes(document, "`src/`", "both READMEs should show the current source layout");
-	assertIncludes(document, "`tests/`", "both READMEs should show the current test layout");
+
 	assertIncludes(document, "pi -e npm:pi-glance", "both READMEs should offer a one-session trial");
 	assertIncludes(document, "pi install npm:pi-glance", "both READMEs should document installation");
 	assertIncludes(document, "pi update npm:pi-glance", "both READMEs should document updates");
@@ -47,23 +46,32 @@ for (const document of [readme, chineseReadme]) {
 	assert.ok(!document.includes("github.com/badlogic/pi-mono"), "README links should use the current Pi repository");
 }
 
+assertIncludes(readme, "Nerd Font icons are enabled by default", "the English README should describe the default icons");
+assertIncludes(chineseReadme, "默认使用 Nerd Font 图标", "the Chinese README should describe the default icons");
+assert.match(readme, /select `plain`.*General.*Icons/, "the English README should explain how regular-font users can switch to plain icons");
+assert.match(chineseReadme, /普通字体.*General.*Icons.*`plain`/, "the Chinese README should explain how regular-font users can switch to plain icons");
+
+
 assert.equal(GLANCE_THEMES.length, 22, "the curated theme collection should remain complete");
 assertIncludes(readme, "22 palettes", "the English README should state the palette count");
 assertIncludes(chineseReadme, "22 套配色", "the Chinese README should state the palette count");
 assertIncludes(readme, "Git · Cost · Model speed · Context · Tokens · Model", "the English README should name the adaptive facts");
 assertIncludes(chineseReadme, "Git · 费用 · 模型速度 · 上下文 · Tokens · 模型", "the Chinese README should name the adaptive facts");
-assertIncludes(readme, "no telemetry", "the English README should state the privacy boundary");
+assert.match(readme, /no telemetry/i, "the English README should state the privacy boundary");
 assertIncludes(chineseReadme, "不收集遥测数据", "the Chinese README should state the privacy boundary");
 assertIncludes(readme, "Pi 0.84.4", "the English README should state the tested Pi baseline");
 assertIncludes(chineseReadme, "Pi 0.84.4", "the Chinese README should state the tested Pi baseline");
-assertIncludes(readme, "ANSI 256 colors", "the English README should describe the terminal color fallback");
-assertIncludes(chineseReadme, "ANSI 256 色", "the Chinese README should describe the terminal color fallback");
+
 assertIncludes(readme, "Node.js 22.19.0 or newer", "the English README should state the Node floor");
 assertIncludes(chineseReadme, "Node.js 22.19.0 或更高版本", "the Chinese README should state the Node floor");
 
-for (const implementationDetail of ["cacheRead /", "agent_settled", "sessionManager.getBranch", "theme: { light:"]) {
-	assert.ok(!readme.includes(implementationDetail), `the product README should leave ${implementationDetail} to architecture docs`);
+for (const implementationDetail of ["cacheRead /", "agent_settled", "sessionManager.getBranch", "theme: { light:", "editor.workingSweep", "npm run check", "npm run pack:dry"]) {
+	for (const document of [readme, chineseReadme]) {
+		assert.ok(!document.includes(implementationDetail), `the product README should leave ${implementationDetail} to development notes`);
+	}
 }
+assert.match(readme, /working animation/i, "the English README should introduce Working animation");
+assertIncludes(chineseReadme, "Working 扫光", "the Chinese README should introduce Working animation");
 
 assert.match(manifest.description ?? "", /editor.*status line.*Pi/, "package description should identify Pi and the editor/status line");
 assert.ok(manifest.files?.includes("README*.md"), "the npm package should include both language READMEs");

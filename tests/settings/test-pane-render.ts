@@ -198,7 +198,7 @@ assertNotContains(initial, "Changes stay local", "empty default status copy shou
 assertNotContains(initial, "NOTES", "old notes section should stay removed");
 assertNotContains(initial, "[Tab]", "tab navigation should stay removed");
 
-const densityPane = await makePane();
+const densityPane = await makePane({ ...defaultConfig(), icons: "plain" });
 const densityRenderBaseline = densityPane.renders();
 press(densityPane.component, "d");
 let densityText = plainText(densityPane.component, 160);
@@ -214,7 +214,9 @@ densityFrame = findLineContaining(densityText, "╭");
 assertContains(densityText, "Preview · density Compact", "D should cycle full preview into compact density");
 assertContains(densityFrame, "ctx 23%", "compact density preview should retain Context percentage");
 assertNotContains(densityFrame, "47k/200k", "compact density preview should fold Context token detail at the same pane width");
-assertContains(densityFrame, "ai Sonnet 4 high", "compact density preview should retain thinking while folding provider detail");
+assertContains(densityFrame, "ai Sonnet 4", "compact density should retain Model identity");
+assertNotContains(densityFrame, "Sonnet 4 high", "compact density should fold automatic Thinking with other optional details");
+assertNotContains(densityFrame, "↑1", "compact density should fold Git upstream detail alongside model/context detail");
 assertNotContains(densityFrame, "anthropic/", "compact density preview should fold automatic provider detail");
 
 press(densityPane.component, "d");
@@ -230,6 +232,21 @@ assertContains(densityText, "✓ Saved", "all density previews should remain tra
 press(densityPane.component, "d");
 assertContains(plainText(densityPane.component, 160), "Preview · density Auto", "D should wrap minimal preview back to automatic density");
 assert.equal(densityPane.renders() - densityRenderBaseline, 4, "each density cycle should request exactly one pane render");
+
+const longModelConfig = defaultConfig();
+longModelConfig.segments = [{ id: "model", enabled: true }];
+const longModelPane = await makePane(longModelConfig, testState({
+	providers: { availableCount: 2 },
+	model: { id: "team-gpt-6-astra", displayName: "team-gpt-6-astra", provider: "TEAM", thinking: "xhigh" },
+}));
+for (const [density, label] of [["Full", "󰚩 TEAM/team-gpt-6-astra xhigh"], ["Compact", "󰚩 team-gpt-6-astra"], ["Minimal", "󰚩 gpt-6-astra"]]) {
+	press(longModelPane.component, "d");
+	const text = plainText(longModelPane.component, 180);
+	assertContains(text, `Preview · density ${density}`);
+	assertContains(findLineContaining(text, "╭"), label!, "D preview must apply name density without shrinking the pane");
+	if (density !== "Full") assertNotContains(findLineContaining(text, "╭"), "xhigh");
+	assertContains(text, "✓ Saved", "model preview density must not dirty the config");
+}
 
 const injectedBindings = keybindingsWith({
 	"tui.select.up": ["u"],
@@ -300,6 +317,7 @@ const darkSlotPreviewRaw = rawText(darkSlotPreviewPane.component, 120);
 assertContains(darkSlotPreviewRaw, fg(PALETTES.dark.border, "╭"), "active Dark theme browser preview should force ambientTone=dark over runtime light tone");
 
 const modelSpeedPreviewConfig = defaultConfig();
+modelSpeedPreviewConfig.icons = "plain";
 modelSpeedPreviewConfig.segments = modelSpeedPreviewConfig.segments.map((segment) =>
 	segment.id === "throughput" ? { ...segment, enabled: true } : segment,
 );
@@ -549,7 +567,7 @@ press(gridSettingPane.component, "\x1b[B");
 press(gridSettingPane.component, "\x1b[B");
 const iconsSelectedText = plainText(gridSettingPane.component);
 assertContains(iconsSelectedText, "» Icons", "down arrow should move within the setting column");
-assertContains(iconsSelectedText, "Plain text or Nerd Font icons with fallback.", "Icons row hint should mention plain and Nerd Font fallback guidance");
+assertContains(iconsSelectedText, "Choose plain if you don't use a Nerd Font.", "Icons row hint should explain the font requirement and plain alternative");
 press(gridSettingPane.component, "\x1b[D");
 const generalParentText = plainText(gridSettingPane.component);
 assertContains(generalParentText, "» General", "left arrow should return to the owning General category rather than a category on the same visual row");
@@ -695,7 +713,7 @@ press(generalHintPane.component, "\x1b[B");
 press(generalHintPane.component, "\x1b[B");
 press(generalHintPane.component, "\x1b[B");
 const topSpacing = plainText(generalHintPane.component);
-assertLineContainsAll(topSpacing, ["Top spacing", "1 row"], "top spacing setting should render");
+assertLineContainsAll(topSpacing, ["Top spacing", "1 row"], "top spacing setting should render the one-row default");
 assertContains(topSpacing, "Set breathing room above the editor.", "top spacing hint should render");
 press(generalHintPane.component, "\r");
 assertLineContainsAll(plainText(generalHintPane.component), ["Top spacing", "1 row"], "enter should not cycle top spacing before value column");
@@ -705,13 +723,13 @@ assertLineContainsAll(plainText(generalHintPane.component), ["Top spacing", "2 r
 press(generalHintPane.component, "\x1b[D");
 press(generalHintPane.component, "\x1b[B");
 const workspaceLabel = plainText(generalHintPane.component);
-assertLineContainsAll(workspaceLabel, ["Workspace label", "name"], "workspace label setting should render");
+assertLineContainsAll(workspaceLabel, ["Workspace label", "smart"], "workspace label setting should render the new default");
 assertContains(workspaceLabel, "Show name, smart ~/ path, or safe path.", "workspace label hint should render");
 press(generalHintPane.component, "\r");
-assertLineContainsAll(plainText(generalHintPane.component), ["Workspace label", "name"], "enter should not cycle workspace label before value column");
+assertLineContainsAll(plainText(generalHintPane.component), ["Workspace label", "smart"], "enter should not cycle workspace label before value column");
 press(generalHintPane.component, "\x1b[C");
 press(generalHintPane.component, "\r");
-assertLineContainsAll(plainText(generalHintPane.component), ["Workspace label", "smart"], "enter should cycle workspace label in value column");
+assertLineContainsAll(plainText(generalHintPane.component), ["Workspace label", "path"], "enter should cycle workspace label in value column");
 
 const gitEnabledPane = await makePane();
 press(gitEnabledPane.component, "\x1b[B");

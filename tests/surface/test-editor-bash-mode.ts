@@ -43,8 +43,8 @@ for (const trueColor of [true, false]) {
 			assert.ok(lines[1]!.startsWith(bashBorder("│")), "side border follows the host");
 			assert.ok(lines.at(-1)!.startsWith(bashBorder("╰")), "bottom border follows the host");
 			assert.ok(lines[0]!.includes(styles.title(" repo ")), "workspace title stays in Glance palette");
-			assert.ok(lines[0]!.includes(styles.segments.model.fg("ai GPT 5.5")), "status keeps Glance styles");
-			assert.equal(lines[0]!.includes(`${bashColor}ai GPT`), false);
+			assert.ok(lines[0]!.includes(styles.segments.model.fg("󰚩 GPT 5.5")), "status keeps Glance styles");
+			assert.equal(lines[0]!.includes(`${bashColor}󰚩 GPT`), false);
 		}
 	});
 }

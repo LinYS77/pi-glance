@@ -124,6 +124,43 @@ test("config store diagnoses reads and atomically saves through an explicit path
 	}
 });
 
+test("new defaults do not overwrite saved choices from current or older configs", async () => {
+	const dir = await mkdtemp(join(tmpdir(), "pi-glance-config-defaults-"));
+	try {
+		const path = join(dir, "config.json");
+		const store = createConfigStore(path);
+		const fresh = await store.loadConfig();
+		assert.equal(fresh.status, "missing");
+		assert.equal(fresh.config.icons, "nerd");
+		assert.equal(fresh.config.editor.topMarginRows, 1);
+		assert.equal(fresh.config.display.workspaceLabel, "smart");
+		assert.equal(fresh.config.segments.find((segment) => segment.id === "tokens")?.enabled, true);
+		assert.deepEqual(await readdir(dir), [], "loading defaults should not create a config file");
+
+		const saved = defaultConfig();
+		saved.icons = "plain";
+		saved.editor.topMarginRows = 0;
+		saved.display.workspaceLabel = "name";
+		saved.segments.find((segment) => segment.id === "tokens")!.enabled = false;
+		for (const version of [8, 9]) {
+			const text = JSON.stringify({
+				...saved,
+				version,
+				editor: version === 8 ? { minContentRows: 3, topMarginRows: 0 } : saved.editor,
+			});
+			await writeFile(path, text);
+			assertLoadResult(store.loadConfigSync(), { config: saved, status: "loaded", writable: true }, `v${version} sync load should preserve saved choices`);
+			const loaded = await store.loadConfig();
+			assertLoadResult(loaded, { config: saved, status: "loaded", writable: true }, `v${version} async load should preserve saved choices`);
+			assert.equal(await readFile(path, "utf8"), text, "loading should not rewrite saved settings");
+			await store.saveConfig(loaded.config);
+			assert.deepEqual(JSON.parse(await readFile(path, "utf8")), saved, "saving should preserve explicit choices instead of adopting new defaults");
+		}
+	} finally {
+		await rm(dir, { recursive: true, force: true });
+	}
+});
+
 test("two config stores in one process remain independent", async () => {
 	const dir = await mkdtemp(join(tmpdir(), "pi-glance-config-stores-"));
 	try {

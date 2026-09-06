@@ -31,7 +31,9 @@ for (const raw of [undefined, null, false, true, 0, 1, "", "{}", []]) {
 	assertDefault(raw, `non-object raw config ${JSON.stringify(raw)} should normalize to defaults`);
 }
 
-assert.equal(defaults.editor.topMarginRows, 1, "default editor top margin rows should preserve the one-row breathing room");
+assert.equal(defaults.icons, "nerd", "new configs should use Nerd Font icons");
+assert.equal(defaults.editor.topMarginRows, 1, "new configs should leave one row above the editor");
+assert.equal(defaults.display.workspaceLabel, "smart", "new configs should show a smart workspace path");
 assert.equal(defaults.version, 9, "Working animation uses config schema v9");
 assert.equal(normalizeConfig({ version: 0 }).version, 9, "old raw version should normalize to current schema version");
 assert.equal(normalizeConfig({ version: 999 }).version, 9, "future raw version should normalize to current schema version");
@@ -270,7 +272,7 @@ assert.equal(normalizeConfig({ editor: { minContentRows: 3.9 } }).editor.minCont
 assert.equal(normalizeConfig({ editor: { minContentRows: 9 } }).editor.minContentRows, 4, "minContentRows should clamp to maximum 4");
 assert.equal(normalizeConfig({ editor: { minContentRows: Number.NaN } }).editor.minContentRows, defaults.editor.minContentRows, "NaN minContentRows should fall back to default");
 assert.equal(normalizeConfig({ editor: { minContentRows: "4" } }).editor.minContentRows, defaults.editor.minContentRows, "non-number minContentRows should fall back to default");
-assert.equal(normalizeConfig({ editor: {} }).editor.topMarginRows, 1, "missing topMarginRows should default to one row for old configs");
+assert.equal(normalizeConfig({ editor: {} }).editor.topMarginRows, 1, "missing topMarginRows should use the one-row default");
 assert.equal(normalizeConfig({ editor: { topMarginRows: -1 } }).editor.topMarginRows, 0, "topMarginRows should clamp to minimum 0");
 assert.equal(normalizeConfig({ editor: { topMarginRows: 99 } }).editor.topMarginRows, 2, "topMarginRows should clamp to maximum 2");
 assert.equal(normalizeConfig({ editor: { topMarginRows: 1.9 } }).editor.topMarginRows, 1, "topMarginRows should floor fractional values");
@@ -348,7 +350,7 @@ assertSegments(
 	[
 		{ id: "git", enabled: false },
 		{ id: "model", enabled: false },
-		{ id: "tokens", enabled: false },
+		{ id: "tokens", enabled: true },
 		{ id: "cost", enabled: true },
 		{ id: "throughput", enabled: true },
 		{ id: "context", enabled: true },

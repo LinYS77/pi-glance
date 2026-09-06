@@ -15,6 +15,7 @@ const RESET = "\x1b[0m";
 
 function configWithSegments(ids: SegmentId[], mutate?: (config: GlanceConfig) => void): GlanceConfig {
 	const config = defaultConfig();
+	config.icons = "plain";
 	config.segments = ids.map((id) => ({ id, enabled: true }));
 	mutate?.(config);
 	return config;
@@ -242,8 +243,8 @@ await test("auto provider should hide provider when only one provider is availab
 	);
 	assert.equal(
 		stripControls(renderGlanceLine(modelState(2, "high"), forcedDensityConfig, 120, 2, { widthMode: "compact" })),
-		"ai GPT 5.5 high",
-		"forced compact preview density should fold provider detail without changing physical width",
+		"ai GPT 5.5",
+		"forced compact preview density should fold optional Provider and Thinking details",
 	);
 	assert.equal(
 		stripControls(renderGlanceLine(modelState(2, "high"), forcedDensityConfig, 120, 2, { widthMode: "minimal" })),
@@ -331,7 +332,7 @@ await test("compact status should prioritize the configured Tokens cache rate wi
 	});
 	assert.equal(
 		stripControls(renderGlanceLine(reportedState, reportedConfig, 75, 1)),
-		" main · 󰈸 $302.0 ·  ?/s · 󰔟 53% · 󰄨 94% · 󰚩 GPT 5.6 sol max",
+		" main · 󰈸 $302.0 ·  ?/s · 󰔟 53% · 󰄨 94% · 󰚩 GPT 5.6 sol",
 		"compact status should prioritize the configured Tokens cache rate with the same icon-plus-percent grammar as Context",
 	);
 });
@@ -457,7 +458,7 @@ await test("tokens full plain mode should include cache rate without the CH abbr
 		"tokens minimal rate mode should fall back to total usage while the rate denominator is unknown",
 	);
 	assert.equal(plainLine(["model"], modelState(1, "high"), 96), "ai GPT 5.5 high", "model thinking auto should show thinking at full width");
-	assert.equal(plainLine(["model"], modelState(1, "high"), 64), "ai GPT 5.5 high", "model thinking auto should show thinking at compact width");
+	assert.equal(plainLine(["model"], modelState(1, "high"), 64), "ai GPT 5.5", "model thinking auto should hide thinking at compact width");
 	assert.equal(plainLine(["model"], modelState(1, "high"), 63), "ai GPT 5.5", "model thinking auto should hide thinking at minimal width");
 });
 

@@ -46,7 +46,7 @@ export function defaultConfig(): GlanceConfig {
 		version: CONFIG_VERSION,
 		enabled: true,
 		theme: { light: "light", dark: "dark" },
-		icons: "plain",
+		icons: "nerd",
 		editor: {
 			minContentRows: 3,
 			topMarginRows: 1,
@@ -54,7 +54,7 @@ export function defaultConfig(): GlanceConfig {
 		},
 		display: {
 			showProvider: "auto",
-			workspaceLabel: "name",
+			workspaceLabel: "smart",
 		},
 		segments: defaultSegmentConfigs(),
 		model: {

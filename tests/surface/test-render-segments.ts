@@ -12,6 +12,7 @@ function line(
 	width = 120,
 ): string {
 	const config = defaultConfig();
+	config.icons = "plain";
 	config.segments = config.segments.map((segment) => ({ ...segment, enabled: segment.id === segmentId }));
 	mutateConfig?.(config);
 	return stripControls(renderGlanceLine(testState(stateOverrides), config, width));

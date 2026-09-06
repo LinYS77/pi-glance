@@ -150,7 +150,7 @@ assert.deepEqual(
 		{ id: "cost", label: "Cost", enabled: true },
 		{ id: "throughput", label: "Model speed", enabled: true },
 		{ id: "context", label: "Context", enabled: true },
-		{ id: "tokens", label: "Tokens", enabled: false },
+		{ id: "tokens", label: "Tokens", enabled: true },
 		{ id: "model", label: "Model", enabled: true },
 	],
 	"categories should start with General then follow configured segment order with enabled flags",
@@ -210,8 +210,8 @@ const generalRows = assertRows(config, "general", [
 	{
 		id: "general.icons",
 		label: "Icons",
-		value: "plain",
-		hint: "Plain text or Nerd Font icons with fallback.",
+		value: "nerd",
+		hint: "Choose plain if you don't use a Nerd Font.",
 		kind: "cycle",
 	},
 	{
@@ -231,7 +231,7 @@ const generalRows = assertRows(config, "general", [
 	{
 		id: "general.workspaceLabel",
 		label: "Workspace label",
-		value: "name",
+		value: "smart",
 		hint: "Show name, smart ~/ path, or safe path.",
 		kind: "cycle",
 	},
@@ -334,7 +334,7 @@ const tokensRows = assertRows(config, "tokens", [
 	{
 		id: "tokens.enabled",
 		label: "Enabled",
-		value: "off",
+		value: "on",
 		hint: "Show or hide this segment.",
 		kind: "toggle",
 	},
@@ -416,11 +416,11 @@ assert.equal(
 	"Tokyo Night",
 	"dark theme row should display friendly theme label",
 );
-assert.equal(rowById(generalRows, "general.icons").apply!(config).icons, "nerd", "icons should cycle plain -> nerd");
+assert.equal(rowById(generalRows, "general.icons").apply!(config).icons, "plain", "icons should cycle nerd -> plain");
 assert.equal(rowById(generalRows, "general.minInputRows").apply!(config).editor.minContentRows, 4, "min input rows should cycle 3 -> 4");
 assert.equal(rowById(generalRows, "general.topMarginRows").apply!(config).editor.topMarginRows, 2, "top spacing should cycle 1 row -> 2 rows");
 assert.equal(generalRows.some((row) => row.id === "general.adaptiveWidth"), false, "adaptive width should be always-on and absent from /glance");
-assert.equal(rowById(generalRows, "general.workspaceLabel").apply!(config).display.workspaceLabel, "smart", "workspace label should cycle name -> smart");
+assert.equal(rowById(generalRows, "general.workspaceLabel").apply!(config).display.workspaceLabel, "path", "workspace label should cycle smart -> path");
 
 assert.equal(rowById(gitRows, "git.enabled").apply!(config).segments.find((segment) => segment.id === "git")?.enabled, false, "git enabled should toggle off");
 assert.equal(rowById(gitRows, "git.dirtyMarker").apply!(config).git.showDirty, false, "dirty marker should toggle off");
@@ -444,7 +444,7 @@ const costInfo = rowById(costRows, "cost.display");
 assert.equal(costInfo.apply, undefined, "cost display info row should not expose apply");
 assertConfigUnchanged(infoBefore, config, "reading an info row should not dirty config");
 
-assert.equal(rowById(tokensRows, "tokens.enabled").apply!(config).segments.find((segment) => segment.id === "tokens")?.enabled, true, "tokens enabled should toggle on");
+assert.equal(rowById(tokensRows, "tokens.enabled").apply!(config).segments.find((segment) => segment.id === "tokens")?.enabled, false, "tokens enabled should toggle off");
 assert.equal(rowById(tokensRows, "tokens.display").apply!(config).tokens.display, "total", "tokens display should cycle input-output -> total");
 assert.equal(rowById(tokensRows, "tokens.cache").apply!(config).tokens.cache, "read-write", "tokens cache should cycle rate -> read/write");
 assert.equal(

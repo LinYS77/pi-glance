@@ -66,7 +66,7 @@ await test("default status line should show finalized Model speed between Cost a
 	const state = withThroughput(testState(), sample);
 	assert.equal(
 		plain(state, config, 120),
-		"$0.000 · spd 20 tok/s · ctx 23% 47k/200k · ai GPT 5.5",
+		"󰈸 $0.000 ·  20 tok/s · 󰔟 23% 47k/200k · 󰄨 ↑100 ↓50 󰑐0% · 󰚩 GPT 5.5",
 		"default status line should show finalized Model speed between Cost and Context while keeping Model last",
 	);
 	assert.deepEqual(
@@ -76,7 +76,7 @@ await test("default status line should show finalized Model speed between Cost a
 			{ id: "cost", enabled: true },
 			{ id: "throughput", enabled: true },
 			{ id: "context", enabled: true },
-			{ id: "tokens", enabled: false },
+			{ id: "tokens", enabled: true },
 			{ id: "model", enabled: true },
 		],
 		"default segments should use the curated order Git, Cost, Model speed, Context, Tokens, Model",
@@ -87,7 +87,7 @@ await test("enabled Model speed should show an unknown placeholder until a trust
 	const config = defaultConfig();
 	assert.equal(
 		plain(withThroughput(testState(), null), config, 120),
-		"$0.000 · spd ? tok/s · ctx 23% 47k/200k · ai GPT 5.5",
+		"󰈸 $0.000 ·  ? tok/s · 󰔟 23% 47k/200k · 󰄨 ↑100 ↓50 󰑐0% · 󰚩 GPT 5.5",
 		"enabled Model speed should show an unknown placeholder until a trusted measurement exists",
 	);
 });
@@ -98,7 +98,7 @@ await test("explicitly disabled throughput segment should render nothing, includ
 });
 
 await test("enabled throughput full status should render unknown ? placeholder when both slots are null", async () => {
-	const config = setSegments(defaultConfig(), [{ id: "throughput", enabled: true }]);
+	const config = setSegments({ ...defaultConfig(), icons: "plain" }, [{ id: "throughput", enabled: true }]);
 	assert.equal(plain(withThroughput(testState(), null), config, 120), "spd ? tok/s", "enabled throughput full status should render unknown ? placeholder when both slots are null");
 	assert.equal(plain(withThroughput(testState(), null), config, 80), "spd ?/s", "enabled throughput compact status should render compact ?/s placeholder");
 	assert.equal(plain(withThroughput(testState(), null), config, 48), "spd ?/s", "enabled throughput minimal status should render compact ?/s placeholder");
@@ -108,7 +108,7 @@ await test("enabled throughput full status should render unknown ? placeholder w
 });
 
 await test("enabled throughput full status should render final plain icon plus tok/s copy", async () => {
-	const config = setSegments(defaultConfig(), [{ id: "throughput", enabled: true }]);
+	const config = setSegments({ ...defaultConfig(), icons: "plain" }, [{ id: "throughput", enabled: true }]);
 	const state = withThroughput(testState(), sample);
 	assert.equal(plain(state, config, 120), "spd 20 tok/s", "enabled throughput full status should render final plain icon plus tok/s copy");
 	assert.equal(plain(state, config, 80), "spd 20/s", "enabled throughput compact status should render final compact /s copy");
@@ -116,7 +116,7 @@ await test("enabled throughput full status should render final plain icon plus t
 });
 
 await test("currentRun should win over lastRun and render with a provisional ~ marker in full width", async () => {
-	const config = setSegments(defaultConfig(), [{ id: "throughput", enabled: true }]);
+	const config = setSegments({ ...defaultConfig(), icons: "plain" }, [{ id: "throughput", enabled: true }]);
 	const current = turn(42);
 	const state = withThroughput(testState(), sample, current);
 	assert.equal(plain(state, config, 120), "spd ~42 tok/s", "currentRun should win over lastRun and render with a provisional ~ marker in full width");
@@ -124,7 +124,7 @@ await test("currentRun should win over lastRun and render with a provisional ~ m
 });
 
 await test("invalid currentRun should fall back to a valid final lastRun", async () => {
-	const config = setSegments(defaultConfig(), [{ id: "throughput", enabled: true }]);
+	const config = setSegments({ ...defaultConfig(), icons: "plain" }, [{ id: "throughput", enabled: true }]);
 	const invalidCurrent = turn(0);
 	const invalidFinal = turn(Number.NaN);
 	assert.equal(plain(withThroughput(testState(), sample, invalidCurrent), config, 120), "spd 20 tok/s", "invalid currentRun should fall back to a valid final lastRun");
@@ -132,13 +132,13 @@ await test("invalid currentRun should fall back to a valid final lastRun", async
 });
 
 await test("precision auto should keep one decimal below 10 tok/s", async () => {
-	const config = setSegments(defaultConfig(), [{ id: "throughput", enabled: true }]);
+	const config = setSegments({ ...defaultConfig(), icons: "plain" }, [{ id: "throughput", enabled: true }]);
 	assert.equal(plain(withThroughput(testState(), turn(7.04)), setPrecision(config, "auto"), 120), "spd 7.0 tok/s", "precision auto should keep one decimal below 10 tok/s");
-	assert.equal(plain(withThroughput(testState(), turn(42.4)), setPrecision(defaultConfig(), "auto"), 120), "$0.000 · spd 42 tok/s · ctx 23% 47k/200k · ai GPT 5.5", "precision auto should round integer-rate values at normal widths");
+	assert.equal(plain(withThroughput(testState(), turn(42.4)), setPrecision(defaultConfig(), "auto"), 120), "󰈸 $0.000 ·  42 tok/s · 󰔟 23% 47k/200k · 󰄨 ↑100 ↓50 󰑐0% · 󰚩 GPT 5.5", "precision auto should round integer-rate values at normal widths");
 });
 
 await test("precision=1 should force one decimal for low rates", async () => {
-	const config = setSegments(setPrecision(defaultConfig(), 1), [{ id: "throughput", enabled: true }]);
+	const config = setSegments(setPrecision({ ...defaultConfig(), icons: "plain" }, 1), [{ id: "throughput", enabled: true }]);
 	assert.equal(plain(withThroughput(testState(), turn(7)), config, 120), "spd 7.0 tok/s", "precision=1 should force one decimal for low rates");
 	assert.equal(plain(withThroughput(testState(), turn(42)), config, 120), "spd 42.0 tok/s", "precision=1 should force one decimal for normal rates");
 	assert.equal(plain(withThroughput(testState(), turn(1_234)), config, 120), "spd 1.2k tok/s", "precision=1 should apply to compact k mantissas for large rates");
@@ -146,7 +146,7 @@ await test("precision=1 should force one decimal for low rates", async () => {
 });
 
 await test("precision=0 should round to integer for low rates", async () => {
-	const config = setSegments(setPrecision(defaultConfig(), 0), [{ id: "throughput", enabled: true }]);
+	const config = setSegments(setPrecision({ ...defaultConfig(), icons: "plain" }, 0), [{ id: "throughput", enabled: true }]);
 	assert.equal(plain(withThroughput(testState(), turn(7.4)), config, 120), "spd 7 tok/s", "precision=0 should round to integer for low rates");
 	assert.equal(plain(withThroughput(testState(), turn(42.4)), config, 120), "spd 42 tok/s", "precision=0 should round to integer for normal rates");
 	assert.equal(plain(withThroughput(testState(), turn(1_234)), config, 120), "spd 1k tok/s", "precision=0 should apply to compact k mantissas for large rates");
@@ -164,18 +164,20 @@ await test("roomy default-order status should include Git when available", async
 		sample,
 	);
 	const roomy = plain(richState, config, 160);
-	assert.ok(roomy.includes("git main *"), "roomy default-order status should include Git when available");
-	assert.ok(roomy.includes("spd 20 tok/s"), "roomy default-order status should include Model speed by default");
-	assert.ok(roomy.includes("ai GPT 5.5 high"), "roomy default-order status should include Model");
-	assert.ok(roomy.indexOf("$0.042") < roomy.indexOf("spd 20 tok/s"), "Cost should render before Model speed by default");
-	assert.ok(roomy.indexOf("spd 20 tok/s") < roomy.indexOf("ctx 23% 47k/200k"), "Model speed should render before Context by default");
-	assert.ok(roomy.indexOf("ctx 23% 47k/200k") < roomy.indexOf("ai GPT 5.5 high"), "Context should render before final Model by default");
+	assert.ok(roomy.includes(" main ●"), "roomy default-order status should include Git when available");
+	assert.ok(roomy.includes(" 20 tok/s"), "roomy default-order status should include Model speed by default");
+	assert.ok(roomy.includes("󰚩 GPT 5.5 high"), "roomy default-order status should include Model");
+	assert.ok(roomy.includes("󰄨 ↑12k ↓3.1k 󰑐6%"), "roomy default-order status should include Tokens and cache rate");
+	assert.ok(roomy.indexOf("$0.042") < roomy.indexOf(" 20 tok/s"), "Cost should render before Model speed by default");
+	assert.ok(roomy.indexOf(" 20 tok/s") < roomy.indexOf("󰔟 23% 47k/200k"), "Model speed should render before Context by default");
+	assert.ok(roomy.indexOf("󰔟 23% 47k/200k") < roomy.indexOf("󰄨 ↑12k ↓3.1k 󰑐6%"), "Tokens should render after Context by default");
+	assert.ok(roomy.indexOf("󰄨 ↑12k ↓3.1k 󰑐6%") < roomy.indexOf("󰚩 GPT 5.5 high"), "Model should stay last after Tokens");
 
-	const withTokens = defaultConfig();
-	withTokens.segments = withTokens.segments.map((segment) => segment.id === "tokens" ? { ...segment, enabled: true } : segment);
-	const tokenLine = plain(richState, withTokens, 180);
-	assert.ok(tokenLine.indexOf("ctx 23% 47k/200k") < tokenLine.indexOf("tok ↑12k ↓3.1k 6%"), "enabled Tokens should render after Context by default");
-	assert.ok(tokenLine.indexOf("tok ↑12k ↓3.1k 6%") < tokenLine.indexOf("ai GPT 5.5 high"), "Model should stay last when Tokens are enabled");
+	const withoutTokens = defaultConfig();
+	withoutTokens.segments.find((segment) => segment.id === "tokens")!.enabled = false;
+	const tokenLine = plain(richState, withoutTokens, 180);
+	assert.ok(!tokenLine.includes("󰄨"), "explicitly disabled Tokens should stay hidden");
+	assert.ok(tokenLine.includes("󰚩 GPT 5.5 high"), "disabling Tokens should retain the final Model");
 
 	const narrow = plain(richState, config, 48);
 	assert.ok(visibleWidth(narrow) <= 48, "fitted status line should stay within width budget");

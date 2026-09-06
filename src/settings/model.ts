@@ -500,7 +500,7 @@ export function updatePaneModel(model: PaneModelState, intent: PaneIntent): Pane
 					focus: "categories",
 					categoryIndex: 0,
 					settingIndex: 0,
-					status: "Defaults restored locally. Press S to save or Esc to discard.",
+					status: "Defaults restored. Press S to save or Esc to cancel.",
 					subview: "settings",
 					themeBrowser: undefined,
 				},

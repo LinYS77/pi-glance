@@ -31,6 +31,7 @@ function stateWithGit(git: Partial<GitSnapshot>) {
 
 function gitLine(git: Partial<GitSnapshot>, mutateConfig?: (config: ReturnType<typeof defaultConfig>) => void, width = 120): string {
 	const config = defaultConfig();
+	config.icons = "plain";
 	config.segments = config.segments.map((segment) => ({ ...segment, enabled: segment.id === "git" }));
 	mutateConfig?.(config);
 	return stripControls(renderGlanceLine(stateWithGit(git), config, width));
@@ -57,6 +58,8 @@ assert.equal(
 );
 assert.equal(gitLine({ status: "conflict", dirty: true, conflicts: 1 }, undefined), "git main !", "conflict marker defaults on");
 assert.equal(gitLine({ ahead: 2, behind: 1 }), "git main ↑2 ↓1", "ahead/behind defaults on");
+assert.equal(gitLine({ status: "dirty", dirty: true, ahead: 2, behind: 1 }, undefined, 80), "git main *", "compact Git keeps branch/state and folds upstream detail");
+assert.equal(gitLine({ status: "conflict", conflicts: 1, ahead: 2 }, config => { config.git.showDirty = false; }, 80), "git main !", "compact Git must retain conflicts even with dirty markers disabled");
 assert.equal(gitLine({ status: "dirty", dirty: true, unstaged: 1, ahead: 2, behind: 1 }, undefined, 48), "git main *", "minimal git keeps status over upstream counts");
 assert.equal(
 	gitLine({ ahead: 2, behind: 1 }, (config) => {

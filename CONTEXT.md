@@ -166,11 +166,43 @@ Pi has no public footer getter or zero-height hidden footer. An empty footer row
 
 `editor.workingSweep` defaults to `true`, including when older configs omit the field. `/glance` → General → Working animation controls it. Saving changes takes effect on the current editor without replacing its factory or clearing input. Cancelling the pane, a failed save, or a read-only config leaves the active setting unchanged. The settings pane animates its preview only while this row is focused and enabled, and disposes the preview clock on close. `npm run preview:working` remains a standalone development preview without model calls or installation changes.
 
-The beam crosses only the left region, in a 2–3.6 second cycle with a broad bold core and feathered edges. Title and connector use the same intensity. The palette adapter chooses a contrasting neutral peak using the theme's declared light/dark tone and the actual RGB/ANSI256 foreground. Contrast tests cover all 22 themes, including already-dark/light high-contrast colors. Black/white reference backgrounds are used for these tests; no terminal-background query is made. Unlit text retains its original color. All right-hand status bytes, their trailing border, corners, scroll labels, the editor body, bottom edge, and Pi's Bash border callback stay unchanged.
+The beam crosses only the left region, in a 2–3.6 second cycle with a broad bold core and feathered edges. `src/theme/working-colors.ts` assigns one chromatic accent per palette; title and connector share that peak and intensity. Tests check Oklab color separation from both original foregrounds and at least 4.5:1 peak contrast on reference backgrounds in RGB and ANSI256. Reference backgrounds include black/white and `#282828`/`#f5f5f5`; no terminal-background query is made, so arbitrary terminal backgrounds are not guaranteed. The radius is bounded to 9–28 columns, with a wider flat core and smooth edges. Unlit text retains its original color. All right-hand status bytes, their trailing border, corners, scroll labels, the editor body, bottom edge, and Pi's Bash border callback stay unchanged.
 
 `src/runtime/working-sweep.ts` owns the 30 FPS display clock and ordinary Working-row visibility. It runs only while Glance owns the editor, pauses for blocking UI, and stops at `agent_settled` when Pi is idle. Disabling the effect or Glance restores the native Working row. Re-enabling during a prompt waits for `ui_prompt_end` before animating. Retry and compaction notices remain Pi-owned. Pi has no getter for Working-row visibility, so Glance cannot restore a different extension's prior hidden-row preference.
 
 The live editor retains its original status-string cache; animation does not recolor or collect status facts. `src/surface/top-edge-sweep.ts` shades only glyphs near the beam and emits unlit text in bulk. Unicode measurements have a bounded cache (32 strings, at most 1,024 UTF-16 units each); palette/gradient resources are reused by theme and color mode. The width stops before the status area. Animation does not share the Model speed clock, invalidate its data, or replay missed frames after a blocked event loop.
+
+## Status density
+
+`src/surface/status-line.ts` selects one shared density from the available status columns: full at 96 or more, compact at 64–95, minimal below 64. These are status-area columns after the workspace title, not terminal-width or monitor fractions. The settings pane can explicitly preview the same modes. Every feature receives that density; individual segments do not invent independent breakpoints.
+
+The shared meaning is **details → primary facts → identity/essential state**, not a requirement to shorten every value three times. With default settings:
+
+| Segment | Full | Compact | Minimal |
+| --- | --- | --- | --- |
+| Git | Branch, dirty/conflict marker, upstream counts | Branch and dirty/conflict marker | Same as compact |
+| Cost | Compact USD | Same | Same |
+| Model speed | `43 tok/s` | `43/s` | Same as compact |
+| Context | Percentage and token capacity | Percentage | Same as compact |
+| Tokens | Input/output and cache rate | Cache rate | Same as compact |
+| Model | Provider/name and Thinking | Complete model name | Model name without a matching Provider prefix |
+
+Explicit content choices still apply, such as Context tokens-only, Git SHA always, and Model labels set to always. Unknown/zero values, conflicts and Context warning colors retain their existing meaning. `tests/surface/test-status-density.ts` checks the joint six-segment matrix, shared breakpoints, actual half-screen frames and these exceptions.
+
+## Model fitting
+
+Automatic model labels keep four semantic alternatives:
+
+```text
+TEAM/team-gpt-6-astra xhigh
+team-gpt-6-astra xhigh
+team-gpt-6-astra
+gpt-6-astra
+```
+
+The shared densities start at alternatives 1, 3 and 4 respectively. Alternative 2 is an intermediate overflow fallback within full density, not the default compact label. If the label still does not fit, try the remaining shorter alternatives in order. The final tier removes exactly one leading `<provider>-` prefix, matched case-insensitively against the current provider. Other prefixes, occurrences inside the name, an empty remainder, and configured custom aliases are left intact. Explicit `always` labels remain attached at every tier. There are no fixed per-density name-length caps.
+
+`src/segments/model.ts` supplies these alternatives as data; `src/segments/render.ts` measures columns and truncates at grapheme boundaries. The status-line fitter tries them before removing the segment. It keeps configured priority: earlier facts are not shortened or dropped to preserve later ones. Only after the shortest applicable tier fails to fit does the renderer use grapheme-safe middle ellipsis. An ellipsized name needs at least seven available columns; otherwise the trailing segment is removed. The last remaining segment retains the emergency width-safe clipping behavior at tiny widths. Growing the terminal re-renders from the full state, not the previously shortened string. The live status cache keeps this work off animation frames.
 
 ## Theme selection
 
@@ -197,6 +229,7 @@ At extremely narrow widths, the inherited editor is given enough room for a two-
 ## Configuration
 
 - Current on-disk schema version: `9`.
+- New-install and settings-reset defaults use Nerd Font icons, smart workspace paths, one top-margin row, and all six segments enabled. Other defaults include a three-row editor, Working animation on, light/dark palette slots, input/output Tokens with cache rate, and automatic provider/thinking labels. Defaults fill missing or invalid values; valid saved choices are preserved. Changing defaults does not change the schema version.
 - Missing or invalid `editor.workingSweep` defaults to `true`; explicit `false` is preserved. Migration is in memory and writes only on an explicit save.
 - Legacy theme strings migrate to the same palette in both slots.
 - Legacy Tokens Cache values migrate as `auto -> rate` and `show -> read-write`.
@@ -219,4 +252,12 @@ At extremely narrow widths, the inherited editor is given enough room for a two-
 
 ## Repository files
 
-`docs/` contains local notes and is ignored by Git. Published release notes are available in GitHub Releases; the tag workflow reads the current notes from `.github/release-notes/`. Test build output and npm tarballs are also ignored.
+`package.json`'s `files` list controls the npm package contents. Only runtime TypeScript, READMEs, the manifest and license are shipped; tests, scripts, assets and local state stay out of the tarball. The package-content test checks this exact file list.
+
+`docs/` and `.pi/` are reserved for local notes and Pi settings and are ignored by Git. `.github/release-notes/` keeps the current release notes; previous versions remain in Git history and GitHub Releases. `npm run clean` removes only `.tmp-test/`, leaving dependencies, local settings and release tarballs intact. `npm run build:dev` cleans before compiling.
+
+`npm ci`, `npm run check` and `npm test` install dependencies, typecheck, and run the full test suite. Use `npm run pack:dry` to inspect the package or `npm pack` to create a release tarball.
+
+Developer utilities:
+- `npm run debug:git -- /path/to/repo` prints a Git snapshot.
+- `npm run preview:working` previews Working animation and status density without model calls or configuration writes. Use Left/Right for palettes, `C` for color depth, and resize the terminal to check fitting.

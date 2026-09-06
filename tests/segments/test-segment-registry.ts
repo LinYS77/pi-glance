@@ -19,7 +19,7 @@ const EXPECTED_DEFAULT_SEGMENTS: SegmentConfig[] = [
 	{ id: "cost", enabled: true },
 	{ id: "throughput", enabled: true },
 	{ id: "context", enabled: true },
-	{ id: "tokens", enabled: false },
+	{ id: "tokens", enabled: true },
 	{ id: "model", enabled: true },
 ];
 

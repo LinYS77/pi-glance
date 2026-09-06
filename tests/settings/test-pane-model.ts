@@ -107,7 +107,7 @@ assert.deepEqual(
 		{ id: "cost", label: "Cost", enabled: true, selected: false },
 		{ id: "throughput", label: "Model speed", enabled: true, selected: false },
 		{ id: "context", label: "Context", enabled: true, selected: false },
-		{ id: "tokens", label: "Tokens", enabled: false, selected: false },
+		{ id: "tokens", label: "Tokens", enabled: true, selected: false },
 		{ id: "model", label: "Model", enabled: true, selected: false },
 	],
 	"view categories should start with General and then follow config.segments order/enabled flags",
@@ -380,7 +380,7 @@ assert.equal(resetFromThemeBrowser.model.subview, "settings", "reset from theme 
 assert.equal(resetFromThemeBrowser.model.themeBrowser, undefined, "reset from theme browser should clear browser state");
 assert.deepEqual(resetFromThemeBrowser.model.draft, defaultConfig(), "reset from theme browser should restore default config through the existing reset path");
 assert.equal(resetFromThemeBrowser.model.focus, "categories", "reset from theme browser should restore category focus like existing reset");
-assert.equal(resetFromThemeBrowser.model.status, "Defaults restored locally. Press S to save or Esc to discard.", "reset from theme browser should keep existing reset status copy");
+assert.equal(resetFromThemeBrowser.model.status, "Defaults restored. Press S to save or Esc to cancel.", "reset from theme browser should explain saving or cancelling");
 
 const restoredFromBack = updatePaneModel(previewedLightSlotTheme.model, { type: "back" });
 assert.equal(restoredFromBack.requestRender, true, "Esc/back in theme browser should request render");
@@ -490,6 +490,10 @@ assert.equal(toggledEnabled.model.draft.enabled, false, "mutating save completio
 
 const nonDefaultInitial = cloneConfig(config);
 nonDefaultInitial.enabled = false;
+nonDefaultInitial.icons = "plain";
+nonDefaultInitial.editor.topMarginRows = 0;
+nonDefaultInitial.display.workspaceLabel = "name";
+nonDefaultInitial.segments.find((segment) => segment.id === "tokens")!.enabled = false;
 nonDefaultInitial.segments = [...nonDefaultInitial.segments].reverse();
 const resetStart = withFocus(createPaneModel(nonDefaultInitial), "values", 4, 2);
 const resetResult = updatePaneModel(resetStart, { type: "resetDefaults" });
@@ -500,8 +504,13 @@ assert.deepEqual(resetResult.model.initial, nonDefaultInitial, "reset should kee
 assert.equal(resetResult.model.focus, "categories", "reset should return focus to categories");
 assert.equal(resetResult.model.categoryIndex, 0, "reset should select General");
 assert.equal(resetResult.model.settingIndex, 0, "reset should select the first setting row");
-assert.equal(resetResult.model.status, "Defaults restored locally. Press S to save or Esc to discard.", "reset should show local restore status");
+assert.equal(resetResult.model.status, "Defaults restored. Press S to save or Esc to cancel.", "reset should explain saving or cancelling");
 assert.equal(paneIsDirty(resetResult.model), true, "reset from a non-default initial config should be dirty until saved");
+const saveReset = updatePaneModel(resetResult.model, { type: "save" });
+assert.equal(saveReset.completion?.action, "save");
+if (saveReset.completion?.action !== "save") throw new Error("reset save completion missing");
+assert.deepEqual(saveReset.completion.config, defaultConfig(), "saving a reset should use the same defaults as a new installation");
+assertCancel(updatePaneModel(resetResult.model, { type: "cancel" }), "cancelling a reset should discard the new defaults");
 
 const valuesFocus = withFocus(model, "values", 1, 2);
 const backFromValues = updatePaneModel(valuesFocus, { type: "back" });

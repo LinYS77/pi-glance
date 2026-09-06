@@ -48,12 +48,14 @@ function collectGit(ctx: SegmentRenderContext): SegmentData | undefined {
 	const branch = gitBranchLabel(ctx);
 	const parts = gitDetailParts(ctx);
 	const secondary = parts.join(" ") || undefined;
-	const minimalStatus = git.status === "conflict" || ctx.config.git.showDirty ? gitStatusMark(ctx) : "";
+	const coreStatus = git.status === "conflict" || ctx.config.git.showDirty ? gitStatusMark(ctx) : "";
+	const core = [branch, coreStatus].filter(Boolean).join(" ");
 	return {
 		primary: branch,
 		secondary,
 		display: {
-			minimal: [branch, minimalStatus].filter(Boolean).join(" "),
+			compact: core,
+			minimal: core,
 		},
 	};
 }

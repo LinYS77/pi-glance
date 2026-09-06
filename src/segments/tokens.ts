@@ -79,7 +79,7 @@ function collectTokens(ctx: SegmentRenderContext): SegmentData | undefined {
 export const tokensSegmentFeature = {
 	id: "tokens",
 	label: "Tokens",
-	defaultEnabled: false,
+	defaultEnabled: true,
 	settings: [
 		{
 			id: "tokens.display",

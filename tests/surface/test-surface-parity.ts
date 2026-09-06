@@ -368,6 +368,8 @@ for (const themeId of EDITOR_STYLE_PARITY_THEMES) {
 	for (const width of [56, 120] as const) {
 		for (const focused of [true, false] as const) {
 			const config = defaultConfig();
+			config.icons = "plain";
+			config.display.workspaceLabel = "name";
 			useTheme(config, themeId);
 			config.editor.topMarginRows = 0;
 			config.editor.minContentRows = 2;
@@ -402,6 +404,7 @@ for (const themeId of EDITOR_STYLE_PARITY_THEMES) {
 await test("initial live status should use light model bytes", async () => {
 	const state = editorStyleState;
 	const config = defaultConfig();
+	config.icons = "plain";
 	useTheme(config, "light");
 	config.editor.topMarginRows = 0;
 	onlySegments(config, ["model"]);
@@ -418,6 +421,7 @@ await test("initial live status should use light model bytes", async () => {
 await test("live editor should evaluate getAmbientTone during render for light status bytes", async () => {
 	const state = editorStyleState;
 	const config = defaultConfig();
+	config.icons = "plain";
 	config.theme = { light: "light", dark: "dark" };
 	config.editor.topMarginRows = 0;
 	onlySegments(config, ["model"]);
@@ -444,6 +448,7 @@ await test("live editor should evaluate getAmbientTone during render for light s
 await test("live editor should initially render truecolor status bytes", async () => {
 	const state = editorStyleState;
 	const config = defaultConfig();
+	config.icons = "plain";
 	useTheme(config, "light");
 	config.editor.topMarginRows = 0;
 	onlySegments(config, ["model"]);
@@ -470,6 +475,7 @@ await test("live editor should initially render truecolor status bytes", async (
 await test("injected built-in editor style context should style live status through the generic context", async () => {
 	const state = editorStyleState;
 	const config = defaultConfig();
+	config.icons = "plain";
 	useTheme(config, "light");
 	config.editor.topMarginRows = 0;
 	onlySegments(config, ["model"]);
@@ -503,7 +509,7 @@ interface Scenario {
 
 const scenarios: Scenario[] = [
 	{
-		name: "default dirty plain provider2 long model",
+		name: "default dirty Nerd Font provider2 long model",
 		state: dirtyState(),
 	},
 	{
@@ -517,10 +523,10 @@ const scenarios: Scenario[] = [
 		configure: (config) => onlySegments(config, ["git"]),
 	},
 	{
-		name: "workspace label smart",
+		name: "workspace label name",
 		state: dirtyState(),
 		configure: (config) => {
-			config.display.workspaceLabel = "smart";
+			config.display.workspaceLabel = "name";
 		},
 	},
 	{
@@ -531,10 +537,10 @@ const scenarios: Scenario[] = [
 		},
 	},
 	{
-		name: "nerd icons",
+		name: "plain icons",
 		state: dirtyState(),
 		configure: (config) => {
-			config.icons = "nerd";
+			config.icons = "plain";
 		},
 	},
 ];

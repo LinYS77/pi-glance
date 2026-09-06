@@ -92,7 +92,7 @@ function assertFullscreenFrame(width: number, label: string): string {
 }
 
 const initialFrame = assertFullscreenFrame(120, "initial /thinking state");
-assert.ok(initialFrame.includes("ai GPT 5.6 sol"), "fullscreen Glance status should show the current model");
+assert.ok(initialFrame.includes("󰚩 GPT 5.6 sol"), "fullscreen Glance status should show the current model");
 assert.equal(initialFrame.includes("GPT 5.6 sol max"), false, "thinking off should not add a label before /thinking changes it");
 
 const renderBaseline = fullscreenRenderRequests;
@@ -104,7 +104,7 @@ await harness.runtime.events.thinkingLevelSelect(
 	test.ctx as ExtensionContext,
 );
 const maxFrame = assertFullscreenFrame(120, "Pi /thinking max");
-assert.ok(maxFrame.includes("ai GPT 5.6 sol max"), "Pi /thinking selection should refresh the thinking label in the existing fullscreen editor");
+assert.ok(maxFrame.includes("󰚩 GPT 5.6 sol max"), "Pi /thinking selection should refresh the thinking label in the existing fullscreen editor");
 assert.ok(fullscreenRenderRequests > renderBaseline, "Pi /thinking selection should request a render from the active fullscreen TUI");
 assert.equal(test.getEntryReads(), entryBaseline, "Pi /thinking selection should not rescan persisted session entries");
 assert.equal(test.getBranchReads(), branchBaseline, "Pi /thinking selection should not read the production session branch");
@@ -117,7 +117,7 @@ await harness.runtime.events.thinkingLevelSelect(
 	test.ctx as ExtensionContext,
 );
 const clampedFrame = assertFullscreenFrame(120, "model-clamped /thinking state");
-assert.ok(clampedFrame.includes("ai Mini"), "thinking-level clamp event should refresh the current model through Pi's cheap selector path");
+assert.ok(clampedFrame.includes("󰚩 Mini"), "thinking-level clamp event should refresh the current model through Pi's cheap selector path");
 assert.equal(clampedFrame.includes("Mini max"), false, "thinking-level clamp to off should remove the prior max label");
 
 editor.setText("  !!pwd");

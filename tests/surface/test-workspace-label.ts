@@ -48,7 +48,7 @@ function renderedTop(width: number, mutateConfig?: (config: ReturnType<typeof de
 
 const homePath = `${homedir()}/winnie/00_project/07_pi-glance`;
 
-assert.equal(defaultConfig().display.workspaceLabel, "name", "workspace label defaults to name");
+assert.equal(defaultConfig().display.workspaceLabel, "smart", "workspace label defaults to a smart path");
 assert.equal(formatWorkspaceLabel(homePath, "07_pi-glance", "name", 80), "07_pi-glance", "name mode renders basename");
 assert.equal(formatWorkspaceLabel(homePath, "07_pi-glance", "name", 8), "07_pi-g…", "name mode fits title budget");
 assert.equal(formatWorkspaceLabel(homePath, "07_pi-glance", "smart", 20, 72), "07_pi-glance", "smart narrow renders basename");
@@ -110,7 +110,7 @@ const quietGitTop = stripControls(
 		config.segments = config.segments.map((segment) => ({ ...segment, enabled: segment.id === "git" }));
 	}),
 );
-assert.ok(quietGitTop.includes("git main"), "preview top preserves quiet git segment rendering");
-assert.ok(!quietGitTop.includes("ctx"), "preview top respects enabled segment list");
+assert.ok(quietGitTop.includes(" main"), "preview top preserves quiet git segment rendering");
+assert.ok(!quietGitTop.includes("󰔟"), "preview top respects enabled segment list");
 
 console.log("✓ workspace label checks passed");

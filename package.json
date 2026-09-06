@@ -55,7 +55,8 @@
   },
   "scripts": {
     "check": "tsc --noEmit",
-    "build:dev": "rm -rf .tmp-test && tsc -p tsconfig.test.json",
+    "clean": "node -e \"require('node:fs').rmSync('.tmp-test', { recursive: true, force: true })\"",
+    "build:dev": "npm run clean --silent && tsc -p tsconfig.test.json",
     "test": "npm run test:dev",
     "test:boundaries": "npm run build:dev --silent && node .tmp-test/tests/architecture/test-boundaries.js",
     "test:command-save": "npm run build:dev --silent && node .tmp-test/tests/settings/test-glance-command-save.js",

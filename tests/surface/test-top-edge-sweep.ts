@@ -39,13 +39,42 @@ function contrast(a: Rgb, b: Rgb): number {
 	return (Math.max(first, second) + 0.05) / (Math.min(first, second) + 0.05);
 }
 
+function oklab(color: Rgb): [number, number, number] {
+	const [r, g, b] = [color.r, color.g, color.b].map(value => {
+		const c = value / 255;
+		return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+	}) as [number, number, number];
+	const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
+	const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
+	const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
+	return [0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s, 1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s, 0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s];
+}
+
+test("each theme has one chromatic Working accent distinct from both title and connector", () => {
+	for (const palette of GLANCE_THEMES) for (const mode of ["truecolor", "ansi256"] as const) {
+		const styles = resolveBuiltInGlanceStyles(palette.id, mode);
+		const titlePeak = foreground(styles.highlight!(styles.title, 1)("x"));
+		const borderPeak = foreground(styles.highlight!(styles.border, 1)("x"));
+		assert.deepEqual(titlePeak, borderPeak, `${palette.id}/${mode}: one continuous beam`);
+		const peak = oklab(titlePeak);
+		assert.ok(Math.hypot(peak[1], peak[2]) >= 0.07, `${palette.id}/${mode}: use a colored accent rather than gray`);
+		for (const style of [styles.title, styles.border]) {
+			const base = oklab(foreground(style("x")));
+			const difference = Math.hypot(...peak.map((value, i) => value - base[i]!));
+			assert.ok(difference >= 0.18, `${palette.id}/${mode}: perceptual difference ${difference}`);
+		}
+		const background = palette.tone === "dark" ? { r: 40, g: 40, b: 40 } : { r: 245, g: 245, b: 245 };
+		assert.ok(contrast(titlePeak, background) >= 4.5, `${palette.id}/${mode}: readable on the reference background`);
+	}
+});
+
 test("wide unlit text bypasses per-character highlighting", () => {
 	const styles = resolveBuiltInGlanceStyles("light");
 	let calls = 0;
 	const sweep = createTopEdgeSweep(4000, 1800, { ...styles, highlight: (style, amount) => { calls++; return styles.highlight!(style, amount); } });
 	const text = "─".repeat(4000);
 	assert.equal(stripAnsi(sweep(text, styles.border, 0)), text);
-	assert.ok(calls <= 54, `only the beam and its edges should be evaluated, got ${calls}`);
+	assert.ok(calls <= 62, `only the beam and its edges should be evaluated, got ${calls}`);
 	calls = 0;
 	assert.equal(sweep("unlit path", styles.title, 0), styles.title("unlit path"));
 	assert.equal(calls, 0);
@@ -65,16 +94,14 @@ test("cached Unicode measurements remain correct after changing paths and evicti
 	assert.ok(before[0]!.includes("👩🏽‍💻") && before[0]!.includes("e\u0301"));
 });
 
-test("all themes have a contrasting bold core, not merely different RGB numbers", () => {
+test("all themes retain readable bold cores and feathered transitions", () => {
 	for (const palette of GLANCE_THEMES) for (const mode of ["truecolor", "ansi256"] as const) {
 		const styles = resolveBuiltInGlanceStyles(palette.id, mode);
 		const value = palette.tone === "dark" ? 0 : 255;
 		const background = { r: value, g: value, b: value };
 		for (const style of [styles.border, styles.title]) {
-			const base = foreground(style("x"));
 			const peak = styles.highlight!(style, 1)("x");
 			const color = foreground(peak);
-			assert.ok(contrast(color, base) >= 2.1, `${palette.id}/${mode}: foreground contrast ${contrast(color, base)}`);
 			assert.ok(contrast(color, background) >= 4.5, `${palette.id}/${mode}: core remains readable on the reference background`);
 			assert.ok(peak.startsWith("\x1b[1m") && peak.endsWith("\x1b[22m"), "bold applies only to the core");
 			assert.equal(styles.highlight!(style, 0), style);
@@ -97,12 +124,12 @@ test("a broad core crosses the left region every two to four seconds", () => {
 	for (const width of [20, 80, 160, 400]) {
 		const profile = sweepProfile(width, 0);
 		assert.equal(profile.center, -profile.radius);
-		assert.ok(profile.radius >= 7 && profile.radius <= 24);
+		assert.ok(profile.radius >= 9 && profile.radius <= 28);
 		assert.ok(profile.periodMs >= 2000 && profile.periodMs <= 3600);
 		const intensities: number[] = [];
 		const sweep = createTopEdgeSweep(width, profile.periodMs / 2, { ...styles, highlight: (style, amount) => { intensities.push(amount); return style; } });
 		sweep("─".repeat(width), styles.border, 0);
-		assert.ok(intensities.filter(value => value === 1).length >= 4, "visible core spans multiple characters");
+		assert.ok(intensities.filter(value => value === 1).length >= 8, "visible core spans at least eight characters");
 		assert.ok(intensities.some(value => value > 0 && value < 1));
 		if (width >= 80) assert.equal(intensities[0], 0, "no whole-region flashing");
 	}
@@ -112,7 +139,7 @@ test("path and line share one beam without splitting Unicode graphemes", () => {
 	const styles = resolveBuiltInGlanceStyles("dark");
 	const whole: number[] = [], split: number[] = [];
 	const a = "路径/👩🏽‍💻/e\u0301 ", b = "────────────────";
-	const record = (out: number[]) => createTopEdgeSweep(80, 800, { ...styles, highlight: (style, amount) => { out.push(amount); return style; } });
+	const record = (out: number[]) => createTopEdgeSweep(80, 800, { ...styles, highlight: (style, amount) => { if (amount > 0) out.push(amount); return style; } });
 	record(whole)(a + b, styles.title, 0);
 	record(split)(a, styles.title, 0);
 	record(split)(b, styles.border, visibleWidth(a));

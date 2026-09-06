@@ -49,7 +49,7 @@ assertSegments(
 		{ id: "cost", enabled: true },
 		{ id: "throughput", enabled: true },
 		{ id: "context", enabled: true },
-		{ id: "tokens", enabled: false },
+		{ id: "tokens", enabled: true },
 		{ id: "model", enabled: true },
 	],
 	"default segment order should put enabled throughput between Cost and Context while keeping Model last",
@@ -113,7 +113,7 @@ assertSegments(
 		{ id: "model", enabled: false },
 		{ id: "cost", enabled: true },
 		{ id: "context", enabled: true },
-		{ id: "tokens", enabled: false },
+		{ id: "tokens", enabled: true },
 	],
 	"schema v4 configs should preserve an explicitly enabled throughput segment and append other missing defaults after user order",
 );

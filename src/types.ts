@@ -199,6 +199,11 @@ export interface SegmentData {
 	primary: string;
 	secondary?: string;
 	display?: SegmentDisplay;
+	/** Ordered shorter labels, followed by a name that can be middle-ellipsized. */
+	fit?: {
+		alternatives: readonly string[];
+		name: { prefix: string; value: string; suffix: string };
+	};
 }
 
 export interface SegmentRenderContext {
@@ -213,6 +218,8 @@ export interface SegmentRenderResult {
 	id: SegmentId;
 	text: string;
 	tone: SegmentTone;
+	/** Returns a meaningful label within the available columns, or no fit. */
+	fit?: (width: number) => string | undefined;
 }
 
 export interface SegmentDefinition {

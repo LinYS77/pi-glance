@@ -175,7 +175,7 @@ export function getSettingsRows(config: GlanceConfig, categoryId: SettingsCatego
 						}),
 					{ opensSubview: "themeBrowser", themeSlot: "dark" },
 				),
-				cycleRow("general.icons", "Icons", config.icons, "Plain text or Nerd Font icons with fallback.", (draft) =>
+				cycleRow("general.icons", "Icons", config.icons, "Choose plain if you don't use a Nerd Font.", (draft) =>
 					withConfig(draft, (next) => {
 						next.icons = nextOption(next.icons, ICON_MODE_VALUES);
 					}),
