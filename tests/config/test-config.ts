@@ -186,7 +186,7 @@ assert.deepEqual(
 		editor: {
 			minContentRows: 4,
 			topMarginRows: 2,
-			workingSweep: "top",
+			workingSweep: "perimeter",
 		},
 		display: {
 			showProvider: "always",

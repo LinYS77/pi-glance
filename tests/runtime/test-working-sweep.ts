@@ -85,7 +85,7 @@ test("losing the editor returns native Working; reentrant settlement cannot re-a
 	}
 });
 
-test("default-on runtime keeps animation separate from usage, Git and the model-speed clock", async () => {
+test("default full-border runtime keeps animation separate from usage, Git and the model-speed clock", async () => {
 	const time = clock(), git = createGitHarness(), ctx = createRuntimeTestContext();
 	const config = defaultConfig(); config.editor.topMarginRows = 0;
 	const harness = createRuntimeHarness({ workingSweepNowMs: time.now, nowMs: () => { throw new Error("animation read the model-speed clock"); }, scheduleSweepFrame: time.schedule, git, loadConfigSyncConfig: config });
@@ -98,11 +98,18 @@ test("default-on runtime keeps animation separate from usage, Git and the model-
 	const reads = ctx.getEntryReads(), schedules = [...git.schedules];
 	ctx.setIdle(false);
 	events.agentStart({}, ctx.ctx);
-	time.advance(1600);
+	assert.equal(config.editor.workingSweep, "perimeter");
 	const active = editor.render(180);
 	assert.notEqual(active[0], idle[0]);
 	assert.deepEqual(active.map(stripAnsi), idle.map(stripAnsi));
-	assert.deepEqual(active.slice(1), idle.slice(1));
+	let bottomChanges = 0;
+	for (let i = 0; i < 25; i++) {
+		time.advance(200);
+		const frame = editor.render(180);
+		assert.deepEqual(frame.map(stripAnsi), idle.map(stripAnsi));
+		if (frame.at(-1) !== idle.at(-1)) bottomChanges++;
+	}
+	assert.ok(bottomChanges > 5, "the default animates the full border");
 	assert.equal(ctx.getEntryReads(), reads);
 	assert.deepEqual(git.schedules, schedules);
 	await events.agentEnd({ messages: [] }, ctx.ctx);
@@ -188,6 +195,7 @@ test("saving the Working setting toggles in place and respects an already-open p
 test("saving perimeter mode changes the current editor without replacing its clock or draft", async () => {
 	const time = clock(), ctx = createRuntimeTestContext({ idle: false });
 	const config = defaultConfig(); config.editor.topMarginRows = 0;
+	config.editor.workingSweep = "top";
 	const perimeter = structuredClone(config); perimeter.editor.workingSweep = "perimeter";
 	const harness = createRuntimeHarness({ workingSweepNowMs: time.now, scheduleSweepFrame: time.schedule, git: createGitHarness(), loadConfigSyncConfig: config,
 		showPaneResults: [{ action: "save", config: perimeter }, { action: "cancel" }, { action: "save", config }] });
@@ -230,7 +238,7 @@ test("saving perimeter mode changes the current editor without replacing its clo
 	assert.deepEqual(ctx.workingVisibility, [false, true]);
 });
 
-for (const mode of ["off", "perimeter"] as const) for (const failure of ["write-error", "read-only"] as const) {
+for (const mode of ["off", "top"] as const) for (const failure of ["write-error", "read-only"] as const) {
 	test(`failed Working setting save preserves the running configuration: ${mode}/${failure}`, async () => {
 		const time = clock(), ctx = createRuntimeTestContext({ idle: false });
 		const config = defaultConfig(), draft = structuredClone(config); draft.editor.workingSweep = mode;

@@ -238,7 +238,7 @@ const generalRows = assertRows(config, "general", [
 	{
 		id: "general.workingSweep",
 		label: "Working animation",
-		value: "top edge",
+		value: "full border",
 		hint: "Top edge, full border, or Pi's Working indicator.",
 		kind: "cycle",
 	},

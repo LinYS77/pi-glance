@@ -164,9 +164,9 @@ Pi has no public footer getter or zero-height hidden footer. An empty footer row
 
 ## Working animation
 
-`editor.workingSweep` offers `top` (default), `perimeter`, and `off`. `/glance` → General → Working animation displays them as `top edge`, `full border`, and `off`. Saving changes takes effect on the current editor without replacing its factory or clearing input. Cancelling the pane, a failed save, or a read-only config leaves the active setting unchanged. The settings pane animates its preview only while this row is focused and not off, and disposes the preview clock on close. `npm run preview:working -- --perimeter` previews the loop without model calls, installation changes, or configuration writes.
+`editor.workingSweep` offers `top`, `perimeter` (default), and `off`. `/glance` → General → Working animation displays them as `top edge`, `full border`, and `off`. Saving changes takes effect on the current editor without replacing its factory or clearing input. Cancelling the pane, a failed save, or a read-only config leaves the active setting unchanged. The settings pane animates its preview only while this row is focused and not off, and disposes the preview clock on close. `npm run preview:working -- --perimeter` previews the loop without model calls, installation changes, or configuration writes.
 
-Both modes move at **45 horizontal columns per second**, defined once by `sweepMotion` in `src/surface/sweep.ts`. The 30 FPS clock is unchanged. Cycle time comes from route length rather than separate duration limits, so resizing, editor height and status fitting do not change travel speed. Top-edge travel includes the feathered entrance and exit beyond its visible region; the perimeter is closed and has no off-frame interval.
+Both modes move at **47 horizontal columns per second**, defined once by `sweepMotion` in `src/surface/sweep.ts`. The 30 FPS clock is unchanged. Cycle time comes from route length rather than separate duration limits, so resizing, editor height and status fitting do not change travel speed. Top-edge travel includes the feathered entrance and exit beyond its visible region; the perimeter is closed and has no off-frame interval.
 
 Top-edge mode crosses the title and its connector; corners, right-hand status, scroll labels and other edges remain unchanged. Perimeter mode follows one clockwise closed path through the title, visible top border, corners, sides and bottom. It uses circular distance for a seamless wrap, including the feathered tail. One vertical row counts as two horizontal cells to approximate terminal-cell proportions. The loop uses the actual rendered body height, excluding top spacing and autocomplete. Status text and its surrounding spaces do not consume path distance: the beam bridges that gap instead of disappearing behind metadata. Status bytes and scroll labels remain unchanged in both modes.
 
@@ -233,8 +233,8 @@ At extremely narrow widths, the inherited editor is given enough room for a two-
 ## Configuration
 
 - Current on-disk schema version: `10`.
-- New-install and settings-reset defaults use Nerd Font icons, smart workspace paths, one top-margin row, and all six segments enabled. Other defaults include a three-row editor, Working animation on, light/dark palette slots, input/output Tokens with cache rate, and automatic provider/thinking labels. Defaults fill missing or invalid values; valid saved choices are preserved. Changing defaults does not change the schema version.
-- Missing or invalid `editor.workingSweep` defaults to `top`; legacy `true` becomes `top` and `false` becomes `off`. Migration is in memory and writes only on an explicit save.
+- New-install and settings-reset defaults use Nerd Font icons, smart workspace paths, one top-margin row, and all six segments enabled. Other defaults include a three-row editor, full-border Working animation, light/dark palette slots, input/output Tokens with cache rate, and automatic provider/thinking labels. Defaults fill missing or invalid values; valid saved choices are preserved. Changing defaults does not change the schema version.
+- Missing or invalid `editor.workingSweep` defaults to `perimeter`; legacy `true` remains `top` and `false` remains `off`. Explicit saved modes are preserved. Migration is in memory and writes only on an explicit save.
 - Legacy theme strings migrate to the same palette in both slots.
 - Legacy Tokens Cache values migrate as `auto -> rate` and `show -> read-write`.
 - Adaptive width is always on; legacy `display.adaptive` is discarded.

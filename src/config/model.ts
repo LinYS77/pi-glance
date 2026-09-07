@@ -52,7 +52,7 @@ export function defaultConfig(): GlanceConfig {
 		editor: {
 			minContentRows: 3,
 			topMarginRows: 1,
-			workingSweep: "top",
+			workingSweep: "perimeter",
 		},
 		display: {
 			showProvider: "auto",

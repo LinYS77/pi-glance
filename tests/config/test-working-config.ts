@@ -7,11 +7,11 @@ import { cloneConfig, configFromText, configToText, defaultConfig, normalizeConf
 import { createConfigStore } from "../../src/config/store.js";
 import { WORKING_SWEEP_MODE_VALUES } from "../../src/config/options.js";
 
-test("Working animation defaults to the top edge and round-trips all three modes", () => {
-	assert.equal(defaultConfig().editor.workingSweep, "top");
+test("Working animation defaults to full border and round-trips all three modes", () => {
+	assert.equal(defaultConfig().editor.workingSweep, "perimeter");
 	assert.deepEqual(WORKING_SWEEP_MODE_VALUES, ["top", "perimeter", "off"]);
 	for (const value of [undefined, null, 0, 1, "false", "true", "border", [], {}]) {
-		assert.equal(normalizeConfig({ editor: { workingSweep: value } }).editor.workingSweep, "top");
+		assert.equal(normalizeConfig({ editor: { workingSweep: value } }).editor.workingSweep, "perimeter");
 	}
 	for (const workingSweep of WORKING_SWEEP_MODE_VALUES) {
 		const config = normalizeConfig({ editor: { workingSweep } });

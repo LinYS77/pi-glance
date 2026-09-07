@@ -135,6 +135,7 @@ test("new defaults do not overwrite saved choices from current or older configs"
 		assert.equal(fresh.config.editor.topMarginRows, 1);
 		assert.equal(fresh.config.display.workspaceLabel, "smart");
 		assert.equal(fresh.config.segments.find((segment) => segment.id === "tokens")?.enabled, true);
+		assert.equal(fresh.config.editor.workingSweep, "perimeter");
 		assert.deepEqual(await readdir(dir), [], "loading defaults should not create a config file");
 
 		const saved = defaultConfig();
@@ -148,13 +149,15 @@ test("new defaults do not overwrite saved choices from current or older configs"
 				version,
 				editor: version === 8 ? { minContentRows: 3, topMarginRows: 0 } : { ...saved.editor, workingSweep: version === 9 ? true : saved.editor.workingSweep },
 			});
+			const expected = structuredClone(saved);
+			if (version === 9) expected.editor.workingSweep = "top";
 			await writeFile(path, text);
-			assertLoadResult(store.loadConfigSync(), { config: saved, status: "loaded", writable: true }, `v${version} sync load should preserve saved choices`);
+			assertLoadResult(store.loadConfigSync(), { config: expected, status: "loaded", writable: true }, `v${version} sync load should preserve saved choices`);
 			const loaded = await store.loadConfig();
-			assertLoadResult(loaded, { config: saved, status: "loaded", writable: true }, `v${version} async load should preserve saved choices`);
+			assertLoadResult(loaded, { config: expected, status: "loaded", writable: true }, `v${version} async load should preserve saved choices`);
 			assert.equal(await readFile(path, "utf8"), text, "loading should not rewrite saved settings");
 			await store.saveConfig(loaded.config);
-			assert.deepEqual(JSON.parse(await readFile(path, "utf8")), saved, "saving should preserve explicit choices instead of adopting new defaults");
+			assert.deepEqual(JSON.parse(await readFile(path, "utf8")), expected, "saving should preserve explicit choices instead of adopting new defaults");
 		}
 	} finally {
 		await rm(dir, { recursive: true, force: true });

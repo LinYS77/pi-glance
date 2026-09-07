@@ -5,7 +5,7 @@ const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" });
 const SINGLE_CELL_TEXT = /^[\x20-\x7e─]*$/;
 const TEXT_CACHE_LIMIT = 32;
 const MAX_CACHED_TEXT_LENGTH = 1024;
-const SWEEP_COLUMNS_PER_SECOND = 45;
+const SWEEP_COLUMNS_PER_SECOND = 47;
 
 /** Both paths use one travel speed; a longer route gets a longer cycle. */
 export function sweepMotion(length: number, elapsedMs: number): { position: number; periodMs: number } {

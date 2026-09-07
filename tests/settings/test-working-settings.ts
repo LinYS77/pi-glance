@@ -6,13 +6,14 @@ import { defaultConfig } from "../../src/config/model.js";
 import { getSettingsRows } from "../../src/settings/catalog.js";
 import { createPaneModel, createPaneViewModel, updatePaneModel } from "../../src/settings/model.js";
 import { showGlancePane } from "../../src/settings/pane.js";
+import type { WorkingSweepMode } from "../../src/types.js";
 import type { ScheduleSweepFrame } from "../../src/runtime/working-sweep.js";
 import { testState } from "../support/helpers.js";
 import { stripAnsi } from "../support/surface-test-harness.js";
 
 const right = "\x1b[C", down = "\x1b[B", left = "\x1b[D", up = "\x1b[A";
 
-function makePane() {
+function makePane(workingSweep: WorkingSweepMode = defaultConfig().editor.workingSweep) {
 	let now = 0, renders = 0;
 	let component: (Component & { dispose?(): void }) | undefined;
 	let cancel = () => {};
@@ -24,6 +25,7 @@ function makePane() {
 		return () => { tasks.delete(callback); };
 	};
 	const config = defaultConfig();
+	config.editor.workingSweep = workingSweep;
 	const result = showGlancePane(config, { ui: {
 		custom: <T>(factory: (tui: TUI, theme: Theme, keys: KeybindingsManager, done: (result: T) => void) => Component) => new Promise<T>((resolve) => {
 			const finish = (value: T) => { component?.dispose?.(); resolve(value); };
@@ -53,10 +55,10 @@ function makePane() {
 	};
 }
 
-test("Working setting cycles top edge, full border and off without changing other options", () => {
+test("Working setting starts at full border and cycles without changing other options", () => {
 	const config = defaultConfig();
 	let next = config;
-	for (const [label, mode] of [["top edge", "top"], ["full border", "perimeter"], ["off", "off"]] as const) {
+	for (const [label, mode] of [["full border", "perimeter"], ["off", "off"], ["top edge", "top"]] as const) {
 		const row = getSettingsRows(next, "general").find(row => row.id === "general.workingSweep")!;
 		assert.equal(row.value, label);
 		assert.equal(row.kind, "cycle");
@@ -64,7 +66,7 @@ test("Working setting cycles top edge, full border and off without changing othe
 		assert.deepEqual({ ...next, editor: { ...next.editor, workingSweep: config.editor.workingSweep } }, config);
 		next = row.apply!(next);
 	}
-	assert.equal(config.editor.workingSweep, "top");
+	assert.equal(config.editor.workingSweep, "perimeter");
 	assert.deepEqual(next, config);
 });
 
@@ -81,7 +83,7 @@ test("pane view model limits animation to the focused Working setting", () => {
 });
 
 test("settings preview animates only while selected, stops on off, and saves the choice", async () => {
-	const test = makePane();
+	const test = makePane("top");
 	assert.equal(test.pending(), 0);
 	assert.match(test.pane.render(120).map(stripAnsi).join("\n"), /Working animation\s+top edge/);
 	test.selectWorking();
@@ -113,22 +115,27 @@ test("settings preview animates only while selected, stops on off, and saves the
 	assert.equal(test.pending(), 0);
 });
 
-test("perimeter preview saves the new choice; reset returns to the top edge", async () => {
+test("saved top-edge choice overrides the default; reset returns to full border", async () => {
 	const test = makePane();
+	assert.match(test.pane.render(120).map(stripAnsi).join("\n"), /Working animation\s+full border/);
 	test.selectWorking();
+	const before = test.pane.render(120);
+	test.advance(2200);
+	assert.notEqual(test.pane.render(120).find(line => stripAnsi(line).startsWith("╰")), before.find(line => stripAnsi(line).startsWith("╰")), "the default animates the bottom, not just the title");
 	test.pane.handleInput?.(right);
-	test.pane.handleInput?.("\r");
+	test.pane.handleInput?.("\r"); // off
+	test.pane.handleInput?.("\r"); // top edge
 	test.pane.handleInput?.("s");
 	const saved = await test.result;
 	assert.equal(saved.action, "save");
 	if (saved.action !== "save") return;
-	assert.equal(saved.config.editor.workingSweep, "perimeter");
-	assert.equal(test.config.editor.workingSweep, "top");
+	assert.equal(saved.config.editor.workingSweep, "top");
+	assert.equal(test.config.editor.workingSweep, "perimeter");
 	assert.equal(test.pending(), 0);
 	const model = createPaneModel(saved.config);
-	assert.equal(model.draft.editor.workingSweep, "perimeter");
+	assert.equal(model.draft.editor.workingSweep, "top");
 	const reset = updatePaneModel(model, { type: "resetDefaults" }).model;
-	assert.equal(reset.draft.editor.workingSweep, "top");
+	assert.equal(reset.draft.editor.workingSweep, "perimeter");
 });
 
 test("leaving the Working row or closing the panel disposes its preview clock", async () => {

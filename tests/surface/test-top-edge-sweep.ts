@@ -17,6 +17,13 @@ const theme: EditorTheme = { borderColor: identity, selectList: { selectedPrefix
 const tui = { terminal: { rows: 24 }, requestRender() {} } as unknown as TUI;
 const keys = { matches: () => false } as unknown as KeybindingsManager;
 
+function topEdgeConfig() {
+	const config = defaultConfig();
+	config.editor.topMarginRows = 0;
+	config.editor.workingSweep = "top";
+	return config;
+}
+
 function foreground(text: string): Rgb {
 	const rgb = text.match(/\x1b\[38;2;(\d+);(\d+);(\d+)m/);
 	if (rgb) return { r: Number(rgb[1]), g: Number(rgb[2]), b: Number(rgb[3]) };
@@ -125,7 +132,7 @@ test("a broad core crosses the left region at a steady travel speed", () => {
 		const profile = sweepProfile(width, 0);
 		assert.equal(profile.center, -profile.radius);
 		assert.ok(profile.radius >= 9 && profile.radius <= 28);
-		assert.ok(Math.abs(profile.periodMs - (width + profile.radius * 2) / 45 * 1000) < 1e-10);
+		assert.ok(Math.abs(profile.periodMs - (width + profile.radius * 2) / 47 * 1000) < 1e-10);
 		const intensities: number[] = [];
 		const sweep = createTopEdgeSweep(width, profile.periodMs / 2, { ...styles, highlight: (style, amount) => { intensities.push(amount); return style; } });
 		sweep("─".repeat(width), styles.border, 0);
@@ -151,7 +158,7 @@ test("path and line share one beam without splitting Unicode graphemes", () => {
 });
 
 test("every theme preserves all text, dimensions, body and bottom at every phase", () => {
-	const config = defaultConfig(); config.editor.topMarginRows = 0;
+	const config = topEdgeConfig();
 	const state = richInputSurfaceState();
 	for (const palette of GLANCE_THEMES) for (const mode of ["truecolor", "ansi256"] as const) {
 		const styles = resolveBuiltInGlanceStyles(palette.id, mode);
@@ -170,7 +177,7 @@ test("every theme preserves all text, dimensions, body and bottom at every phase
 });
 
 test("right-hand status and its trailing border remain byte-identical throughout the sweep", () => {
-	const config = defaultConfig(); config.editor.topMarginRows = 0;
+	const config = topEdgeConfig();
 	const styles = resolveBuiltInGlanceStyles("light");
 	for (const width of [80, 120, 220]) for (const warning of [false, true]) {
 		const state = richInputSurfaceState();
@@ -193,7 +200,7 @@ test("right-hand status and its trailing border remain byte-identical throughout
 });
 
 test("short paths still animate their connector; unfocused frames remain static", () => {
-	const config = defaultConfig(); config.editor.topMarginRows = 0;
+	const config = topEdgeConfig();
 	const state = richInputSurfaceState(); state.workspace = { name: "p", path: "/p" };
 	const styles = resolveBuiltInGlanceStyles("high-contrast-light");
 	const touched: string[] = [];
@@ -210,7 +217,7 @@ test("short paths still animate their connector; unfocused frames remain static"
 });
 
 test("live sweep retains the original status cache, Bash border and scroll labels", () => {
-	const config = defaultConfig(); config.editor.topMarginRows = 0;
+	const config = topEdgeConfig();
 	const sample = richInputSurfaceState();
 	let reads = 0;
 	const state = { ...sample, get usage() { reads++; return sample.usage; } };

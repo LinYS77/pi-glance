@@ -30,20 +30,20 @@ function intensityAt(width: number, rows: number, elapsed: number, column: numbe
 	return intensity;
 }
 
-test("both modes travel at 45 columns per second regardless of width, height or status gaps", () => {
+test("both modes travel at 47 columns per second regardless of width, height or status gaps", () => {
 	for (const width of [0, 1, 2, 4, 40, 80, 120, 220, 4000]) {
 		const top = sweepProfile(width, 0);
 		const topLength = width + top.radius * 2;
-		assert.ok(Math.abs(topLength / top.periodMs * 1000 - 45) < 1e-10);
+		assert.ok(Math.abs(topLength / top.periodMs * 1000 - 47) < 1e-10);
 		for (const rows of [2, 4, 12]) for (const gap of [undefined, { column: 1, width: Math.floor(width / 3) }]) {
 			const loop = perimeterSweepProfile(width, rows, 0, gap);
-			assert.ok(Math.abs(loop.length / loop.periodMs * 1000 - 45) < 1e-10);
+			assert.ok(Math.abs(loop.length / loop.periodMs * 1000 - 47) < 1e-10);
 			const stepMs = Math.min(top.periodMs, loop.periodMs) / 20;
 			for (const lap of [0, 1, 10]) {
 				const topStart = top.periodMs * (lap + 0.25), loopStart = loop.periodMs * (lap + 0.25);
 				const topDistance = sweepProfile(width, topStart + stepMs).center - sweepProfile(width, topStart).center;
 				const loopDistance = perimeterSweepProfile(width, rows, loopStart + stepMs, gap).center - perimeterSweepProfile(width, rows, loopStart, gap).center;
-				assert.ok(Math.abs(topDistance - stepMs * 45 / 1000) < 1e-8);
+				assert.ok(Math.abs(topDistance - stepMs * 47 / 1000) < 1e-8);
 				assert.ok(Math.abs(topDistance - loopDistance) < 1e-8, `${width}/${rows}: equal elapsed time means equal distance`);
 			}
 		}
