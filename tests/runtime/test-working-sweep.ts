@@ -146,7 +146,7 @@ test("disable, re-enable and reload keep just one clock and restore the native r
 test("saving the Working setting toggles in place and respects an already-open prompt", async () => {
 	const time = clock(), ctx = createRuntimeTestContext({ idle: false });
 	const config = defaultConfig(); config.editor.topMarginRows = 0;
-	const off = structuredClone(config); off.editor.workingSweep = false;
+	const off = structuredClone(config); off.editor.workingSweep = "off";
 	const harness = createRuntimeHarness({ workingSweepNowMs: time.now, scheduleSweepFrame: time.schedule, git: createGitHarness(), loadConfigSyncConfig: config,
 		showPaneResults: [{ action: "save", config: off }, { action: "save", config }, { action: "cancel" }] });
 	const { events, commands } = harness.runtime;
@@ -185,16 +185,66 @@ test("saving the Working setting toggles in place and respects an already-open p
 	assert.equal(time.pending(), 0);
 });
 
-for (const failure of ["write-error", "read-only"] as const) {
-	test(`failed Working setting save preserves the running configuration: ${failure}`, async () => {
+test("saving perimeter mode changes the current editor without replacing its clock or draft", async () => {
+	const time = clock(), ctx = createRuntimeTestContext({ idle: false });
+	const config = defaultConfig(); config.editor.topMarginRows = 0;
+	const perimeter = structuredClone(config); perimeter.editor.workingSweep = "perimeter";
+	const harness = createRuntimeHarness({ workingSweepNowMs: time.now, scheduleSweepFrame: time.schedule, git: createGitHarness(), loadConfigSyncConfig: config,
+		showPaneResults: [{ action: "save", config: perimeter }, { action: "cancel" }, { action: "save", config }] });
+	const { events, commands } = harness.runtime;
+	events.sessionStart({}, ctx.ctx);
+	const editor = invokeEditorFactory(ctx, 0, () => {}) as GlanceEditor;
+	editor.focused = true; editor.setText("保留 draft");
+	const factory = ctx.getCurrentEditorFactory(), cursor = editor.getCursor();
+	const idleBottom = editor.render(180).at(-1);
+	time.advance(1000);
+	const clockCallback = time.stale();
+	await commands.openPane("", ctx.ctx);
+	assert.equal(time.stale(), clockCallback, "mode-only changes reuse the running clock");
+	assert.equal(time.pending(), 1);
+	let changes = 0;
+	for (let i = 0; i < 20; i++) {
+		time.advance(200);
+		if (editor.render(180).at(-1) !== idleBottom) changes++;
+	}
+	assert.ok(changes > 5);
+	const active = editor.render(180);
+	await commands.openPane("", ctx.ctx);
+	assert.deepEqual(editor.render(180), active, "cancel preserves perimeter mode and phase");
+	events.uiPromptStart({ reason: "ui_prompt", kind: "custom" }, ctx.ctx);
+	assert.equal(time.pending(), 0);
+	assert.equal(editor.render(180).at(-1), idleBottom);
+	events.uiPromptEnd({ reason: "ui_prompt", kind: "custom" }, ctx.ctx);
+	assert.equal(time.pending(), 1);
+	await commands.openPane("", ctx.ctx);
+	assert.equal(editor.render(180).at(-1), idleBottom, "switching back restores the static bottom");
+	assert.equal(ctx.getCurrentEditorFactory(), factory);
+	assert.equal(ctx.editorFactories.length, 1);
+	assert.equal(ctx.footerFactories.length, 1);
+	assert.equal(editor.getText(), "保留 draft");
+	assert.deepEqual(editor.getCursor(), cursor);
+	assert.deepEqual(ctx.workingVisibility, [false]);
+	ctx.setIdle(true); events.agentSettled({}, ctx.ctx);
+	assert.equal(time.pending(), 0);
+	await events.sessionShutdown({}, ctx.ctx);
+	assert.deepEqual(ctx.workingVisibility, [false, true]);
+});
+
+for (const mode of ["off", "perimeter"] as const) for (const failure of ["write-error", "read-only"] as const) {
+	test(`failed Working setting save preserves the running configuration: ${mode}/${failure}`, async () => {
 		const time = clock(), ctx = createRuntimeTestContext({ idle: false });
-		const config = defaultConfig(), off = structuredClone(config); off.editor.workingSweep = false;
+		const config = defaultConfig(), draft = structuredClone(config); draft.editor.workingSweep = mode;
 		const harness = createRuntimeHarness({ workingSweepNowMs: time.now, scheduleSweepFrame: time.schedule, git: createGitHarness(),
 			loadConfigSyncResult: { config, status: failure === "read-only" ? "future" : "loaded", writable: failure !== "read-only" },
 			saveConfigError: failure === "write-error" ? new Error("test write failure") : undefined,
-			showPaneResults: [{ action: "save", config: off }] });
+			showPaneResults: [{ action: "save", config: draft }] });
 		harness.runtime.events.sessionStart({}, ctx.ctx);
+		const editor = invokeEditorFactory(ctx, 0, () => {}) as GlanceEditor;
+		editor.focused = true;
+		time.advance(1200);
+		const frame = editor.render(180);
 		await harness.runtime.commands.openPane("", ctx.ctx);
+		assert.deepEqual(editor.render(180), frame, "failed saves cannot apply draft mode or restart the clock");
 		assert.equal(time.pending(), 1);
 		assert.deepEqual(ctx.workingVisibility, [false]);
 		assert.equal(harness.savedConfigs.length, 0);
@@ -207,7 +257,7 @@ for (const options of [{ workingSweep: false }, { mode: "rpc" }, { mode: "json" 
 		const time = clock();
 		const ctx = createRuntimeTestContext({ mode: "mode" in options ? options.mode : "tui", idle: false });
 		const config = "disabled" in options ? disabledConfig() : defaultConfig();
-		if ("workingSweep" in options) config.editor.workingSweep = false;
+		if ("workingSweep" in options) config.editor.workingSweep = "off";
 		const harness = createRuntimeHarness({ workingSweepNowMs: time.now, scheduleSweepFrame: time.schedule, git: createGitHarness(), loadConfigSyncConfig: config });
 		harness.runtime.events.sessionStart({}, ctx.ctx);
 		harness.runtime.events.agentStart({}, ctx.ctx);

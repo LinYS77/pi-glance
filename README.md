@@ -33,7 +33,7 @@ Restart Pi or run `/reload`.
 
 - **Rounded editor** — Pi's editing, history, autocomplete, and keybindings stay the same.
 - **Adaptive status line** — Git · Cost · Model speed · Context · Tokens · Model. Folds as the terminal narrows.
-- **Working animation** — a sweep across the workspace title and connecting line while Pi works.
+- **Working animation** — a sweep along the top edge or around the editor while Pi works.
 - **22 palettes** — separate light and dark choices with live preview.
 
 No runtime dependencies. No telemetry.

@@ -1,10 +1,10 @@
 import { strict as assert } from "node:assert";
 import type { ExtensionContext, KeybindingsManager } from "@earendil-works/pi-coding-agent";
-import { TuiAltScreen, isViewportTUI, visibleWidth, type EditorTheme, type Terminal, type TUI } from "@earendil-works/pi-tui";
+import { TuiMainScreen, TuiAltScreen, isViewportTUI, visibleWidth, type EditorTheme, type Terminal, type TUI } from "@earendil-works/pi-tui";
 import { defaultConfig } from "../../src/config/model.js";
 import { GlanceEditor } from "../../src/surface/editor.js";
 import { createGitHarness, createRuntimeHarness, createRuntimeTestContext } from "../support/runtime-harness.js";
-import { stripAnsi } from "../support/surface-test-harness.js";
+import { richInputSurfaceState, stripAnsi } from "../support/surface-test-harness.js";
 
 interface TestTerminal extends Terminal {
 	readonly writes: string[];
@@ -134,4 +134,24 @@ assert.deepEqual(terminal.writes, [], "fullscreen compatibility test should not 
 
 fullscreen.setFocus(null);
 fullscreen.clear();
-console.log("✓ Pi 0.84.4 /thinking and fullscreen compatibility checks passed");
+
+for (const tui of [new TuiMainScreen(createTerminal()), new TuiAltScreen(createTerminal(), false, undefined, { mouse: false })]) {
+	const loopConfig = defaultConfig(); loopConfig.editor.workingSweep = "perimeter";
+	let elapsed: number | undefined;
+	const loopEditor = new GlanceEditor(tui, editorTheme, keybindings, richInputSurfaceState, () => loopConfig, undefined, { getWorkingElapsedMs: () => elapsed });
+	tui.addChild(loopEditor); tui.setFocus(loopEditor);
+	loopEditor.setText("Working loop\n中文🙂 draft");
+	for (const width of [180, 80, 16, 4, 1, 120]) {
+		elapsed = undefined;
+		const idle = tui.render(width);
+		for (const time of [0, 600, 1800, 3600, 5000]) {
+			elapsed = time;
+			const direct = loopEditor.render(width), mounted = tui.render(width);
+			assert.deepEqual(mounted, direct, "both Pi TUI modes use the same animated frame");
+			assert.deepEqual(mounted.map(stripAnsi), idle.map(stripAnsi));
+			for (const line of mounted) assert.ok(visibleWidth(line) <= width);
+		}
+	}
+	tui.setFocus(null); tui.clear();
+}
+console.log("✓ Pi /thinking, Working loop and regular/fullscreen compatibility checks passed");

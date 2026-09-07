@@ -2,6 +2,7 @@ import { cloneConfig, toggleSegment } from "../config/model.js";
 import {
 	EDITOR_TOP_MARGIN_ROW_VALUES,
 	ICON_MODE_VALUES,
+	WORKING_SWEEP_MODE_VALUES,
 	WORKSPACE_LABEL_MODE_VALUES,
 	nextOption,
 } from "../config/options.js";
@@ -195,9 +196,9 @@ export function getSettingsRows(config: GlanceConfig, categoryId: SettingsCatego
 						next.display.workspaceLabel = nextOption(next.display.workspaceLabel, WORKSPACE_LABEL_MODE_VALUES);
 					}),
 				),
-				toggleRow("general.workingSweep", "Working animation", config.editor.workingSweep, "Animate the path while Pi works. Off uses Pi's Working indicator.", (draft) =>
+				cycleRow("general.workingSweep", "Working animation", { top: "top edge", perimeter: "full border", off: "off" }[config.editor.workingSweep], "Top edge, full border, or Pi's Working indicator.", (draft) =>
 					withConfig(draft, (next) => {
-						next.editor.workingSweep = !next.editor.workingSweep;
+						next.editor.workingSweep = nextOption(next.editor.workingSweep, WORKING_SWEEP_MODE_VALUES);
 					}),
 				),
 			];

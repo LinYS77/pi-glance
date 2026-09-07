@@ -61,17 +61,17 @@ test("config store diagnoses reads and atomically saves through an explicit path
 		assertLoadResult(loadConfigSync(), { config: partialExpected, status: "loaded", writable: true }, "sync load should normalize valid partial config text");
 		assertLoadResult(await loadConfig(), { config: partialExpected, status: "loaded", writable: true }, "async load should normalize valid partial config text");
 
-		const futureRaw = { version: 10, enabled: false, icons: "nerd", futureOnly: { preserve: true } };
+		const futureRaw = { version: 11, enabled: false, icons: "nerd", futureOnly: { preserve: true } };
 		await writeConfigText(configPath, JSON.stringify(futureRaw));
 		const futureExpected = normalizeConfig(futureRaw);
 		assertLoadResult(
 			loadConfigSync(),
-			{ config: futureExpected, status: "future", writable: false, diagnostic: /version 10.*newer than supported version 9.*without overwriting/i },
+			{ config: futureExpected, status: "future", writable: false, diagnostic: /version 11.*newer than supported version 10.*without overwriting/i },
 			"future sync config should load known fields read-only",
 		);
 		assertLoadResult(
 			await loadConfig(),
-			{ config: futureExpected, status: "future", writable: false, diagnostic: /version 10.*newer than supported version 9.*without overwriting/i },
+			{ config: futureExpected, status: "future", writable: false, diagnostic: /version 11.*newer than supported version 10.*without overwriting/i },
 			"future async config should load known fields read-only",
 		);
 
@@ -142,11 +142,11 @@ test("new defaults do not overwrite saved choices from current or older configs"
 		saved.editor.topMarginRows = 0;
 		saved.display.workspaceLabel = "name";
 		saved.segments.find((segment) => segment.id === "tokens")!.enabled = false;
-		for (const version of [8, 9]) {
+		for (const version of [8, 9, 10]) {
 			const text = JSON.stringify({
 				...saved,
 				version,
-				editor: version === 8 ? { minContentRows: 3, topMarginRows: 0 } : saved.editor,
+				editor: version === 8 ? { minContentRows: 3, topMarginRows: 0 } : { ...saved.editor, workingSweep: version === 9 ? true : saved.editor.workingSweep },
 			});
 			await writeFile(path, text);
 			assertLoadResult(store.loadConfigSync(), { config: saved, status: "loaded", writable: true }, `v${version} sync load should preserve saved choices`);

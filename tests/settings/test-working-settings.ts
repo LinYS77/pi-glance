@@ -53,17 +53,19 @@ function makePane() {
 	};
 }
 
-test("Working setting is enabled by default and its row changes only the editor option", () => {
+test("Working setting cycles top edge, full border and off without changing other options", () => {
 	const config = defaultConfig();
-	const row = getSettingsRows(config, "general").find(row => row.id === "general.workingSweep")!;
-	assert.equal(row.value, "on");
-	assert.equal(row.kind, "toggle");
-	const next = row.apply!(config);
-	assert.equal(next.editor.workingSweep, false);
-	assert.deepEqual({ ...next, editor: config.editor }, config);
-	assert.equal(config.editor.workingSweep, true);
-	const restored = getSettingsRows(next, "general").find(row => row.id === "general.workingSweep")!.apply!(next);
-	assert.deepEqual(restored, config);
+	let next = config;
+	for (const [label, mode] of [["top edge", "top"], ["full border", "perimeter"], ["off", "off"]] as const) {
+		const row = getSettingsRows(next, "general").find(row => row.id === "general.workingSweep")!;
+		assert.equal(row.value, label);
+		assert.equal(row.kind, "cycle");
+		assert.equal(next.editor.workingSweep, mode);
+		assert.deepEqual({ ...next, editor: { ...next.editor, workingSweep: config.editor.workingSweep } }, config);
+		next = row.apply!(next);
+	}
+	assert.equal(config.editor.workingSweep, "top");
+	assert.deepEqual(next, config);
 });
 
 test("pane view model limits animation to the focused Working setting", () => {
@@ -81,7 +83,7 @@ test("pane view model limits animation to the focused Working setting", () => {
 test("settings preview animates only while selected, stops on off, and saves the choice", async () => {
 	const test = makePane();
 	assert.equal(test.pending(), 0);
-	assert.match(test.pane.render(120).map(stripAnsi).join("\n"), /Working animation\s+on/);
+	assert.match(test.pane.render(120).map(stripAnsi).join("\n"), /Working animation\s+top edge/);
 	test.selectWorking();
 	assert.equal(test.pending(), 1);
 	const first = test.pane.render(120);
@@ -91,18 +93,42 @@ test("settings preview animates only while selected, stops on off, and saves the
 	assert.notDeepEqual(first, next);
 	const stale = test.stale();
 	test.pane.handleInput?.(right); // value focus
+	test.pane.handleInput?.("\r"); // full border
+	assert.equal(test.pending(), 1, "switching styles keeps a single preview clock");
+	assert.match(test.pane.render(120).map(stripAnsi).join("\n"), /Working animation\s+.*full border/);
+	const perimeter = test.pane.render(120);
+	test.advance(1400);
+	assert.notEqual(test.pane.render(120).find(line => stripAnsi(line).startsWith("╰")), perimeter.find(line => stripAnsi(line).startsWith("╰")));
 	test.pane.handleInput?.("\r"); // off
 	assert.equal(test.pending(), 0);
 	const stopped = test.pane.render(120);
 	test.advance(1000); stale();
 	assert.deepEqual(test.pane.render(120), stopped);
 	assert.match(stopped.map(stripAnsi).join("\n"), /Working animation\s+.*off/);
-	assert.equal(test.config.editor.workingSweep, true, "preview never mutates the initial config");
+	assert.equal(test.config.editor.workingSweep, "top", "preview never mutates the initial config");
 	test.pane.handleInput?.("s");
 	const saved = await test.result;
 	assert.equal(saved.action, "save");
-	if (saved.action === "save") assert.equal(saved.config.editor.workingSweep, false);
+	if (saved.action === "save") assert.equal(saved.config.editor.workingSweep, "off");
 	assert.equal(test.pending(), 0);
+});
+
+test("perimeter preview saves the new choice; reset returns to the top edge", async () => {
+	const test = makePane();
+	test.selectWorking();
+	test.pane.handleInput?.(right);
+	test.pane.handleInput?.("\r");
+	test.pane.handleInput?.("s");
+	const saved = await test.result;
+	assert.equal(saved.action, "save");
+	if (saved.action !== "save") return;
+	assert.equal(saved.config.editor.workingSweep, "perimeter");
+	assert.equal(test.config.editor.workingSweep, "top");
+	assert.equal(test.pending(), 0);
+	const model = createPaneModel(saved.config);
+	assert.equal(model.draft.editor.workingSweep, "perimeter");
+	const reset = updatePaneModel(model, { type: "resetDefaults" }).model;
+	assert.equal(reset.draft.editor.workingSweep, "top");
 });
 
 test("leaving the Working row or closing the panel disposes its preview clock", async () => {

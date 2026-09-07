@@ -18,6 +18,7 @@ export type TokensDisplayMode = "input-output" | "total";
 export type TokensCacheMode = "rate" | "read-write" | "hide";
 export type ModelThinkingMode = "auto" | "always" | "never";
 export type WorkspaceLabelMode = "name" | "smart" | "path";
+export type WorkingSweepMode = "top" | "perimeter" | "off";
 export type EditorTopMarginRows = 0 | 1 | 2;
 export type ThroughputPrecision = "auto" | 0 | 1;
 
@@ -32,7 +33,7 @@ interface DisplayConfig {
 }
 
 interface EditorConfig {
-	workingSweep: boolean;
+	workingSweep: WorkingSweepMode;
 	minContentRows: number;
 	topMarginRows: EditorTopMarginRows;
 }
@@ -65,7 +66,7 @@ interface ThroughputConfig {
 }
 
 export interface GlanceConfig {
-	version: 9;
+	version: 10;
 	enabled: boolean;
 	theme: GlanceThemePair;
 	icons: IconMode;

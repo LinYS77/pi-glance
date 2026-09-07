@@ -7,6 +7,7 @@ import {
 	PROVIDER_DISPLAY_MODE_VALUES,
 	TOKENS_CACHE_MODE_VALUES,
 	TOKENS_DISPLAY_MODE_VALUES,
+	WORKING_SWEEP_MODE_VALUES,
 	WORKSPACE_LABEL_MODE_VALUES,
 } from "./options.js";
 import { THROUGHPUT_PRECISION_DESCRIPTOR } from "./schema.js";
@@ -29,8 +30,9 @@ import type {
 } from "../types.js";
 
 // CONFIG_VERSION is the on-disk config schema version, not the npm package version.
-export const CONFIG_VERSION = 9 as const;
+export const CONFIG_VERSION = 10 as const;
 
+const WORKING_SWEEP_MODES = new Set(WORKING_SWEEP_MODE_VALUES);
 const ICON_MODES = new Set<IconMode>(ICON_MODE_VALUES);
 const PROVIDER_MODES = new Set<GlanceConfig["display"]["showProvider"]>(PROVIDER_DISPLAY_MODE_VALUES);
 const WORKSPACE_LABEL_MODES = new Set<WorkspaceLabelMode>(WORKSPACE_LABEL_MODE_VALUES);
@@ -50,7 +52,7 @@ export function defaultConfig(): GlanceConfig {
 		editor: {
 			minContentRows: 3,
 			topMarginRows: 1,
-			workingSweep: true,
+			workingSweep: "top",
 		},
 		display: {
 			showProvider: "auto",
@@ -206,7 +208,9 @@ export function normalizeConfig(raw: unknown): GlanceConfig {
 		icons: parseStringEnum(record.icons, ICON_MODES, defaults.icons),
 		editor: {
 			minContentRows: parseIntInRange(editor.minContentRows, defaults.editor.minContentRows, 2, 4),
-			workingSweep: parseBool(editor.workingSweep, defaults.editor.workingSweep),
+			workingSweep: typeof editor.workingSweep === "boolean"
+				? (editor.workingSweep ? "top" : "off")
+				: parseStringEnum(editor.workingSweep, WORKING_SWEEP_MODES, defaults.editor.workingSweep),
 			topMarginRows: parseIntInRange(editor.topMarginRows, defaults.editor.topMarginRows, 0, 2) as EditorTopMarginRows,
 		},
 		display: {

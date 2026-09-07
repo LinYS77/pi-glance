@@ -164,13 +164,17 @@ Pi has no public footer getter or zero-height hidden footer. An empty footer row
 
 ## Working animation
 
-`editor.workingSweep` defaults to `true`, including when older configs omit the field. `/glance` → General → Working animation controls it. Saving changes takes effect on the current editor without replacing its factory or clearing input. Cancelling the pane, a failed save, or a read-only config leaves the active setting unchanged. The settings pane animates its preview only while this row is focused and enabled, and disposes the preview clock on close. `npm run preview:working` remains a standalone development preview without model calls or installation changes.
+`editor.workingSweep` offers `top` (default), `perimeter`, and `off`. `/glance` → General → Working animation displays them as `top edge`, `full border`, and `off`. Saving changes takes effect on the current editor without replacing its factory or clearing input. Cancelling the pane, a failed save, or a read-only config leaves the active setting unchanged. The settings pane animates its preview only while this row is focused and not off, and disposes the preview clock on close. `npm run preview:working -- --perimeter` previews the loop without model calls, installation changes, or configuration writes.
 
-The beam crosses only the left region, in a 2–3.6 second cycle with a broad bold core and feathered edges. `src/theme/working-colors.ts` assigns one chromatic accent per palette; title and connector share that peak and intensity. Tests check Oklab color separation from both original foregrounds and at least 4.5:1 peak contrast on reference backgrounds in RGB and ANSI256. Reference backgrounds include black/white and `#282828`/`#f5f5f5`; no terminal-background query is made, so arbitrary terminal backgrounds are not guaranteed. The radius is bounded to 9–28 columns, with a wider flat core and smooth edges. Unlit text retains its original color. All right-hand status bytes, their trailing border, corners, scroll labels, the editor body, bottom edge, and Pi's Bash border callback stay unchanged.
+Both modes move at **45 horizontal columns per second**, defined once by `sweepMotion` in `src/surface/sweep.ts`. The 30 FPS clock is unchanged. Cycle time comes from route length rather than separate duration limits, so resizing, editor height and status fitting do not change travel speed. Top-edge travel includes the feathered entrance and exit beyond its visible region; the perimeter is closed and has no off-frame interval.
+
+Top-edge mode crosses the title and its connector; corners, right-hand status, scroll labels and other edges remain unchanged. Perimeter mode follows one clockwise closed path through the title, visible top border, corners, sides and bottom. It uses circular distance for a seamless wrap, including the feathered tail. One vertical row counts as two horizontal cells to approximate terminal-cell proportions. The loop uses the actual rendered body height, excluding top spacing and autocomplete. Status text and its surrounding spaces do not consume path distance: the beam bridges that gap instead of disappearing behind metadata. Status bytes and scroll labels remain unchanged in both modes.
+
+`src/theme/working-colors.ts` assigns one chromatic accent per palette; title and border share that peak and intensity. Tests check Oklab color separation from both original foregrounds and at least 4.5:1 peak contrast on reference backgrounds in RGB and ANSI256. Reference backgrounds include black/white and `#282828`/`#f5f5f5`; no terminal-background query is made, so arbitrary terminal backgrounds are not guaranteed. The radius is bounded to 9–28 columns, reduced further on tiny loops, with a broad bold core and smooth edges. Unlit text retains its original color. Both modes preserve input bytes, cursor markers, Pi's Bash border callback and unfocused dimming; one-column frames remain static in perimeter mode.
 
 `src/runtime/working-sweep.ts` owns the 30 FPS display clock and ordinary Working-row visibility. It runs only while Glance owns the editor, pauses for blocking UI, and stops at `agent_settled` when Pi is idle. Disabling the effect or Glance restores the native Working row. Re-enabling during a prompt waits for `ui_prompt_end` before animating. Retry and compaction notices remain Pi-owned. Pi has no getter for Working-row visibility, so Glance cannot restore a different extension's prior hidden-row preference.
 
-The live editor retains its original status-string cache; animation does not recolor or collect status facts. `src/surface/top-edge-sweep.ts` shades only glyphs near the beam and emits unlit text in bulk. Unicode measurements have a bounded cache (32 strings, at most 1,024 UTF-16 units each); palette/gradient resources are reused by theme and color mode. The width stops before the status area. Animation does not share the Model speed clock, invalidate its data, or replay missed frames after a blocked event loop.
+The live editor retains its original status-string cache; animation does not recolor or collect status facts. `src/surface/sweep.ts` shades only glyphs near the beam and emits unlit text in bulk. Unicode measurements have a bounded cache (32 strings, at most 1,024 UTF-16 units each); palette/gradient resources are reused by theme and color mode. `top-edge-sweep.ts` supplies the open-path profile; `perimeter-sweep.ts` maps frame coordinates to the closed path. Animation does not share the Model speed clock, invalidate its data, or replay missed frames after a blocked event loop.
 
 ## Status density
 
@@ -228,9 +232,9 @@ At extremely narrow widths, the inherited editor is given enough room for a two-
 
 ## Configuration
 
-- Current on-disk schema version: `9`.
+- Current on-disk schema version: `10`.
 - New-install and settings-reset defaults use Nerd Font icons, smart workspace paths, one top-margin row, and all six segments enabled. Other defaults include a three-row editor, Working animation on, light/dark palette slots, input/output Tokens with cache rate, and automatic provider/thinking labels. Defaults fill missing or invalid values; valid saved choices are preserved. Changing defaults does not change the schema version.
-- Missing or invalid `editor.workingSweep` defaults to `true`; explicit `false` is preserved. Migration is in memory and writes only on an explicit save.
+- Missing or invalid `editor.workingSweep` defaults to `top`; legacy `true` becomes `top` and `false` becomes `off`. Migration is in memory and writes only on an explicit save.
 - Legacy theme strings migrate to the same palette in both slots.
 - Legacy Tokens Cache values migrate as `auto -> rate` and `show -> read-write`.
 - Adaptive width is always on; legacy `display.adaptive` is discarded.
@@ -260,4 +264,4 @@ At extremely narrow widths, the inherited editor is given enough room for a two-
 
 Developer utilities:
 - `npm run debug:git -- /path/to/repo` prints a Git snapshot.
-- `npm run preview:working` previews Working animation and status density without model calls or configuration writes. Use Left/Right for palettes, `C` for color depth, and resize the terminal to check fitting.
+- `npm run preview:working` previews Working animation and status density without model calls or configuration writes. Use `M` for sweep modes, Left/Right for palettes, `C` for color depth, and resize the terminal to check fitting.

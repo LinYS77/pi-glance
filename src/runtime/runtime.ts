@@ -236,7 +236,7 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 
 	function reconcileWorkingSweep(ctx: ExtensionContext): void {
 		if (!isTuiMode(ctx)) return;
-		if (getConfig().enabled && getConfig().editor.workingSweep) workingSweep?.attach(!ctx.isIdle(), waitingForUi);
+		if (getConfig().enabled && getConfig().editor.workingSweep !== "off") workingSweep?.attach(!ctx.isIdle(), waitingForUi);
 		else workingSweep?.dispose();
 	}
 

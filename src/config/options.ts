@@ -10,9 +10,11 @@ import type {
 	ThroughputPrecision,
 	TokensCacheMode,
 	TokensDisplayMode,
+	WorkingSweepMode,
 	WorkspaceLabelMode,
 } from "../types.js";
 
+export const WORKING_SWEEP_MODE_VALUES: ReadonlyArray<WorkingSweepMode> = ["top", "perimeter", "off"];
 export const ICON_MODE_VALUES: ReadonlyArray<IconMode> = ["plain", "nerd"];
 export const PROVIDER_DISPLAY_MODE_VALUES: ReadonlyArray<GlanceConfig["display"]["showProvider"]> = ["auto", "always", "never"];
 export const WORKSPACE_LABEL_MODE_VALUES: ReadonlyArray<WorkspaceLabelMode> = ["name", "smart", "path"];

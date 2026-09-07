@@ -1,5 +1,5 @@
 import { strict as assert } from "node:assert";
-import { cloneConfig, configFromText, configToText, defaultConfig, normalizeConfig } from "../../src/config/model.js";
+import { CONFIG_VERSION, cloneConfig, configFromText, configToText, defaultConfig, normalizeConfig } from "../../src/config/model.js";
 import { THROUGHPUT_PRECISION_DESCRIPTOR } from "../../src/config/schema.js";
 
 import type { SegmentConfig as SegmentLike, ThroughputPrecision, GlanceConfig } from "../../src/types.js";
@@ -18,9 +18,9 @@ function precisionOf(config: GlanceConfig): ThroughputPrecision {
 
 const defaults = defaultConfig();
 
-assert.equal(defaults.version, 9, "defaultConfig should use the current config schema version");
-assert.equal(normalizeConfig({ version: 0 }).version, 9, "old raw versions should normalize to schema version 9");
-assert.equal(normalizeConfig({ version: 999 }).version, 9, "future raw versions should normalize to current schema version 9");
+assert.equal(defaults.version, CONFIG_VERSION, "defaultConfig should use the current config schema version");
+assert.equal(normalizeConfig({ version: 0 }).version, CONFIG_VERSION, "old raw versions should normalize to the current schema");
+assert.equal(normalizeConfig({ version: 999 }).version, CONFIG_VERSION, "future raw versions should normalize to the current schema");
 assert.equal(defaults.throughput.precision, THROUGHPUT_PRECISION_DESCRIPTOR.defaultValue, "defaultConfig should use descriptor throughput precision default");
 assert.deepEqual((defaults).throughput, { precision: THROUGHPUT_PRECISION_DESCRIPTOR.defaultValue }, "defaultConfig should include throughput.precision=auto");
 
@@ -131,7 +131,7 @@ assertSegments(
 );
 
 const encoded = configToText(normalizeConfig({ throughput: { precision: 0 } }));
-assert.equal(JSON.parse(encoded).version, 9, "configToText should serialize schema version 9");
+assert.equal(JSON.parse(encoded).version, CONFIG_VERSION, "configToText should serialize the current schema");
 assert.deepEqual(JSON.parse(encoded).throughput, { precision: 0 }, "configToText should serialize throughput precision");
 assert.deepEqual(configFromText(encoded), normalizeConfig({ throughput: { precision: 0 } }), "current schema config text should round-trip through configFromText/configToText");
 

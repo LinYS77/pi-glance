@@ -119,13 +119,13 @@ test("status, warnings and host-provided border colors are outside the highlight
 	}
 });
 
-test("a broad core crosses the left region every two to four seconds", () => {
+test("a broad core crosses the left region at a steady travel speed", () => {
 	const styles = resolveBuiltInGlanceStyles("light");
 	for (const width of [20, 80, 160, 400]) {
 		const profile = sweepProfile(width, 0);
 		assert.equal(profile.center, -profile.radius);
 		assert.ok(profile.radius >= 9 && profile.radius <= 28);
-		assert.ok(profile.periodMs >= 2000 && profile.periodMs <= 3600);
+		assert.ok(Math.abs(profile.periodMs - (width + profile.radius * 2) / 45 * 1000) < 1e-10);
 		const intensities: number[] = [];
 		const sweep = createTopEdgeSweep(width, profile.periodMs / 2, { ...styles, highlight: (style, amount) => { intensities.push(amount); return style; } });
 		sweep("─".repeat(width), styles.border, 0);

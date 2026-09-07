@@ -467,7 +467,7 @@ export function createPaneViewModel(model: PaneModelState, width: number): Glanc
 		previewDensity: model.previewDensity,
 		previewDensityLabel: previewDensityLabel(model.previewDensity),
 		preview: {
-			working: model.draft.enabled && model.draft.editor.workingSweep && model.subview === "settings"
+			working: model.draft.enabled && model.draft.editor.workingSweep !== "off" && model.subview === "settings"
 				&& model.focus !== "categories" && settings[model.settingIndex]?.id === "general.workingSweep",
 			config: model.draft,
 			density: model.previewDensity,

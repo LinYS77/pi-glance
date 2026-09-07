@@ -1,6 +1,7 @@
 import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import { renderGlanceLine } from "./status-line.js";
 import { createTopEdgeSweep } from "./top-edge-sweep.js";
+import { createPerimeterSweep, type PerimeterSweep } from "./perimeter-sweep.js";
 import {
 	planSurfaceBottomFrame,
 	planSurfaceRow,
@@ -13,7 +14,7 @@ import {
 	SURFACE_AUTOCOMPLETE_INDENT,
 	SURFACE_CONTENT_PADDING_X,
 } from "./layout.js";
-import type { ResolvedGlanceStyles } from "../theme/adapter.js";
+import type { ResolvedGlanceStyles, TextStyler } from "../theme/adapter.js";
 import type { GlanceConfig, GlanceState } from "../types.js";
 
 export type InputSurfaceChromeFocus = "focused" | "unfocused";
@@ -95,15 +96,17 @@ function topLeftPlan(input: InputSurfaceFrameInput, metrics: Pick<InputSurfaceFr
 	});
 }
 
-function renderTopFrame(input: InputSurfaceFrameInput, metrics: Pick<InputSurfaceFrameMetrics, "safeWidth" | "innerWidth">): string {
+function planTopFrame(input: InputSurfaceFrameInput, metrics: Pick<InputSurfaceFrameMetrics, "safeWidth" | "innerWidth">) {
+	const left = topLeftPlan(input, metrics);
+	const statusBudget = planSurfaceStatusBudget(metrics.innerWidth, left.width);
+	return planSurfaceTopFrame({ width: metrics.safeWidth, left, status: resolveStatus(input, statusBudget) });
+}
+
+function renderTopFrame(input: InputSurfaceFrameInput, plan: ReturnType<typeof planSurfaceTopFrame>, perimeter?: PerimeterSweep): string {
 	const dimChrome = shouldDimChrome(input);
 	const border = dimChrome ? input.styles.dim : input.styles.border;
 	const title = dimChrome ? input.styles.dim : input.styles.title;
-	const left = topLeftPlan(input, metrics);
-	const statusBudget = planSurfaceStatusBudget(metrics.innerWidth, left.width);
-	const status = resolveStatus(input, statusBudget);
-	const plan = planSurfaceTopFrame({ width: metrics.safeWidth, left, status });
-	const elapsed = dimChrome ? undefined : input.chrome?.workingElapsedMs;
+	const elapsed = !input.config.enabled || dimChrome || input.config.editor.workingSweep !== "top" ? undefined : input.chrome?.workingElapsedMs;
 	const sweepWidth = plan.leftWidth + plan.fillerWidth;
 	const sweep = elapsed === undefined ? undefined : createTopEdgeSweep(sweepWidth, elapsed, input.styles);
 	let column = 0;
@@ -111,19 +114,30 @@ function renderTopFrame(input: InputSurfaceFrameInput, metrics: Pick<InputSurfac
 		const start = column;
 		column += visibleWidth(chunk.text);
 		if (chunk.role === "status") return chunk.text;
-		if (chunk.role === "title") return sweep ? sweep(chunk.text, title, start - 1) : title(chunk.text);
+		if (chunk.role === "title") return perimeter ? perimeter(chunk.text, title, start, 0) : sweep ? sweep(chunk.text, title, start - 1) : title(chunk.text);
 		if (chunk.role === "border" || chunk.role === "dim") {
-			// Only the path's connecting line moves, never the corner or status-side tail.
+			if (perimeter && /^[╭╮─]+$/.test(chunk.text)) return perimeter(chunk.text, border, start, 0);
+			// Top-edge mode keeps the corners and status-side tail static.
 			return sweep && start >= 1 && start < 1 + sweepWidth && /^─+$/.test(chunk.text)
 				? sweep(chunk.text, border, start - 1)
 				: border(chunk.text);
 		}
 		return chunk.text;
 	}).join("");
-	return truncateToWidth(rendered, metrics.safeWidth, border("…"));
+	return truncateToWidth(rendered, plan.safeWidth, border("…"));
 }
 
-function renderPreviewRow(input: InputSurfaceFrameInput, text: string, index: number, width: number): string {
+function rowBorder(border: TextStyler, width: number, row: number, perimeter?: PerimeterSweep): TextStyler {
+	if (!perimeter) return border;
+	let column = 0;
+	return (text) => {
+		const rendered = perimeter(text, border, column, row);
+		column = width - 1;
+		return rendered;
+	};
+}
+
+function renderPreviewRow(input: InputSurfaceFrameInput, text: string, index: number, width: number, perimeter?: PerimeterSweep): string {
 	const showPromptIndicator = input.body.kind === "preview" && input.body.showPromptIndicator === true && index === 0;
 	return renderSurfaceChunks(
 		planSurfaceRow({
@@ -134,7 +148,7 @@ function renderPreviewRow(input: InputSurfaceFrameInput, text: string, index: nu
 			prefixRole: showPromptIndicator ? "dim" : "text",
 		}).chunks,
 		{
-			border: input.styles.border,
+			border: rowBorder(input.styles.border, width, index + 1, perimeter),
 			content: input.styles.text,
 			dim: input.styles.dim,
 			text: identity,
@@ -142,7 +156,7 @@ function renderPreviewRow(input: InputSurfaceFrameInput, text: string, index: nu
 	);
 }
 
-function renderEditorRow(input: InputSurfaceFrameInput, text: string, width: number): string {
+function renderEditorRow(input: InputSurfaceFrameInput, text: string, index: number, width: number, perimeter?: PerimeterSweep): string {
 	const border = shouldDimChrome(input) ? input.styles.dim : input.styles.border;
 	return renderSurfaceChunks(
 		planSurfaceRow({
@@ -153,7 +167,7 @@ function renderEditorRow(input: InputSurfaceFrameInput, text: string, width: num
 			ellipsis: "",
 		}).chunks,
 		{
-			border,
+			border: rowBorder(border, width, index + 1, perimeter),
 			content: identity,
 			text: identity,
 		},
@@ -165,16 +179,21 @@ function bodyLines(body: InputSurfaceFrameBody): readonly string[] {
 	return body.lines;
 }
 
-function renderBodyRow(input: InputSurfaceFrameInput, text: string, index: number, width: number): string {
+function renderBodyRow(input: InputSurfaceFrameInput, text: string, index: number, width: number, perimeter?: PerimeterSweep): string {
 	return input.body.kind === "preview"
-		? renderPreviewRow(input, text, index, width)
-		: renderEditorRow(input, text, width);
+		? renderPreviewRow(input, text, index, width, perimeter)
+		: renderEditorRow(input, text, index, width, perimeter);
 }
 
-function renderBottomFrame(input: InputSurfaceFrameInput, width: number): string {
+function renderBottomFrame(input: InputSurfaceFrameInput, width: number, row: number, perimeter?: PerimeterSweep): string {
 	const border = shouldDimChrome(input) ? input.styles.dim : input.styles.border;
+	let column = 0;
 	return renderSurfaceChunks(planSurfaceBottomFrame({ width, scrollIndicator: input.chrome?.bottomScrollIndicator }).chunks, {
-		border,
+		border: (text) => {
+			const start = column;
+			column += visibleWidth(text);
+			return perimeter && /^[╰╯─]+$/.test(text) ? perimeter(text, border, start, row) : border(text);
+		},
 	});
 }
 
@@ -192,15 +211,21 @@ export function renderInputSurfaceFrame(input: InputSurfaceFrameInput): string[]
 	const metrics = measureInputSurfaceFrame(input.width);
 	const sourceLines = bodyLines(input.body);
 	const rows = Math.max(minContentRows(input.config), sourceLines.length);
+	const top = planTopFrame(input, metrics);
+	const topGap = top.status.text ? { column: 1 + top.leftWidth + top.fillerWidth, width: top.status.width + 2 } : undefined;
+	const elapsed = input.chrome?.workingElapsedMs;
+	const perimeter = input.config.enabled && input.config.editor.workingSweep === "perimeter" && !shouldDimChrome(input) && elapsed !== undefined
+		? createPerimeterSweep(metrics.safeWidth, rows, elapsed, input.styles, topGap)
+		: undefined;
 	const lines = [
 		...renderSurfaceTopMargin(metrics.safeWidth, input.config.editor.topMarginRows),
-		renderTopFrame(input, metrics),
+		renderTopFrame(input, top, perimeter),
 	];
 
 	for (let i = 0; i < rows; i++) {
-		lines.push(renderBodyRow(input, sourceLines[i] ?? "", i, metrics.safeWidth));
+		lines.push(renderBodyRow(input, sourceLines[i] ?? "", i, metrics.safeWidth, perimeter));
 	}
 
-	lines.push(renderBottomFrame(input, metrics.safeWidth));
+	lines.push(renderBottomFrame(input, metrics.safeWidth, rows + 1, perimeter));
 	return lines;
 }

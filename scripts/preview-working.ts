@@ -4,6 +4,7 @@ import { performance } from "node:perf_hooks";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import { getCapabilities, matchesKey, ProcessTerminal, truncateToWidth, TuiAltScreen } from "@earendil-works/pi-tui";
 import { createConfigStore } from "../src/config/store.js";
+import { WORKING_SWEEP_MODE_VALUES, nextOption } from "../src/config/options.js";
 import { WorkingSweep } from "../src/runtime/working-sweep.js";
 import { renderInputSurfaceFrame } from "../src/surface/frame.js";
 import { renderGlanceLine } from "../src/surface/status-line.js";
@@ -44,7 +45,8 @@ if (process.argv.includes("--dark")) tone = "dark";
 const requestedTheme = process.argv.find(arg => arg.startsWith("--theme="))?.slice("--theme=".length);
 let previewTheme: GlanceThemeName | undefined = isGlanceThemeName(requestedTheme) ? requestedTheme : undefined;
 let trueColor = process.argv.includes("--256") ? false : getCapabilities().trueColor;
-let running = config.editor.workingSweep;
+if (process.argv.includes("--perimeter")) config.editor.workingSweep = "perimeter";
+let running = config.editor.workingSweep !== "off";
 let shortPath = false;
 let warnings = false;
 let closed = false;
@@ -83,6 +85,9 @@ tui.addChild({
 		if (matchesKey(data, "space")) {
 			running = !running;
 			if (running) sweep.start(); else sweep.settle();
+		} else if (matchesKey(data, "m")) {
+			config.editor.workingSweep = nextOption(config.editor.workingSweep, WORKING_SWEEP_MODE_VALUES);
+			if (config.editor.workingSweep === "off") sweep.dispose(); else sweep.attach(running);
 		} else if (matchesKey(data, "s")) {
 			shortPath = !shortPath;
 			state.workspace = shortPath ? { name: "p", path: "/p" } : { name: basename(cwd), path: cwd };
@@ -107,8 +112,8 @@ tui.addChild({
 	},
 	render(width) {
 		return [
-			"Glance 路径扫光 · 路径与连接线动态，右侧状态静止 · 演示数据",
-			`${running ? "运行中" : "空闲"} · ${previewTheme ?? selectGlanceTheme(config.theme, tone)} · ${trueColor ? "RGB" : "ANSI 256"}`,
+			"Glance Working 扫光 · 演示数据",
+			`${running ? "运行中" : "空闲"} · ${config.editor.workingSweep} · ${previewTheme ?? selectGlanceTheme(config.theme, tone)} · ${trueColor ? "RGB" : "ANSI 256"}`,
 			"",
 			...renderInputSurfaceFrame({
 				state, config, width,
@@ -118,11 +123,11 @@ tui.addChild({
 				status: { render: renderStatus },
 			}),
 			"",
-			"Space 动效 · ←/→ 浏览 22 套配色 · T 亮暗配置 · C 色深",
+			"Space 工作/空闲 · M 扫光模式 · ←/→ 配色 · T 亮暗 · C 色深",
 			"S 长短路径 · E 告警 · Q 退出；可直接调整终端宽度。",
 		].map((line) => truncateToWidth(line, width));
 	},
 });
 tui.setFocus(tui.children[0]!);
 tui.start();
-sweep.attach(running);
+if (config.editor.workingSweep !== "off") sweep.attach(running);
