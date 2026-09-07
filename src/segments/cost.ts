@@ -1,10 +1,6 @@
 import { formatCost } from "./display-primitives.js";
-import type { SegmentFeature } from "./feature.js";
-import type { GlanceConfig, SegmentData, SegmentRenderContext } from "../types.js";
-
-function onOff(value: boolean): string {
-	return value ? "on" : "off";
-}
+import { toggleSetting, type SegmentFeature } from "./feature.js";
+import type { SegmentData, SegmentRenderContext } from "../types.js";
 
 function collectCost(ctx: SegmentRenderContext): SegmentData | undefined {
 	if (ctx.config.cost.hideZero && (!Number.isFinite(ctx.state.usage.cost) || ctx.state.usage.cost <= 0)) return undefined;
@@ -18,23 +14,7 @@ export const costSegmentFeature = {
 	label: "Cost",
 	defaultEnabled: true,
 	settings: [
-		{
-			id: "cost.hideZero",
-			label: "Hide zero",
-			hint: "Hide until cost is non-zero.",
-			kind: "toggle",
-			value: (config: GlanceConfig) => onOff(config.cost.hideZero),
-			mutate: (config: GlanceConfig) => {
-				config.cost.hideZero = !config.cost.hideZero;
-			},
-		},
-		{
-			id: "cost.display",
-			label: "Display",
-			hint: "Compact session cost.",
-			kind: "info",
-			value: () => "compact USD",
-		},
+		toggleSetting("cost.hideZero", "Hide zero cost", "Hide the session cost until it is greater than zero.", c => c.cost.hideZero, (c, v) => { c.cost.hideZero = v; }),
 	],
 	collect: collectCost,
 } as const satisfies SegmentFeature;

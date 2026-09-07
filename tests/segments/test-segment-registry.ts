@@ -35,7 +35,7 @@ const EXPECTED_LABELS: Record<ExpectedSegmentId, string> = {
 const EXPECTED_SEGMENT_SETTING_IDS: Record<ExpectedSegmentId, string[]> = {
 	git: ["git.dirtyMarker", "git.aheadBehind", "git.sha", "git.polling"],
 	context: ["context.display", "context.unknown"],
-	cost: ["cost.hideZero", "cost.display"],
+	cost: ["cost.hideZero"],
 	tokens: ["tokens.display", "tokens.cache"],
 	model: ["model.providerLabel", "model.thinkingLabel"],
 	throughput: ["throughput.precision"],
@@ -112,13 +112,13 @@ for (const id of EXPECTED_SEGMENT_IDS) {
 	for (const descriptor of descriptors) {
 		assert.ok(descriptor.label.trim(), `${descriptor.id} descriptor should have a non-empty label`);
 		assert.ok(descriptor.hint.trim(), `${descriptor.id} descriptor should have a non-empty hint`);
-		assert.ok(["toggle", "cycle", "info"].includes(descriptor.kind), `${descriptor.id} descriptor should have a known kind`);
+		assert.ok(["toggle", "choice"].includes(descriptor.kind), `${descriptor.id} descriptor should have a known kind`);
 	}
 
 	assert.deepEqual(
-		getSettingsRows(config, id).map((row) => row.id),
-		[`${id}.enabled`, ...EXPECTED_SEGMENT_SETTING_IDS[id]],
-		`${id} catalog rows should keep enabled plus registry-covered segment setting ids`,
+		getSettingsRows(config, "status", id).map((row) => row.id),
+		EXPECTED_SEGMENT_SETTING_IDS[id],
+		`${id} details come from the feature, visibility lives on the status overview`,
 	);
 }
 

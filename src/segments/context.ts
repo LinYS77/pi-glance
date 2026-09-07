@@ -1,17 +1,6 @@
-import { CONTEXT_DISPLAY_MODE_VALUES, CONTEXT_UNKNOWN_MODE_VALUES, nextOption } from "../config/options.js";
+import { choiceSetting, type SegmentFeature } from "./feature.js";
 import { formatPercent, formatTokens } from "./display-primitives.js";
-import type { SegmentFeature } from "./feature.js";
-import type { GlanceConfig, SegmentData, SegmentRenderContext } from "../types.js";
-
-const CONTEXT_DISPLAY_LABELS: Record<GlanceConfig["context"]["display"], string> = {
-	"percent+tokens": "percent / tokens",
-	percent: "percent",
-	tokens: "tokens",
-};
-
-function contextDisplayLabel(mode: GlanceConfig["context"]["display"]): string {
-	return CONTEXT_DISPLAY_LABELS[mode];
-}
+import type { SegmentData, SegmentRenderContext } from "../types.js";
 
 function contextTokenRatio(ctx: SegmentRenderContext): string {
 	return `${formatTokens(ctx.state.context.tokens)}/${formatTokens(ctx.state.context.window)}`;
@@ -58,26 +47,12 @@ export const contextSegmentFeature = {
 	label: "Context",
 	defaultEnabled: true,
 	settings: [
-		{
-			id: "context.display",
-			label: "Display",
-			hint: "Choose percent, tokens, or both.",
-			kind: "cycle",
-			value: (config: GlanceConfig) => contextDisplayLabel(config.context.display),
-			mutate: (config: GlanceConfig) => {
-				config.context.display = nextOption(config.context.display, CONTEXT_DISPLAY_MODE_VALUES);
-			},
-		},
-		{
-			id: "context.unknown",
-			label: "Unknown",
-			hint: "Show ? or hide when context is unknown.",
-			kind: "cycle",
-			value: (config: GlanceConfig) => config.context.unknown,
-			mutate: (config: GlanceConfig) => {
-				config.context.unknown = nextOption(config.context.unknown, CONTEXT_UNKNOWN_MODE_VALUES);
-			},
-		},
+		choiceSetting("context.display", "Show", "Choose how context usage appears.", [
+			{ value: "percent+tokens", label: "Percentage + tokens" }, { value: "percent", label: "Percentage" }, { value: "tokens", label: "Tokens" },
+		], c => c.context.display, (c, v) => { c.context.display = v; }),
+		choiceSetting("context.unknown", "When unavailable", "What to show when Pi cannot report context usage.", [
+			{ value: "show", label: "Show ?" }, { value: "hide", label: "Hide" },
+		], c => c.context.unknown, (c, v) => { c.context.unknown = v; }),
 	],
 	collect: collectContext,
 } as const satisfies SegmentFeature;

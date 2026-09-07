@@ -108,7 +108,7 @@ function renderTopFrame(input: InputSurfaceFrameInput, plan: ReturnType<typeof p
 	const title = dimChrome ? input.styles.dim : input.styles.title;
 	const elapsed = !input.config.enabled || dimChrome || input.config.editor.workingSweep !== "top" ? undefined : input.chrome?.workingElapsedMs;
 	const sweepWidth = plan.leftWidth + plan.fillerWidth;
-	const sweep = elapsed === undefined ? undefined : createTopEdgeSweep(sweepWidth, elapsed, input.styles);
+	const sweep = elapsed === undefined ? undefined : createTopEdgeSweep(sweepWidth, elapsed, input.styles, input.config.editor.workingSweepSpeed);
 	let column = 0;
 	const rendered = plan.chunks.map((chunk) => {
 		const start = column;
@@ -215,7 +215,7 @@ export function renderInputSurfaceFrame(input: InputSurfaceFrameInput): string[]
 	const topGap = top.status.text ? { column: 1 + top.leftWidth + top.fillerWidth, width: top.status.width + 2 } : undefined;
 	const elapsed = input.chrome?.workingElapsedMs;
 	const perimeter = input.config.enabled && input.config.editor.workingSweep === "perimeter" && !shouldDimChrome(input) && elapsed !== undefined
-		? createPerimeterSweep(metrics.safeWidth, rows, elapsed, input.styles, topGap)
+		? createPerimeterSweep(metrics.safeWidth, rows, elapsed, input.styles, topGap, input.config.editor.workingSweepSpeed)
 		: undefined;
 	const lines = [
 		...renderSurfaceTopMargin(metrics.safeWidth, input.config.editor.topMarginRows),

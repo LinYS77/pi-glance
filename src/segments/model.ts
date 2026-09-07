@@ -1,6 +1,5 @@
-import { MODEL_THINKING_MODE_VALUES, PROVIDER_DISPLAY_MODE_VALUES, nextOption } from "../config/options.js";
-import type { SegmentFeature } from "./feature.js";
-import type { GlanceConfig, SegmentData, SegmentRenderContext } from "../types.js";
+import { choiceSetting, type SegmentFeature } from "./feature.js";
+import type { SegmentData, SegmentRenderContext } from "../types.js";
 
 function shouldShowThinking(ctx: SegmentRenderContext, thinking: string): boolean {
 	if (ctx.config.model.showThinking === "never") return false;
@@ -50,26 +49,12 @@ export const modelSegmentFeature = {
 	label: "Model",
 	defaultEnabled: true,
 	settings: [
-		{
-			id: "model.providerLabel",
-			label: "Provider label",
-			hint: "Show provider name.",
-			kind: "cycle",
-			value: (config: GlanceConfig) => config.display.showProvider,
-			mutate: (config: GlanceConfig) => {
-				config.display.showProvider = nextOption(config.display.showProvider, PROVIDER_DISPLAY_MODE_VALUES);
-			},
-		},
-		{
-			id: "model.thinkingLabel",
-			label: "Thinking label",
-			hint: "Show thinking level.",
-			kind: "cycle",
-			value: (config: GlanceConfig) => config.model.showThinking,
-			mutate: (config: GlanceConfig) => {
-				config.model.showThinking = nextOption(config.model.showThinking, MODEL_THINKING_MODE_VALUES);
-			},
-		},
+		choiceSetting("model.providerLabel", "Provider name", "Show the provider alongside the model name.", [
+			{ value: "auto", label: "Automatic", hint: "Only when useful and there is room." }, { value: "always", label: "Always" }, { value: "never", label: "Never" },
+		], c => c.display.showProvider, (c, v) => { c.display.showProvider = v; }),
+		choiceSetting("model.thinkingLabel", "Thinking level", "Show the model's current thinking level.", [
+			{ value: "auto", label: "Automatic", hint: "Hide when off or space is limited." }, { value: "always", label: "Always" }, { value: "never", label: "Never" },
+		], c => c.model.showThinking, (c, v) => { c.model.showThinking = v; }),
 	],
 	collect: collectModel,
 } as const satisfies SegmentFeature;

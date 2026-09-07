@@ -894,7 +894,7 @@ await test("invalid config load should notify its diagnostic once at session sta
 });
 
 await test("future config load should warn without treating known fields as a runtime failure", async () => {
-	const diagnostic = "pi-glance configuration version 11 is newer than supported version 10";
+	const diagnostic = "pi-glance configuration version 12 is newer than supported version 11";
 	const initialConfig = defaultConfig();
 	const git = createGitHarness();
 	const test = createContext();

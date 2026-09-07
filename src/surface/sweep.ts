@@ -1,3 +1,4 @@
+import { WORKING_SPEED } from "../config/schema.js";
 import { visibleWidth } from "@earendil-works/pi-tui";
 import type { ResolvedGlanceStyles, TextStyler } from "../theme/adapter.js";
 
@@ -5,14 +6,14 @@ const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" });
 const SINGLE_CELL_TEXT = /^[\x20-\x7e─]*$/;
 const TEXT_CACHE_LIMIT = 32;
 const MAX_CACHED_TEXT_LENGTH = 1024;
-const SWEEP_COLUMNS_PER_SECOND = 47;
 
 /** Both paths use one travel speed; a longer route gets a longer cycle. */
-export function sweepMotion(length: number, elapsedMs: number): { position: number; periodMs: number } {
+export function sweepMotion(length: number, elapsedMs: number, speed: number = WORKING_SPEED.defaultValue): { position: number; periodMs: number } {
+	const columnsPerSecond = WORKING_SPEED.normalize(speed);
 	const distance = Number.isFinite(length) ? Math.max(0, length) : 0;
-	const periodMs = distance / SWEEP_COLUMNS_PER_SECOND * 1000;
+	const periodMs = distance / columnsPerSecond * 1000;
 	const elapsed = Number.isFinite(elapsedMs) ? Math.max(0, elapsedMs) : 0;
-	return { periodMs, position: periodMs > 0 ? (elapsed % periodMs) / 1000 * SWEEP_COLUMNS_PER_SECOND : 0 };
+	return { periodMs, position: periodMs > 0 ? (elapsed % periodMs) / 1000 * columnsPerSecond : 0 };
 }
 
 interface MeasuredText {

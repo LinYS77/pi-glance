@@ -1,517 +1,253 @@
-import { cloneConfig, defaultConfig, moveSegment } from "../config/model.js";
-import {
-	getSettingsCategories,
-	getSettingsRows,
-	getThemeCatalogForSlot,
-	getThemeCount,
-	getThemeIdByIndex,
-	getThemeIndex,
-	getThemeLabel,
-	type GlanceThemeSlot,
-	type SettingsCategory,
-	type SettingsCategoryId,
-	type SettingsRow,
-} from "./catalog.js";
-import type { GlanceConfig, GlanceThemeName, WidthMode } from "../types.js";
+import { cloneConfig, defaultConfig, moveSegment, toggleSegment } from "../config/model.js";
+import { getSettingsRows, getThemeCatalogForSlot, SETTINGS_SECTIONS, type SettingsRow, type SettingsSectionId, type GlanceThemeSlot } from "./catalog.js";
+import { segmentLabel } from "../segments/registry.js";
+import type { GlanceConfig, SegmentId, WidthMode } from "../types.js";
 
 export type PanePreviewDensity = "auto" | WidthMode;
-
-export type PaneFocus = "categories" | "settings" | "values";
-export type PaneSubview = "settings" | "themeBrowser";
-export type PaneMoveDirection = "left" | "right" | "up" | "down";
-
-export type PaneIntent =
-	| { type: "cancel" }
-	| { type: "back" }
-	| { type: "move"; direction: PaneMoveDirection; amount?: number }
-	| { type: "activate" }
-	| { type: "save" }
-	| { type: "resetDefaults" }
-	| { type: "cyclePreviewDensity" }
-	| { type: "reorderSegment"; direction: -1 | 1 }
-	| { type: "noop" };
-
-export type PaneCompletion = { action: "save"; config: GlanceConfig } | { action: "cancel" };
-
-export interface ThemeBrowserState {
-	slot: GlanceThemeSlot;
-	highlightedThemeIndex: number;
-	restoreTheme: GlanceThemeName;
-	returnFocus: PaneFocus;
-	returnCategoryIndex: number;
-	returnSettingIndex: number;
-}
-
-interface PaneSharedState {
+interface ListPage { kind: "list"; index: number; segment?: SegmentId }
+interface EditorPageBase { parent: ListPage; restore: GlanceConfig; rowId: string }
+type EditorPage =
+	| (EditorPageBase & { kind: "choices"; index: number })
+	| (EditorPageBase & { kind: "theme"; index: number; slot: GlanceThemeSlot })
+	| (EditorPageBase & { kind: "number"; text: string; error: string });
+type ContentPage = ListPage | EditorPage;
+type PanePage = ContentPage | { kind: "confirm"; action: "discard" | "reset"; index: number; previous: ContentPage };
+export interface PaneModelState {
 	initial: GlanceConfig;
 	draft: GlanceConfig;
-	focus: PaneFocus;
-	categoryIndex: number;
-	settingIndex: number;
-	status: string;
+	section: SettingsSectionId;
+	sectionPages: Record<SettingsSectionId, ListPage>;
+	detailRows: Partial<Record<SegmentId, number>>;
+	page: PanePage;
 	previewDensity: PanePreviewDensity;
 }
-
-export type PaneModelState = PaneSharedState & (
-	| { subview: "settings"; themeBrowser?: never }
-	| { subview: "themeBrowser"; themeBrowser: ThemeBrowserState }
-);
-
-type ThemeBrowserModel = Extract<PaneModelState, { subview: "themeBrowser" }>;
-
-export interface PaneUpdateResult {
-	model: PaneModelState;
-	requestRender: boolean;
-	completion?: PaneCompletion;
-}
-
-export interface HelpShortcut {
-	key: string;
-	label: string;
-}
-
-export type SettingsRowKind = SettingsRow["kind"];
-
-export type CategoryViewModel = SettingsCategory & {
-	selected: boolean;
-	hasFocus: boolean;
-};
-
-export interface SettingViewModel {
-	id: string;
-	label: string;
-	value: string;
-	hint: string;
-	kind: SettingsRowKind;
-	opensSubview?: PaneSubview;
-	editable: boolean;
-	selected: boolean;
-	labelHasFocus: boolean;
-	valueHasFocus: boolean;
-}
-
-export interface ThemeBrowserThemeViewModel {
-	id: GlanceThemeName;
-	label: string;
-	group: string;
-	groupLabel: string;
-	tone: string;
-	tags: readonly string[];
-	detailTags: readonly string[];
-	description: string;
-	detailDescription: string;
-	selected: boolean;
-	previewed: boolean;
-	restored: boolean;
-	saved: boolean;
-}
-
-export interface ThemeBrowserViewModel {
-	slot: GlanceThemeSlot;
-	slotLabel: string;
-	highlightedThemeIndex: number;
-	savedTheme: GlanceThemeName;
-	savedLabel: string;
-	restoreTheme: GlanceThemeName;
-	restoreLabel: string;
-	previewTheme: GlanceThemeName;
-	previewLabel: string;
-	themes: ThemeBrowserThemeViewModel[];
-}
-
+export type PaneCompletion = { action: "save"; config: GlanceConfig } | { action: "cancel" };
+export type PaneIntent =
+	| { type: "move"; direction: "up" | "down"; amount?: number }
+	| { type: "adjust"; direction: -1 | 1 }
+	| { type: "section"; direction: -1 | 1 }
+	| { type: "reorder"; direction: -1 | 1 }
+	| { type: "input"; text: string }
+	| { type: "activate" | "toggle" | "back" | "cancel" | "save" | "reset" | "density" };
+export interface PaneUpdateResult { model: PaneModelState; completion?: PaneCompletion }
+export interface HelpShortcut { key: string; label: string }
 export interface GlancePaneViewModel {
+	section: SettingsSectionId;
+	title: string;
 	dirty: boolean;
-	status: string;
-	subview: PaneSubview;
-	categories: CategoryViewModel[];
-	selectedCategory?: SettingsCategory;
-	settingsTitle: string;
-	settings: SettingViewModel[];
-	selectedHint?: string;
-	previewDensity: PanePreviewDensity;
-	previewDensityLabel: string;
-	preview: {
-		working: boolean;
-		config: GlanceConfig;
-		density: PanePreviewDensity;
-		ambientTone?: GlanceThemeSlot;
-	};
-	themeBrowser?: ThemeBrowserViewModel;
+	rows: Array<{ id: string; label: string; value: string; kind: SettingsRow["kind"]; selected: boolean; changed: boolean }>;
+	choices: Array<{ label: string; selected: boolean; checked: boolean }>;
+	hint: string;
+	page: PanePage["kind"];
+	actions: HelpShortcut[];
 	help: HelpShortcut[];
-}
-
-const PREVIEW_DENSITIES: readonly PanePreviewDensity[] = ["auto", "full", "compact", "minimal"];
-
-function previewDensityLabel(density: PanePreviewDensity): string {
-	return density === "auto" ? "Auto" : density[0]!.toUpperCase() + density.slice(1);
-}
-
-function cyclePreviewDensity(model: PaneModelState): PaneModelState {
-	const index = PREVIEW_DENSITIES.indexOf(model.previewDensity);
-	const previewDensity = PREVIEW_DENSITIES[(index + 1) % PREVIEW_DENSITIES.length] ?? "auto";
-	return withModel(model, { previewDensity });
-}
-
-function sameConfig(a: GlanceConfig, b: GlanceConfig): boolean {
-	return JSON.stringify(a) === JSON.stringify(b);
-}
-
-function categoriesFor(model: PaneModelState): SettingsCategory[] {
-	return getSettingsCategories(model.draft);
-}
-
-function rowsFor(model: PaneModelState, categoryId: SettingsCategoryId): SettingsRow[] {
-	return getSettingsRows(model.draft, categoryId);
-}
-
-function selectedCategory(model: PaneModelState): SettingsCategory | undefined {
-	return categoriesFor(model)[model.categoryIndex];
-}
-
-function withModel<M extends PaneModelState>(model: M, changes: Partial<PaneSharedState>): M {
-	return { ...model, ...changes };
-}
-
-function result(model: PaneModelState, requestRender: boolean, completion?: PaneCompletion): PaneUpdateResult {
-	return completion ? { model, requestRender, completion } : { model, requestRender };
-}
-
-function themeSlotLabel(slot: GlanceThemeSlot): string {
-	return slot === "light" ? "Light" : "Dark";
-}
-
-function configTheme(config: GlanceConfig, slot: GlanceThemeSlot): GlanceThemeName {
-	return config.theme[slot];
-}
-
-function withConfigTheme(config: GlanceConfig, slot: GlanceThemeSlot, theme: GlanceThemeName): GlanceConfig {
-	return { ...config, theme: { ...config.theme, [slot]: theme } };
-}
-
-function themeBrowserHelpShortcuts(): HelpShortcut[] {
-	return [
-		{ key: "↑↓", label: "preview" },
-		{ key: "Enter", label: "accept" },
-		{ key: "Esc/Left", label: "restore" },
-		{ key: "S", label: "save" },
-	];
-}
-
-function helpShortcuts(focus: PaneFocus, width: number): HelpShortcut[] {
-	const stable: HelpShortcut[] = [
-		{ key: "←→↑↓", label: "move" },
-		{ key: "S", label: "save" },
-		{ key: "R", label: "reset" },
-	];
-
-	const isNarrow = width < 72;
-
-	switch (focus) {
-		case "categories":
-			if (isNarrow) {
-				return [
-					{ key: "S", label: "save" },
-					{ key: "J/K", label: "reorder" },
-					{ key: "Esc", label: "cancel" },
-				];
-			}
-			return [...stable, { key: "Enter", label: "open" }, { key: "J/K", label: "reorder" }, { key: "Esc", label: "cancel" }];
-		case "settings":
-			if (isNarrow) {
-				return [
-					{ key: "Enter", label: "edit" },
-					{ key: "S", label: "save" },
-					{ key: "Esc", label: "back" },
-				];
-			}
-			return [...stable, { key: "Enter", label: "edit" }, { key: "Esc", label: "back" }];
-		case "values":
-			if (isNarrow) {
-				return [
-					{ key: "Enter", label: "change" },
-					{ key: "S", label: "save" },
-					{ key: "Esc", label: "back" },
-				];
-			}
-			return [...stable, { key: "Enter", label: "change" }, { key: "Esc", label: "back" }];
-	}
-}
-
-function closeThemeBrowser(model: ThemeBrowserModel, draft: GlanceConfig, status: string): PaneModelState {
-	const browser = model.themeBrowser;
-	return {
-		...model,
-		draft,
-		focus: browser.returnFocus,
-		categoryIndex: browser.returnCategoryIndex,
-		settingIndex: browser.returnSettingIndex,
-		status,
-		subview: "settings",
-		themeBrowser: undefined,
-	};
-}
-
-function acceptThemeBrowser(model: ThemeBrowserModel): PaneModelState {
-	const slot = model.themeBrowser.slot;
-	return closeThemeBrowser(model, model.draft, `${themeSlotLabel(slot)} theme → ${getThemeLabel(configTheme(model.draft, slot))}. Press S to save.`);
-}
-
-function restoreThemeBrowser(model: ThemeBrowserModel): PaneModelState {
-	return closeThemeBrowser(model, withConfigTheme(model.draft, model.themeBrowser.slot, model.themeBrowser.restoreTheme), "Theme preview discarded.");
-}
-
-function moveThemeBrowserHighlight(model: ThemeBrowserModel, direction: PaneMoveDirection, amount = 1): PaneModelState {
-	if (direction === "left") return restoreThemeBrowser(model);
-	if (direction === "right") return model;
-
-	const slot = model.themeBrowser.slot;
-	const count = getThemeCount(slot);
-	const distance = Math.max(1, Math.floor(amount));
-	const step = direction === "up" ? -distance : distance;
-	const highlightedThemeIndex = (model.themeBrowser.highlightedThemeIndex + step % count + count) % count;
-	const theme = getThemeIdByIndex(highlightedThemeIndex, slot) ?? configTheme(model.draft, slot);
-	return {
-		...model,
-		draft: withConfigTheme(model.draft, slot, theme),
-		themeBrowser: {
-			...model.themeBrowser,
-			highlightedThemeIndex,
-		},
-	};
-}
-
-function moveFocus(model: PaneModelState, direction: PaneMoveDirection, amount = 1): PaneModelState {
-	if (model.subview === "themeBrowser") return moveThemeBrowserHighlight(model, direction, amount);
-
-	const categories = categoriesFor(model);
-	const distance = Math.max(1, Math.floor(amount));
-
-	switch (direction) {
-		case "left":
-			if (model.focus === "values") return withModel(model, { focus: "settings" });
-			if (model.focus === "settings") return withModel(model, { focus: "categories" });
-			return model;
-		case "right": {
-			const category = categories[model.categoryIndex];
-			const hasRows = Boolean(category && rowsFor(model, category.id).length > 0);
-			if (!hasRows) return model;
-			if (model.focus === "categories") return withModel(model, { focus: "settings" });
-			if (model.focus === "settings") return withModel(model, { focus: "values" });
-			return model;
-		}
-		case "up":
-		case "down": {
-			const step = (direction === "up" ? -1 : 1) * distance;
-			if (model.focus === "categories") {
-				const count = categories.length;
-				const categoryIndex = count === 0 ? 0 : ((model.categoryIndex + step) % count + count) % count;
-				return withModel(model, { categoryIndex, settingIndex: 0 });
-			}
-
-			const category = categories[model.categoryIndex];
-			const count = category ? rowsFor(model, category.id).length : 0;
-			return withModel(model, {
-				settingIndex: count === 0 ? 0 : ((model.settingIndex + step) % count + count) % count,
-			});
-		}
-	}
-}
-
-function selectedRow(model: PaneModelState): SettingsRow | undefined {
-	const category = selectedCategory(model);
-	if (!category) return undefined;
-	return rowsFor(model, category.id)[model.settingIndex];
-}
-
-function openThemeBrowser(model: PaneModelState, row: SettingsRow): PaneModelState {
-	const slot = row.themeSlot ?? "light";
-	const highlightedThemeIndex = getThemeIndex(configTheme(model.draft, slot), slot);
-	return {
-		...model,
-		subview: "themeBrowser",
-		themeBrowser: {
-			slot,
-			highlightedThemeIndex,
-			restoreTheme: configTheme(model.draft, slot),
-			returnFocus: model.focus,
-			returnCategoryIndex: model.categoryIndex,
-			returnSettingIndex: model.settingIndex,
-		},
-	};
-}
-
-function activateCurrent(model: PaneModelState): PaneModelState {
-	if (model.subview === "themeBrowser") return acceptThemeBrowser(model);
-
-	const category = selectedCategory(model);
-	if (!category) return model;
-	const row = selectedRow(model);
-	if (!row) return model;
-
-	if (model.focus === "categories") return withModel(model, { focus: "settings" });
-	if (model.focus === "settings") return withModel(model, { focus: "values" });
-
-	if (row.opensSubview === "themeBrowser") return openThemeBrowser(model, row);
-
-	if (!row.apply) {
-		return withModel(model, { status: row.hint ?? `${row.label} is informational.` });
-	}
-
-	const draft = row.apply(model.draft);
-	const nextRow = getSettingsRows(draft, category.id)[model.settingIndex];
-	return withModel(model, {
-		draft,
-		status: `${row.label} → ${nextRow?.value ?? "updated"}. Press S to save.`,
-	});
-}
-
-function reorderCurrentSegment(model: PaneModelState, direction: -1 | 1): PaneModelState {
-	if (model.categoryIndex === 0) {
-		return withModel(model, { status: "Cannot move General settings." });
-	}
-
-	const segment = model.draft.segments[model.categoryIndex - 1];
-	if (!segment) return model;
-
-	const targetCategoryIndex = model.categoryIndex + direction;
-	if (targetCategoryIndex < 1 || targetCategoryIndex > model.draft.segments.length) {
-		return withModel(model, { status: direction < 0 ? "Already at the top." : "Already at the bottom." });
-	}
-
-	return withModel(model, {
-		draft: moveSegment(model.draft, segment.id, direction),
-		categoryIndex: targetCategoryIndex,
-		status: "Segment order updated. Press S to save.",
-	});
+	preview: { config: GlanceConfig; working: boolean; density: PanePreviewDensity; ambientTone?: GlanceThemeSlot };
 }
 
 export function createPaneModel(initial: GlanceConfig): PaneModelState {
-	return {
-		initial: cloneConfig(initial),
-		draft: cloneConfig(initial),
-		focus: "categories",
-		categoryIndex: 0,
-		settingIndex: 0,
-		status: "",
-		previewDensity: "auto",
-		subview: "settings",
-	};
+	return { initial: cloneConfig(initial), draft: cloneConfig(initial), section: "appearance", sectionPages: { appearance: { kind: "list", index: 0 }, status: { kind: "list", index: 0 }, working: { kind: "list", index: 0 } }, detailRows: {}, page: { kind: "list", index: 0 }, previewDensity: "auto" };
 }
-
 export function paneIsDirty(model: PaneModelState): boolean {
-	return !sameConfig(model.draft, model.initial);
+	// Normalized config order is not significant (defaults and loaded files may differ).
+	return !sameValue(model.draft, model.initial);
 }
-
-function createThemeBrowserViewModel(model: PaneModelState): ThemeBrowserViewModel | undefined {
-	if (model.subview !== "themeBrowser") return undefined;
-	const slot = model.themeBrowser.slot;
-	const savedTheme = configTheme(model.initial, slot);
-	const previewTheme = configTheme(model.draft, slot);
-	return {
-		slot,
-		slotLabel: `${themeSlotLabel(slot)} theme`,
-		highlightedThemeIndex: model.themeBrowser.highlightedThemeIndex,
-		savedTheme,
-		savedLabel: getThemeLabel(savedTheme),
-		restoreTheme: model.themeBrowser.restoreTheme,
-		restoreLabel: getThemeLabel(model.themeBrowser.restoreTheme),
-		previewTheme,
-		previewLabel: getThemeLabel(previewTheme),
-		themes: getThemeCatalogForSlot(slot).map((theme, index) => ({
-			id: theme.id,
-			label: theme.label,
-			group: theme.group,
-			groupLabel: theme.groupLabel,
-			tone: theme.tone,
-			tags: theme.tags,
-			detailTags: theme.detailTags,
-			description: theme.description,
-			detailDescription: theme.detailDescription,
-			selected: index === model.themeBrowser?.highlightedThemeIndex,
-			previewed: theme.id === previewTheme,
-			restored: theme.id === model.themeBrowser?.restoreTheme,
-			saved: theme.id === savedTheme,
-		})),
-	};
+function sameValue(a: unknown, b: unknown): boolean {
+	if (a === b) return true;
+	if (!a || !b || typeof a !== "object" || typeof b !== "object") return false;
+	const first = Object.entries(a), second = Object.entries(b);
+	return first.length === second.length && first.every(([key, value]) => Object.hasOwn(b, key) && sameValue(value, (b as Record<string, unknown>)[key]));
 }
-
-export function createPaneViewModel(model: PaneModelState, width: number): GlancePaneViewModel {
-	const categories = categoriesFor(model);
-	const selected = categories[model.categoryIndex];
-	const settings = selected ? rowsFor(model, selected.id) : [];
-
-	return {
-		dirty: paneIsDirty(model),
-		status: model.status,
-		subview: model.subview,
-		categories: categories.map((category, index) => ({
-			...category,
-			selected: index === model.categoryIndex,
-			hasFocus: model.focus === "categories",
-		})),
-		selectedCategory: selected,
-		settingsTitle: selected ? (selected.id === "general" ? "General" : selected.label) : "",
-		settings: settings.map((row, index) => ({
-			id: row.id,
-			label: row.label,
-			value: row.value,
-			hint: row.hint,
-			kind: row.kind,
-			opensSubview: row.opensSubview,
-			editable: Boolean(row.apply),
-			selected: index === model.settingIndex,
-			labelHasFocus: model.focus === "settings",
-			valueHasFocus: model.focus === "values",
-		})),
-		selectedHint: settings[model.settingIndex]?.hint,
-		previewDensity: model.previewDensity,
-		previewDensityLabel: previewDensityLabel(model.previewDensity),
-		preview: {
-			working: model.draft.enabled && model.draft.editor.workingSweep !== "off" && model.subview === "settings"
-				&& model.focus !== "categories" && settings[model.settingIndex]?.id === "general.workingSweep",
-			config: model.draft,
-			density: model.previewDensity,
-			ambientTone: model.subview === "themeBrowser" ? model.themeBrowser.slot : undefined,
-		},
-		themeBrowser: createThemeBrowserViewModel(model),
-		help: model.subview === "themeBrowser" ? themeBrowserHelpShortcuts() : helpShortcuts(model.focus, width),
-	};
+function contentPage(model: PaneModelState): ContentPage {
+	return model.page.kind === "confirm" ? model.page.previous : model.page;
+}
+function listPage(model: PaneModelState): ListPage {
+	const page = contentPage(model);
+	return page.kind === "list" ? page : page.parent;
+}
+function rowsFor(model: PaneModelState): SettingsRow[] {
+	return getSettingsRows(model.draft, model.section, listPage(model).segment);
+}
+function selectedRow(model: PaneModelState): SettingsRow | undefined {
+	const page = contentPage(model), rows = rowsFor(model);
+	return page.kind === "list" ? rows[page.index] : rows.find(row => row.id === page.rowId);
+}
+function wrap(index: number, count: number): number { return count ? (index % count + count) % count : 0; }
+function clampIndex(index: number, count: number): number { return Math.max(0, Math.min(count - 1, index)); }
+function withList(model: PaneModelState, page: ListPage): PaneModelState {
+	return { ...model, page, sectionPages: { ...model.sectionPages, [model.section]: page },
+		detailRows: page.segment ? { ...model.detailRows, [page.segment]: page.index } : model.detailRows };
+}
+function pickerRow(model: PaneModelState, page: EditorPage) {
+	const row = getSettingsRows(page.restore, model.section, page.parent.segment).find(row => row.id === page.rowId);
+	return row?.kind === "choice" ? row : undefined;
+}
+function pickerCount(model: PaneModelState, page: Extract<EditorPage, { kind: "theme" | "choices" }>): number {
+	if (page.kind === "theme") return getThemeCatalogForSlot(page.slot).length;
+	const row = pickerRow(model, page);
+	return row ? row.options.length + (row.selectedIndex < 0 ? 1 : 0) : 0;
+}
+function selectChoice(model: PaneModelState, page: Extract<EditorPage, { kind: "theme" | "choices" }>, index: number): PaneModelState {
+	let draft = model.draft;
+	if (page.kind === "theme") {
+		const theme = getThemeCatalogForSlot(page.slot)[index];
+		if (theme) { draft = cloneConfig(draft); draft.theme[page.slot] = theme.id; }
+	} else {
+		const row = pickerRow(model, page);
+		if (row) draft = row.selectedIndex < 0 && index === row.options.length ? cloneConfig(page.restore) : row.select(model.draft, index);
+	}
+	return { ...model, draft, page: { ...page, index } };
+}
+function updateNumber(model: PaneModelState, text: string, confirm = false): PaneModelState {
+	if (model.page.kind !== "number") return model;
+	const row = selectedRow(model);
+	if (row?.kind !== "number") return model;
+	const value = Number(text);
+	const valid = /^\d+$/.test(text) && Number.isInteger(value) && value >= row.min && value <= row.max;
+	return { ...model, draft: valid ? row.setValue(model.draft, value) : model.draft,
+		page: { ...model.page, text, error: valid ? "" : confirm ? `Enter a whole number from ${row.min} to ${row.max}.` : text === model.page.text ? model.page.error : "" } };
+}
+function back(model: PaneModelState): PaneUpdateResult {
+	const page = model.page;
+	if (page.kind === "confirm") return { model: { ...model, page: page.previous } };
+	if (page.kind !== "list") return { model: { ...model, draft: page.restore, page: page.parent } };
+	if (page.segment) return { model: withList(model, { kind: "list", index: Math.max(0, model.draft.segments.findIndex(segment => segment.id === page.segment)) }) };
+	return paneIsDirty(model)
+		? { model: { ...model, page: { kind: "confirm", action: "discard", index: 0, previous: page } } }
+		: { model, completion: { action: "cancel" } };
+}
+function activate(model: PaneModelState): PaneUpdateResult {
+	const page = model.page;
+	if (page.kind === "confirm") {
+		if (page.index === 0) return { model: { ...model, page: page.previous } };
+		if (page.action === "discard") return { model, completion: { action: "cancel" } };
+		const draft = defaultConfig(), parent = listPage(model), rowId = selectedRow(model)?.id;
+		const index = Math.max(0, getSettingsRows(draft, model.section, parent.segment).findIndex(row => row.id === rowId));
+		return { model: withList({ ...model, draft }, { ...parent, index }) };
+	}
+	if (page.kind === "number") {
+		const next = updateNumber(model, page.text, true);
+		return { model: next.page.kind === "number" && next.page.error ? next : { ...next, page: page.parent } };
+	}
+	if (page.kind === "theme" || page.kind === "choices") return { model: { ...selectChoice(model, page, page.index), page: page.parent } };
+	const row = selectedRow(model);
+	if (!row) return { model };
+	if (row.kind === "segment") return { model: withList(model, { kind: "list", segment: row.segment, index: model.detailRows[row.segment] ?? 0 }) };
+	if (row.kind === "toggle") return { model: { ...model, draft: row.select(model.draft, row.selectedIndex === 0 ? 1 : 0) } };
+	const base = { parent: page, restore: cloneConfig(model.draft), rowId: row.id };
+	if (row.kind === "theme") return { model: { ...model, page: { ...base, kind: "theme", slot: row.slot, index: Math.max(0, getThemeCatalogForSlot(row.slot).findIndex(theme => theme.id === model.draft.theme[row.slot])) } } };
+	if (row.kind === "number") return { model: { ...model, page: { ...base, kind: "number", text: String(row.number), error: "" } } };
+	return { model: { ...model, page: { ...base, kind: "choices", index: row.selectedIndex < 0 ? row.options.length : row.selectedIndex } } };
 }
 
 export function updatePaneModel(model: PaneModelState, intent: PaneIntent): PaneUpdateResult {
-	switch (intent.type) {
-		case "cancel":
-			return result(model, false, { action: "cancel" });
-		case "back":
-			if (model.subview === "themeBrowser") return result(restoreThemeBrowser(model), true);
-			if (model.focus === "categories") return result(model, false, { action: "cancel" });
-			return result(withModel(model, { focus: model.focus === "values" ? "settings" : "categories" }), true);
-		case "move":
-			return result(moveFocus(model, intent.direction, intent.amount), true);
-		case "activate":
-			return result(activateCurrent(model), true);
-		case "save":
-			return result(model, false, { action: "save", config: cloneConfig(model.draft) });
-		case "resetDefaults":
-			return result(
-				{
-					...model,
-					draft: defaultConfig(),
-					focus: "categories",
-					categoryIndex: 0,
-					settingIndex: 0,
-					status: "Defaults restored. Press S to save or Esc to cancel.",
-					subview: "settings",
-					themeBrowser: undefined,
-				},
-				true,
-			);
-		case "cyclePreviewDensity":
-			return result(cyclePreviewDensity(model), true);
-		case "reorderSegment":
-			if (model.focus !== "categories") return result(model, false);
-			return result(reorderCurrentSegment(model, intent.direction), true);
-		case "noop":
-			return result(model, false);
+	const page = model.page;
+	if (intent.type === "cancel") return { model, completion: { action: "cancel" } };
+	if (intent.type === "back") return back(model);
+	if (intent.type === "activate") return activate(model);
+	if (intent.type === "save") return page.kind === "list" ? { model, completion: { action: "save", config: cloneConfig(model.draft) } } : { model };
+	if (intent.type === "input") return { model: updateNumber(model, intent.text) };
+	if (intent.type === "adjust" && (page.kind === "theme" || page.kind === "choices")) {
+		return { model: selectChoice(model, page, clampIndex(page.index + intent.direction, pickerCount(model, page))) };
 	}
+	if (intent.type === "move") {
+		const amount = Number.isFinite(intent.amount) ? Math.max(1, Math.floor(intent.amount!)) : 1;
+		const step = (intent.direction === "up" ? -1 : 1) * amount;
+		if (page.kind === "number") return { model };
+		if (page.kind === "confirm") return { model: { ...model, page: { ...page, index: clampIndex(page.index + step, 2) } } };
+		if (page.kind === "theme" || page.kind === "choices") return { model: selectChoice(model, page, clampIndex(page.index + step, pickerCount(model, page))) };
+		return { model: withList(model, { ...page, index: clampIndex(page.index + step, rowsFor(model).length) }) };
+	}
+	if (page.kind !== "list") return { model };
+	const row = selectedRow(model);
+	switch (intent.type) {
+		case "section": {
+			const section = SETTINGS_SECTIONS[wrap(SETTINGS_SECTIONS.findIndex(section => section.id === model.section) + intent.direction, SETTINGS_SECTIONS.length)]!.id;
+			return { model: { ...model, section, page: model.sectionPages[section] } };
+		}
+		case "reset": return { model: { ...model, page: { kind: "confirm", action: "reset", index: 0, previous: page } } };
+		case "density": {
+			const values: PanePreviewDensity[] = ["auto", "full", "compact", "minimal"];
+			return { model: model.section === "status" ? { ...model, previewDensity: values[wrap(values.indexOf(model.previewDensity) + 1, values.length)]! } : model };
+		}
+		case "toggle":
+		case "adjust": {
+			if (!row) return { model };
+			if (intent.type === "toggle") {
+				if (row.kind === "segment") return { model: { ...model, draft: toggleSegment(model.draft, row.segment) } };
+				return row.kind === "toggle" ? activate(model) : { model };
+			}
+			if (intent.type !== "adjust") return { model };
+			if (row.kind === "segment") return { model: row.enabled === (intent.direction === 1) ? model : { ...model, draft: toggleSegment(model.draft, row.segment) } };
+			if (row.kind === "toggle") return { model: { ...model, draft: row.select(model.draft, intent.direction === 1 ? 0 : 1) } };
+			if (row.kind === "number") return { model: { ...model, draft: row.setValue(model.draft, row.number + intent.direction) } };
+			if (row.kind === "theme") {
+				const themes = getThemeCatalogForSlot(row.slot), current = themes.findIndex(theme => theme.id === model.draft.theme[row.slot]);
+				const draft = cloneConfig(model.draft);
+				draft.theme[row.slot] = themes[clampIndex(current + intent.direction, themes.length)]!.id;
+				return { model: { ...model, draft } };
+			}
+			if (row.selectedIndex < 0 && intent.direction === 1) return { model };
+			const current = row.selectedIndex < 0 ? row.options.length : row.selectedIndex;
+			return { model: { ...model, draft: row.select(model.draft, clampIndex(current + intent.direction, row.options.length)) } };
+		}
+		case "reorder": {
+			if (row?.kind !== "segment") return { model };
+			const index = Math.max(0, Math.min(model.draft.segments.length - 1, page.index + intent.direction));
+			return { model: withList({ ...model, draft: moveSegment(model.draft, row.segment, intent.direction) }, { ...page, index }) };
+		}
+	}
+}
+
+export function createPaneViewModel(model: PaneModelState): GlancePaneViewModel {
+	const page = model.page, content = contentPage(model), list = listPage(model), row = selectedRow(model);
+	let title = list.segment ? `Status line / ${segmentLabel(list.segment)}` : SETTINGS_SECTIONS.find(section => section.id === model.section)!.label;
+	let hint = row?.kind === "choice" ? row.options[row.selectedIndex]?.hint ?? row.hint : row?.hint ?? "";
+	if (list.segment && !model.draft.segments.find(segment => segment.id === list.segment)?.enabled) title += " (Off)";
+	let choices: GlancePaneViewModel["choices"] = [];
+	let help: HelpShortcut[], actions: HelpShortcut[];
+	if (page.kind === "confirm") {
+		title = page.action === "reset" ? "Reset all settings?" : "Discard unsaved changes?";
+		hint = page.action === "reset" ? "Restore Glance defaults in this preview. Save to apply them." : "Your saved settings will stay unchanged.";
+		choices = [{ label: "Keep editing", selected: page.index === 0, checked: false }, { label: page.action === "reset" ? "Reset all settings" : "Discard changes", selected: page.index === 1, checked: false }];
+		help = [{ key: "↑↓", label: "Select" }];
+		actions = [{ key: "Enter", label: "Confirm" }, { key: "Esc", label: "Back" }];
+	} else if (page.kind === "number") {
+		title = row?.label ?? "Sweep speed";
+		hint = page.error || "Type to replace the speed (10–120 cols/s). Default: 47.";
+		help = [];
+		actions = [{ key: "Enter", label: "Confirm" }, { key: "Esc", label: "Cancel" }];
+	} else if (page.kind === "theme" || page.kind === "choices") {
+		title = row?.label ?? title;
+		if (page.kind === "theme") {
+			const themes = getThemeCatalogForSlot(page.slot), selected = themes[page.index];
+			choices = themes.map((theme, index) => ({ label: theme.label, selected: index === page.index, checked: theme.id === page.restore.theme[page.slot] }));
+			hint = selected ? `${selected.groupLabel} · ${selected.description}` : hint;
+		} else {
+			const previous = pickerRow(model, page);
+			if (previous) {
+				choices = previous.options.map((option, index) => ({ label: option.label, selected: index === page.index, checked: index === previous.selectedIndex }));
+				if (previous.selectedIndex < 0) choices.push({ label: `${previous.value} (current)`, selected: page.index === previous.options.length, checked: true });
+				hint = previous.options[page.index]?.hint ?? previous.hint;
+			}
+		}
+		help = [{ key: "↑↓", label: "Preview" }, { key: "←→", label: "Prev / next" }];
+		actions = [{ key: "Enter", label: "Confirm" }, { key: "Esc", label: "Cancel" }];
+	} else {
+		help = [{ key: "Tab/Shift+Tab", label: "Section" }, { key: "↑↓", label: "Select" }, { key: "←→", label: row?.kind === "segment" || row?.kind === "toggle" ? "Off / on" : row?.kind === "number" ? "Slower / faster" : "Prev / next" }, { key: "Enter", label: row?.kind === "segment" ? "Details" : row?.kind === "toggle" ? "Toggle" : "Edit" }];
+		if (row?.kind === "segment" || row?.kind === "toggle") help.push({ key: "Space", label: "Toggle" });
+		if (row?.kind === "segment") help.push({ key: "J/K", label: "Reorder" });
+		if (model.section === "status") help.push({ key: "D", label: "Preview layout" });
+		actions = [{ key: "S", label: "Save & close" }, { key: "Esc", label: list.segment ? "Back" : "Close" }, { key: "R", label: "Reset" }];
+	}
+	const original = getSettingsRows(model.initial, model.section, list.segment);
+	return {
+		section: model.section, title, page: page.kind, dirty: paneIsDirty(model), hint, choices, help, actions,
+		rows: rowsFor(model).map((row, index) => ({ id: row.id, label: row.label, value: row.value, kind: row.kind, selected: index === list.index,
+			changed: row.value !== original.find(previous => previous.id === row.id)?.value || (row.kind === "segment" && original[index]?.id !== row.id),
+		})),
+		preview: { config: model.draft, density: model.previewDensity,
+			working: model.draft.enabled && model.draft.editor.workingSweep !== "off" && model.section === "working" && page.kind !== "confirm",
+			ambientTone: content.kind === "theme" ? content.slot : row?.kind === "theme" ? row.slot : undefined,
+		},
+	};
 }

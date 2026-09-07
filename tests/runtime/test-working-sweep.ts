@@ -52,6 +52,53 @@ test("clock starts only for an active run; pauses, cancels and disposes without 
 	assert.equal(time.pending(), 0);
 });
 
+test("speed changes preserve travelled distance without replacing the display clock", () => {
+	const time = clock();
+	const sweep = new WorkingSweep({ nowMs: time.now, schedule: time.schedule, ownsEditor: () => true, requestRender() {}, setWorkingVisible() {} });
+	sweep.attach(true);
+	time.advance(1000);
+	const callback = time.stale();
+	sweep.setSpeed(94);
+	assert.equal(sweep.elapsedMs(), 500);
+	assert.equal(time.stale(), callback);
+	assert.equal(time.pending(), 1);
+	time.advance(1000);
+	assert.equal(sweep.elapsedMs(), 1500);
+	sweep.setSpeed(47);
+	assert.equal(sweep.elapsedMs(), 3000);
+	sweep.setWaiting(true); sweep.setSpeed(10);
+	assert.equal(time.pending(), 0);
+	sweep.setWaiting(false);
+	assert.equal(sweep.elapsedMs(), 0);
+	sweep.dispose();
+});
+
+for (const failure of [undefined, "write-error", "read-only"] as const) test(`speed-only saves keep the editor and respect save outcome: ${failure ?? "success"}`, async () => {
+	const time = clock(), ctx = createRuntimeTestContext({ idle: false });
+	const config = defaultConfig(), fast = structuredClone(config);
+	fast.editor.workingSweepSpeed = 94;
+	const h = createRuntimeHarness({ workingSweepNowMs: time.now, scheduleSweepFrame: time.schedule, git: createGitHarness(),
+		loadConfigSyncResult: { config, status: failure === "read-only" ? "future" : "loaded", writable: failure !== "read-only" },
+		saveConfigError: failure === "write-error" ? new Error("write failed") : undefined,
+		showPaneResults: [{ action: "save", config: fast }, { action: "cancel" }],
+	});
+	h.runtime.events.sessionStart({}, ctx.ctx);
+	const editor = invokeEditorFactory(ctx, 0, () => {}) as GlanceEditor;
+	editor.focused = true; editor.setText("Keep this prompt");
+	time.advance(1000);
+	const before = editor.render(180);
+	await h.runtime.commands.openPane("", ctx.ctx);
+	assert.deepEqual(editor.render(180), before, "speed changes cannot jump the beam; failed saves cannot change it");
+	await h.runtime.commands.openPane("", ctx.ctx);
+	assert.equal(h.showPaneInitials.at(-1)!.editor.workingSweepSpeed, failure ? 47 : 94);
+	assert.equal(editor.getText(), "Keep this prompt");
+	assert.equal(ctx.editorFactories.length, 1);
+	assert.equal(ctx.footerFactories.length, 1);
+	assert.equal(time.pending(), 1);
+	await h.runtime.events.sessionShutdown({}, ctx.ctx);
+	assert.equal(time.pending(), 0);
+});
+
 test("a delayed event loop advances the position once instead of replaying missed frames", () => {
 	const time = clock();
 	let renders = 0;

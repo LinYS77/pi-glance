@@ -10,7 +10,7 @@ import {
 	WORKING_SWEEP_MODE_VALUES,
 	WORKSPACE_LABEL_MODE_VALUES,
 } from "./options.js";
-import { THROUGHPUT_PRECISION_DESCRIPTOR } from "./schema.js";
+import { THROUGHPUT_PRECISION_DESCRIPTOR, WORKING_SPEED } from "./schema.js";
 import { defaultSegmentConfigs, isSegmentId } from "../segments/registry.js";
 import { GLANCE_THEME_ID_SET } from "../theme/themes.js";
 import type {
@@ -30,7 +30,7 @@ import type {
 } from "../types.js";
 
 // CONFIG_VERSION is the on-disk config schema version, not the npm package version.
-export const CONFIG_VERSION = 10 as const;
+export const CONFIG_VERSION = 11 as const;
 
 const WORKING_SWEEP_MODES = new Set(WORKING_SWEEP_MODE_VALUES);
 const ICON_MODES = new Set<IconMode>(ICON_MODE_VALUES);
@@ -53,6 +53,7 @@ export function defaultConfig(): GlanceConfig {
 			minContentRows: 3,
 			topMarginRows: 1,
 			workingSweep: "perimeter",
+			workingSweepSpeed: WORKING_SPEED.defaultValue,
 		},
 		display: {
 			showProvider: "auto",
@@ -208,6 +209,7 @@ export function normalizeConfig(raw: unknown): GlanceConfig {
 		icons: parseStringEnum(record.icons, ICON_MODES, defaults.icons),
 		editor: {
 			minContentRows: parseIntInRange(editor.minContentRows, defaults.editor.minContentRows, 2, 4),
+			workingSweepSpeed: WORKING_SPEED.normalize(editor.workingSweepSpeed),
 			workingSweep: typeof editor.workingSweep === "boolean"
 				? (editor.workingSweep ? "top" : "off")
 				: parseStringEnum(editor.workingSweep, WORKING_SWEEP_MODES, defaults.editor.workingSweep),

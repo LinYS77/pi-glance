@@ -1,6 +1,6 @@
 import { THROUGHPUT_PRECISION_DESCRIPTOR } from "../config/schema.js";
-import type { SegmentFeature } from "./feature.js";
-import type { GlanceConfig, SegmentData, SegmentRenderContext, ThroughputPrecision, ModelSpeedMeasurement } from "../types.js";
+import { choiceSetting, type SegmentFeature } from "./feature.js";
+import type { SegmentData, SegmentRenderContext, ThroughputPrecision, ModelSpeedMeasurement } from "../types.js";
 
 function fixedPrecision(value: number, precision: 0 | 1): string {
 	return precision === 0 ? `${Math.round(value)}` : value.toFixed(1);
@@ -61,16 +61,9 @@ export const throughputSegmentFeature = {
 	iconSpacing: { nerd: 2 },
 	defaultEnabled: true,
 	settings: [
-		{
-			id: "throughput.precision",
-			label: "Precision",
-			hint: "Decimals for active text/tool-call tok/s.",
-			kind: "cycle",
-			value: (config: GlanceConfig) => THROUGHPUT_PRECISION_DESCRIPTOR.label(config.throughput.precision),
-			mutate: (config: GlanceConfig) => {
-				config.throughput.precision = THROUGHPUT_PRECISION_DESCRIPTOR.next(config.throughput.precision);
-			},
-		},
+		choiceSetting("throughput.precision", "Decimal places", "Output tokens per second, excluding reasoning and tool waits.", THROUGHPUT_PRECISION_DESCRIPTOR.values.map(value => ({
+			value, label: value === "auto" ? "Automatic" : value === 1 ? "1 decimal" : "Whole numbers",
+		})), c => c.throughput.precision, (c, v) => { c.throughput.precision = v; }),
 	],
 	collect: collectThroughput,
 } as const satisfies SegmentFeature;

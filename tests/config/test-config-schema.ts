@@ -18,13 +18,6 @@ for (const value of ["1", "0", "manual", 2, -1, Number.NaN, null, undefined, tru
 	assert.equal(descriptor.normalize(value), "auto", `${String(value)} should normalize to auto`);
 }
 
-assert.equal(descriptor.label("auto"), "auto", "auto label should be exact");
-assert.equal(descriptor.label(1), "1 digit", "one-digit label should be exact");
-assert.equal(descriptor.label(0), "0 digits", "zero-digit label should be exact");
-assert.equal(descriptor.next("auto"), 1, "auto should cycle to one digit");
-assert.equal(descriptor.next(1), 0, "one digit should cycle to zero digits");
-assert.equal(descriptor.next(0), "auto", "zero digits should cycle to auto");
-
 const values: readonly ThroughputPrecision[] = descriptor.values;
 assert.deepEqual(values, ["auto", 1, 0], "descriptor values should satisfy the public config type");
 assert.equal(defaultConfig().throughput.precision, descriptor.defaultValue, "default config should use the descriptor default");
@@ -36,9 +29,9 @@ assert.equal(normalizeConfig({ throughput: { precision: "manual" } }).throughput
 const precisionSetting = throughputSegmentFeature.settings.find((setting) => setting.id === "throughput.precision");
 assert.ok(precisionSetting, "Model speed feature should expose its precision setting");
 const config = defaultConfig();
-assert.equal(precisionSetting.value(config), descriptor.label(descriptor.defaultValue), "setting label should match descriptor behavior");
-precisionSetting.mutate(config);
-assert.equal(config.throughput.precision, descriptor.next(descriptor.defaultValue), "setting mutation should use descriptor cycling");
-assert.equal(precisionSetting.value(config), descriptor.label(config.throughput.precision), "setting label should follow the mutated value");
+assert.equal(precisionSetting.value(config), "Automatic", "setting uses a readable automatic label");
+precisionSetting.select(config, 1);
+assert.equal(config.throughput.precision, 1, "setting can choose precision directly");
+assert.equal(precisionSetting.value(config), "1 decimal", "setting label follows the selected precision");
 
 console.log("✓ config schema descriptor behavior checks passed");

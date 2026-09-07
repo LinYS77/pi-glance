@@ -1,3 +1,5 @@
+import { WORKING_SPEED } from "../config/schema.js";
+
 export type ScheduleSweepFrame = (callback: () => void, delayMs: number) => () => void;
 
 export interface WorkingSweepOptions {
@@ -22,6 +24,7 @@ export class WorkingSweep {
 	private running = false;
 	private waiting = false;
 	private startedAt = 0;
+	private speed: number = WORKING_SPEED.defaultValue;
 	private generation = 0;
 	private cancelFrame?: () => void;
 
@@ -39,6 +42,17 @@ export class WorkingSweep {
 		return this.attached && this.running && !this.waiting && this.options.ownsEditor()
 			? Math.max(0, this.options.nowMs() - this.startedAt)
 			: undefined;
+	}
+
+	/** Retiming keeps the beam's travelled distance when a live speed changes. */
+	setSpeed(value: number): void {
+		const speed = WORKING_SPEED.normalize(value);
+		if (speed === this.speed) return;
+		if (this.running && !this.waiting) {
+			const now = this.options.nowMs();
+			this.startedAt = now - Math.max(0, now - this.startedAt) * this.speed / speed;
+		}
+		this.speed = speed;
 	}
 
 	start(): void {

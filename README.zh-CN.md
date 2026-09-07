@@ -33,14 +33,14 @@ pi install npm:pi-glance
 
 - **圆角编辑器** — 保留 Pi 原有的编辑、历史、自动补全和快捷键。
 - **自适应状态栏** — Git · 费用 · 模型速度 · 上下文 · Tokens · 模型，随终端宽度折叠。
-- **Working 扫光** — Pi 工作时，扫光绕输入框移动，也可切换为顶部扫光。
+- **Working 扫光** — Pi 工作时，扫光绕输入框或沿顶部移动，速度可调。
 - **22 套配色** — 分别选择亮色与暗色方案，实时预览。
 
 无额外运行时依赖，不收集遥测数据。
 
 ## 设置
 
-运行 `/glance`，选择配色、开关状态项或调整顺序。修改会实时预览，按 `S` 保存。
+运行 `/glance`，在 **Appearance（外观）**、**Status line（状态栏）** 和 **Working（工作动画）** 中设置。`Tab` 切换分区，方向键调整，`S` 保存；修改会实时预览。
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/LinYS77/pi-glance/main/assets/settings.png" alt="pi-glance 设置面板">
@@ -52,7 +52,7 @@ pi install npm:pi-glance
 
 ## 说明
 
-- 默认使用 Nerd Font 图标。使用普通字体时，可在 `/glance` → **General** → **Icons** 中选择 `plain`。
+- 默认使用 Nerd Font 图标。使用普通字体时，可在 `/glance` → **Appearance** → **Icons** 中选择 `Plain`。
 - Pi 只提供一个自定义编辑器位置，最后加载的编辑器扩展会生效。
 - 已在 Pi 0.84.4 和 0.85.1 上验证，需要 Node.js 22.19.0 或更高版本。
 

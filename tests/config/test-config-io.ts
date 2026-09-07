@@ -61,17 +61,17 @@ test("config store diagnoses reads and atomically saves through an explicit path
 		assertLoadResult(loadConfigSync(), { config: partialExpected, status: "loaded", writable: true }, "sync load should normalize valid partial config text");
 		assertLoadResult(await loadConfig(), { config: partialExpected, status: "loaded", writable: true }, "async load should normalize valid partial config text");
 
-		const futureRaw = { version: 11, enabled: false, icons: "nerd", futureOnly: { preserve: true } };
+		const futureRaw = { version: 12, enabled: false, icons: "nerd", futureOnly: { preserve: true } };
 		await writeConfigText(configPath, JSON.stringify(futureRaw));
 		const futureExpected = normalizeConfig(futureRaw);
 		assertLoadResult(
 			loadConfigSync(),
-			{ config: futureExpected, status: "future", writable: false, diagnostic: /version 11.*newer than supported version 10.*without overwriting/i },
+			{ config: futureExpected, status: "future", writable: false, diagnostic: /version 12.*newer than supported version 11.*without overwriting/i },
 			"future sync config should load known fields read-only",
 		);
 		assertLoadResult(
 			await loadConfig(),
-			{ config: futureExpected, status: "future", writable: false, diagnostic: /version 11.*newer than supported version 10.*without overwriting/i },
+			{ config: futureExpected, status: "future", writable: false, diagnostic: /version 12.*newer than supported version 11.*without overwriting/i },
 			"future async config should load known fields read-only",
 		);
 
@@ -143,7 +143,7 @@ test("new defaults do not overwrite saved choices from current or older configs"
 		saved.editor.topMarginRows = 0;
 		saved.display.workspaceLabel = "name";
 		saved.segments.find((segment) => segment.id === "tokens")!.enabled = false;
-		for (const version of [8, 9, 10]) {
+		for (const version of [8, 9, 10, 11]) {
 			const text = JSON.stringify({
 				...saved,
 				version,

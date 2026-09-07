@@ -10,7 +10,7 @@ export interface PerimeterTopGap {
 	width: number;
 }
 
-export function perimeterSweepProfile(width: number, bodyRows: number, elapsedMs: number, topGap?: PerimeterTopGap) {
+export function perimeterSweepProfile(width: number, bodyRows: number, elapsedMs: number, topGap?: PerimeterTopGap, speed?: number) {
 	const horizontal = Math.max(0, safeSurfaceWidth(width) - 1);
 	const rows = Number.isFinite(bodyRows) ? Math.max(0, Math.floor(bodyRows)) : 0;
 	const vertical = (rows + 1) * ROW_DISTANCE;
@@ -18,13 +18,13 @@ export function perimeterSweepProfile(width: number, bodyRows: number, elapsedMs
 	const gapColumn = Math.min(horizontal - gapWidth, safeSurfaceWidth(topGap?.column ?? horizontal));
 	const length = 2 * (horizontal + vertical) - gapWidth;
 	const radius = Math.min(length / 4, Math.max(9, Math.min(28, horizontal * 0.16)));
-	const { position, periodMs } = sweepMotion(length, elapsedMs);
+	const { position, periodMs } = sweepMotion(length, elapsedMs, speed);
 	return { horizontal, vertical, gapWidth, gapColumn, length, radius, periodMs, center: position };
 }
 
 /** One clockwise path, starting at the top-left corner. Margins are not part of it. */
-export function createPerimeterSweep(width: number, bodyRows: number, elapsedMs: number, styles: ResolvedGlanceStyles, topGap?: PerimeterTopGap) {
-	const profile = perimeterSweepProfile(width, bodyRows, elapsedMs, topGap);
+export function createPerimeterSweep(width: number, bodyRows: number, elapsedMs: number, styles: ResolvedGlanceStyles, topGap?: PerimeterTopGap, speed?: number) {
+	const profile = perimeterSweepProfile(width, bodyRows, elapsedMs, topGap, speed);
 	const paint = createTextSweep(profile, styles);
 	return (text: string, style: TextStyler, column: number, row: number): string => {
 		if (width < 2) return style(text);

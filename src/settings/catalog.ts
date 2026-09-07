@@ -1,215 +1,101 @@
-import { cloneConfig, toggleSegment } from "../config/model.js";
-import {
-	EDITOR_TOP_MARGIN_ROW_VALUES,
-	ICON_MODE_VALUES,
-	WORKING_SWEEP_MODE_VALUES,
-	WORKSPACE_LABEL_MODE_VALUES,
-	nextOption,
-} from "../config/options.js";
-import { getSegmentSettings, segmentLabel, type SegmentSettingDescriptor } from "../segments/registry.js";
-import { GLANCE_THEMES, GLANCE_THEME_IDS, themeLabel as glanceThemeLabel } from "../theme/themes.js";
+import { cloneConfig } from "../config/model.js";
+import { WORKING_SPEED } from "../config/schema.js";
+import { choiceSetting, toggleSetting, type SegmentSettingDescriptor, type SettingOption } from "../segments/feature.js";
+import { getSegmentSettings, segmentLabel } from "../segments/registry.js";
+import { GLANCE_THEMES } from "../theme/themes.js";
 import type { GlanceThemeSlot } from "../theme/selection.js";
-import type { EditorTopMarginRows, GlanceConfig, GlanceThemeName, SegmentId } from "../types.js";
+import type { GlanceConfig, GlanceThemeName, SegmentId } from "../types.js";
+
 export type { GlanceThemeSlot } from "../theme/selection.js";
+export type SettingsSectionId = "appearance" | "status" | "working";
+export const SETTINGS_SECTIONS = [
+	{ id: "appearance", label: "Appearance" },
+	{ id: "status", label: "Status line" },
+	{ id: "working", label: "Working" },
+] as const;
 
-export type SettingsCategoryId = "general" | SegmentId;
-type SettingsRowKind = "toggle" | "cycle" | "info";
-export type SettingsRowSubview = "themeBrowser";
-
-export interface SettingsCategory {
-	id: SettingsCategoryId;
-	label: string;
-	enabled?: boolean;
-}
-
-export interface SettingsRow {
-	id: string;
-	label: string;
-	value: string;
-	hint: string;
-	kind: SettingsRowKind;
-	opensSubview?: SettingsRowSubview;
-	themeSlot?: GlanceThemeSlot;
-	apply?: (config: GlanceConfig) => GlanceConfig;
-}
-
-export interface ThemeBrowserCatalogItem {
-	id: GlanceThemeName;
-	label: string;
-	group: string;
-	groupLabel: string;
-	tone: string;
-	tags: readonly string[];
-	detailTags: readonly string[];
-	description: string;
-	detailDescription: string;
-}
-
-const MIN_CONTENT_ROWS = [2, 3, 4] as const;
-
-function withConfig(config: GlanceConfig, mutate: (next: GlanceConfig) => void): GlanceConfig {
-	const next = cloneConfig(config);
-	mutate(next);
-	return next;
-}
-
-function onOff(value: boolean): string {
-	return value ? "on" : "off";
-}
-
-function topMarginRowsLabel(value: EditorTopMarginRows): string {
-	return value === 0 ? "none" : value === 1 ? "1 row" : "2 rows";
-}
-
-function toggleRow(id: string, label: string, value: boolean, hint: string, apply: (config: GlanceConfig) => GlanceConfig): SettingsRow {
-	return { id, label, value: onOff(value), hint, kind: "toggle", apply };
-}
-
-function cycleRow(
-	id: string,
-	label: string,
-	value: string,
-	hint: string,
-	apply: (config: GlanceConfig) => GlanceConfig,
-	options: Pick<SettingsRow, "opensSubview" | "themeSlot"> = {},
-): SettingsRow {
-	return { id, label, value, hint, kind: "cycle", ...options, apply };
-}
-
-export function getThemeCatalog(): readonly ThemeBrowserCatalogItem[] {
-	return GLANCE_THEMES;
-}
-
-export function getThemeCatalogForSlot(slot: GlanceThemeSlot): readonly ThemeBrowserCatalogItem[] {
-	return [
-		...GLANCE_THEMES.filter((theme) => theme.tone === slot),
-		...GLANCE_THEMES.filter((theme) => theme.tone !== slot),
-	];
-}
-
-function themeIdsForSlot(slot: GlanceThemeSlot | undefined): readonly GlanceThemeName[] {
-	return slot ? getThemeCatalogForSlot(slot).map((theme) => theme.id) : GLANCE_THEME_IDS;
-}
-
-export function getThemeCount(slot?: GlanceThemeSlot): number {
-	return themeIdsForSlot(slot).length;
-}
-
-export function getThemeIndex(theme: GlanceThemeName, slot?: GlanceThemeSlot): number {
-	return Math.max(0, themeIdsForSlot(slot).indexOf(theme));
-}
-
-export function getThemeIdByIndex(index: number, slot?: GlanceThemeSlot): GlanceThemeName | undefined {
-	return themeIdsForSlot(slot)[index];
-}
-
-export function getThemeLabel(theme: GlanceThemeName): string {
-	return glanceThemeLabel(theme);
-}
+interface RowBase { id: string; label: string; value: string; hint: string }
+export type SettingsRow = RowBase & (
+	| { kind: "toggle" | "choice"; selectedIndex: number; options: readonly SettingOption[]; select(config: GlanceConfig, index: number): GlanceConfig }
+	| { kind: "theme"; slot: GlanceThemeSlot }
+	| { kind: "number"; number: number; min: number; max: number; setValue(config: GlanceConfig, value: number): GlanceConfig }
+	| { kind: "segment"; segment: SegmentId; enabled: boolean }
+);
 
 function descriptorRow(config: GlanceConfig, descriptor: SegmentSettingDescriptor): SettingsRow {
-	const row = {
-		id: descriptor.id,
-		label: descriptor.label,
-		value: descriptor.value(config),
-		hint: descriptor.hint,
-		kind: descriptor.kind,
-	};
-	if (descriptor.kind === "info") return row;
 	return {
-		...row,
-		apply: (draft) => withConfig(draft, descriptor.mutate),
+		id: descriptor.id, label: descriptor.label, value: descriptor.value(config), hint: descriptor.hint,
+		kind: descriptor.kind, selectedIndex: descriptor.selectedIndex(config), options: descriptor.options,
+		select: (config, index) => {
+			const next = cloneConfig(config);
+			descriptor.select(next, index);
+			return next;
+		},
 	};
 }
 
-function segmentRows(config: GlanceConfig, id: SegmentId, rows: SettingsRow[]): SettingsRow[] {
-	const segment = config.segments.find((candidate) => candidate.id === id);
-	return [
-		toggleRow(`${id}.enabled`, "Enabled", Boolean(segment?.enabled), "Show or hide this segment.", (draft) => toggleSegment(draft, id)),
-		...rows,
-	];
+export function getThemeCatalogForSlot(slot: GlanceThemeSlot) {
+	return [...GLANCE_THEMES.filter(theme => theme.tone === slot), ...GLANCE_THEMES.filter(theme => theme.tone !== slot)];
 }
 
-function segmentDescriptorRows(config: GlanceConfig, id: SegmentId): SettingsRow[] {
-	return segmentRows(config, id, getSegmentSettings(id).map((descriptor) => descriptorRow(config, descriptor)));
+export function getThemeLabel(id: GlanceThemeName): string {
+	return GLANCE_THEMES.find(theme => theme.id === id)?.label ?? id;
 }
 
-export function getSettingsCategories(config: GlanceConfig): SettingsCategory[] {
-	return [
-		{ id: "general", label: "General" },
-		...config.segments.map((segment) => ({
-			id: segment.id,
-			label: segmentLabel(segment.id),
-			enabled: segment.enabled,
-		})),
-	];
-}
+const appearance = [
+	toggleSetting("appearance.enabled", "Glance", "Use the Glance editor frame and status line.", c => c.enabled, (c, v) => { c.enabled = v; }),
+	choiceSetting("appearance.icons", "Icons", "Nerd Font needs a compatible font. Choose Plain if icons look broken.", [
+		{ value: "nerd", label: "Nerd Font" }, { value: "plain", label: "Plain" },
+	], c => c.icons, (c, v) => { c.icons = v; }),
+	choiceSetting("appearance.workspace", "Workspace label", "Choose the name shown on the editor's top edge.", [
+		{ value: "name", label: "Folder name" }, { value: "smart", label: "Smart path", hint: "Shorten the path to fit the available space." }, { value: "path", label: "Full path", hint: "Show as much of the path as fits." },
+	], c => c.display.workspaceLabel, (c, v) => { c.display.workspaceLabel = v; }),
+	choiceSetting("appearance.rows", "Editor height", "Minimum input rows. The editor can grow as you type.", [2, 3, 4].map(value => ({ value, label: `${value} rows` })), c => c.editor.minContentRows, (c, v) => { c.editor.minContentRows = v; }),
+	choiceSetting("appearance.spacing", "Space above editor", "Blank rows between the conversation and the editor.", [
+		{ value: 0, label: "None" }, { value: 1, label: "1 row" }, { value: 2, label: "2 rows" },
+	], c => c.editor.topMarginRows, (c, v) => { c.editor.topMarginRows = v; }),
+];
 
-export function getSettingsRows(config: GlanceConfig, categoryId: SettingsCategoryId): SettingsRow[] {
-	switch (categoryId) {
-		case "general":
-			return [
-				toggleRow("general.enabled", "Enabled", config.enabled, "Temporarily disable pi-glance.", (draft) =>
-					withConfig(draft, (next) => {
-						next.enabled = !next.enabled;
-					}),
-				),
-				cycleRow(
-					"general.theme.light",
-					"Light theme",
-					getThemeLabel(config.theme.light),
-					"Palette used for light or unknown Pi theme tone.",
-					(draft) =>
-						withConfig(draft, (next) => {
-							next.theme.light = nextOption(next.theme.light, themeIdsForSlot("light"));
-						}),
-					{ opensSubview: "themeBrowser", themeSlot: "light" },
-				),
-				cycleRow(
-					"general.theme.dark",
-					"Dark theme",
-					getThemeLabel(config.theme.dark),
-					"Palette used for dark Pi theme tone.",
-					(draft) =>
-						withConfig(draft, (next) => {
-							next.theme.dark = nextOption(next.theme.dark, themeIdsForSlot("dark"));
-						}),
-					{ opensSubview: "themeBrowser", themeSlot: "dark" },
-				),
-				cycleRow("general.icons", "Icons", config.icons, "Choose plain if you don't use a Nerd Font.", (draft) =>
-					withConfig(draft, (next) => {
-						next.icons = nextOption(next.icons, ICON_MODE_VALUES);
-					}),
-				),
-				cycleRow("general.minInputRows", "Min input rows", `${config.editor.minContentRows}`, "Set the resting editor height.", (draft) =>
-					withConfig(draft, (next) => {
-						next.editor.minContentRows = nextOption(next.editor.minContentRows, MIN_CONTENT_ROWS);
-					}),
-				),
-				cycleRow("general.topMarginRows", "Top spacing", topMarginRowsLabel(config.editor.topMarginRows), "Set breathing room above the editor.", (draft) =>
-					withConfig(draft, (next) => {
-						next.editor.topMarginRows = nextOption(next.editor.topMarginRows, EDITOR_TOP_MARGIN_ROW_VALUES);
-					}),
-				),
-				cycleRow("general.workspaceLabel", "Workspace label", config.display.workspaceLabel, "Show name, smart ~/ path, or safe path.", (draft) =>
-					withConfig(draft, (next) => {
-						next.display.workspaceLabel = nextOption(next.display.workspaceLabel, WORKSPACE_LABEL_MODE_VALUES);
-					}),
-				),
-				cycleRow("general.workingSweep", "Working animation", { top: "top edge", perimeter: "full border", off: "off" }[config.editor.workingSweep], "Top edge, full border, or Pi's Working indicator.", (draft) =>
-					withConfig(draft, (next) => {
-						next.editor.workingSweep = nextOption(next.editor.workingSweep, WORKING_SWEEP_MODE_VALUES);
-					}),
-				),
-			];
-		case "git":
-		case "context":
-		case "cost":
-		case "tokens":
-		case "model":
-		case "throughput":
-			return segmentDescriptorRows(config, categoryId);
-		default:
-			return [];
+const animation = choiceSetting("working.mode", "Animation", "Off uses Pi's Working indicator instead of a sweep.", [
+	{ value: "perimeter", label: "Full border", hint: "Move clockwise around the editor." },
+	{ value: "top", label: "Top edge", hint: "Sweep across the workspace title and connecting line." },
+	{ value: "off", label: "Off", hint: "Use Pi's Working indicator." },
+], c => c.editor.workingSweep, (c, v) => { c.editor.workingSweep = v; });
+
+const segmentHints: Record<SegmentId, string> = {
+	git: "Branch, uncommitted changes and upstream commits.",
+	cost: "Session cost in USD, shown as a compact amount.",
+	throughput: "Model output speed in tokens per second.",
+	context: "Current context usage and available capacity.",
+	tokens: "Session token counts and prompt-cache usage.",
+	model: "Model name, provider and thinking level.",
+};
+
+export function getSettingsRows(config: GlanceConfig, section: SettingsSectionId, segment?: SegmentId): SettingsRow[] {
+	if (section === "status") {
+		if (segment) return getSegmentSettings(segment).map(descriptor => descriptorRow(config, descriptor));
+		return config.segments.map(({ id, enabled }) => ({
+			id: `status.${id}`, label: segmentLabel(id), value: enabled ? "On" : "Off", hint: segmentHints[id], kind: "segment", segment: id, enabled,
+		}));
 	}
+	if (section === "working") return [
+		descriptorRow(config, animation),
+		{
+			id: "working.speed", label: "Sweep speed", value: `${config.editor.workingSweepSpeed} cols/s`,
+			hint: config.editor.workingSweep === "off" ? "Turn animation on to preview the speed. Your speed is kept while off." : "10–120 columns per second. Applies to both sweep modes.",
+			kind: "number", number: config.editor.workingSweepSpeed, min: WORKING_SPEED.min, max: WORKING_SPEED.max,
+			setValue: (config, value) => {
+				const next = cloneConfig(config);
+				next.editor.workingSweepSpeed = WORKING_SPEED.normalize(value);
+				return next;
+			},
+		},
+	];
+	const rows = appearance.map(descriptor => descriptorRow(config, descriptor));
+	rows.splice(1, 0, ...(["light", "dark"] as const).map(slot => ({
+		id: `appearance.palette.${slot}`, label: slot === "light" ? "Light palette" : "Dark palette", value: getThemeLabel(config.theme[slot]),
+		hint: slot === "light" ? "Glance colors for Pi's light or unrecognized theme. Does not change Pi's theme." : "Glance colors for Pi's dark theme. Does not change Pi's theme.",
+		kind: "theme" as const, slot,
+	})));
+	return rows;
 }

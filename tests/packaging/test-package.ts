@@ -28,6 +28,18 @@ test("npm package includes the complete source tree and excludes development fil
 	assert.deepEqual([...packed].sort(), [...expected].sort(), "ship all runtime TypeScript, but no tests, fixtures, build output or local state");
 });
 
+test("release version, lockfile and checked-in notes agree", async () => {
+	const manifest = JSON.parse(await readFile("package.json", "utf8"));
+	const lock = JSON.parse(await readFile("package-lock.json", "utf8"));
+	assert.equal(lock.version, manifest.version);
+	assert.equal(lock.packages[""].version, manifest.version);
+	const notesFile = `v${manifest.version}.md`;
+	assert.deepEqual(await readdir(".github/release-notes"), [notesFile]);
+	const notes = await readFile(join(".github/release-notes", notesFile), "utf8");
+	assert.ok(notes.startsWith(`# pi-glance ${manifest.version}\n`));
+	assert.ok(notes.length < 1500, "release notes should stay short");
+});
+
 test("developer clean removes only generated test output and can run twice", async () => {
 	const manifest = JSON.parse(await readFile("package.json", "utf8"));
 	assert.equal(typeof manifest.scripts.clean, "string", "provide an explicit build-output cleanup command");
@@ -40,12 +52,12 @@ test("developer clean removes only generated test output and can run twice", asy
 			await mkdir(join(root, directory));
 			await writeFile(join(root, directory, "keep.txt"), "keep");
 		}
-		await writeFile(join(root, "pi-glance-0.6.7.tgz"), "keep release archive");
+		await writeFile(join(root, "release-archive.tgz"), "keep release archive");
 		for (let run = 0; run < 2; run++) {
 			await promisify(execFile)("npm", ["run", "clean", "--silent"], { cwd: root, timeout: 30_000 });
 			assert.equal((await readdir(root)).includes(".tmp-test"), false);
 			for (const directory of ["src", "node_modules", ".pi"]) assert.equal(await readFile(join(root, directory, "keep.txt"), "utf8"), "keep");
-			assert.equal(await readFile(join(root, "pi-glance-0.6.7.tgz"), "utf8"), "keep release archive");
+			assert.equal(await readFile(join(root, "release-archive.tgz"), "utf8"), "keep release archive");
 		}
 	} finally {
 		await rm(root, { recursive: true, force: true });

@@ -65,6 +65,7 @@ const sweep = new WorkingSweep({
 	requestRender: () => tui.requestRender(),
 	setWorkingVisible: () => {},
 });
+sweep.setSpeed(config.editor.workingSweepSpeed);
 
 async function close(): Promise<void> {
 	if (closed) return;

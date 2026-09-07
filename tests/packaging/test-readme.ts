@@ -48,8 +48,8 @@ for (const document of [readme, chineseReadme]) {
 
 assertIncludes(readme, "Nerd Font icons are enabled by default", "the English README should describe the default icons");
 assertIncludes(chineseReadme, "默认使用 Nerd Font 图标", "the Chinese README should describe the default icons");
-assert.match(readme, /select `plain`.*General.*Icons/, "the English README should explain how regular-font users can switch to plain icons");
-assert.match(chineseReadme, /普通字体.*General.*Icons.*`plain`/, "the Chinese README should explain how regular-font users can switch to plain icons");
+assert.match(readme, /select `Plain`.*Appearance.*Icons/, "the English README should explain how regular-font users can switch to plain icons");
+assert.match(chineseReadme, /普通字体.*Appearance.*Icons.*`Plain`/, "the Chinese README should explain how regular-font users can switch to plain icons");
 
 
 assert.equal(GLANCE_THEMES.length, 22, "the curated theme collection should remain complete");

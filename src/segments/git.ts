@@ -1,17 +1,7 @@
-import { GIT_SHA_MODE_VALUES, nextOption } from "../config/options.js";
-import type { SegmentFeature } from "./feature.js";
-import type { GlanceConfig, SegmentData, SegmentRenderContext } from "../types.js";
+import { choiceSetting, toggleSetting, type SegmentFeature } from "./feature.js";
+import type { SegmentData, SegmentRenderContext } from "../types.js";
 
 const POLL_INTERVALS = [2000, 5000, 10000, 30000] as const;
-
-function onOff(value: boolean): string {
-	return value ? "on" : "off";
-}
-
-function formatPolling(ms: number): string {
-	if (ms % 1000 === 0) return `${ms / 1000}s`;
-	return `${ms}ms`;
-}
 
 function gitBranchLabel(ctx: SegmentRenderContext): string {
 	const git = ctx.state.git;
@@ -65,46 +55,12 @@ export const gitSegmentFeature = {
 	label: "Git",
 	defaultEnabled: true,
 	settings: [
-		{
-			id: "git.dirtyMarker",
-			label: "Dirty marker",
-			hint: "Conflicts always stay visible.",
-			kind: "toggle",
-			value: (config: GlanceConfig) => onOff(config.git.showDirty),
-			mutate: (config: GlanceConfig) => {
-				config.git.showDirty = !config.git.showDirty;
-			},
-		},
-		{
-			id: "git.aheadBehind",
-			label: "Ahead / behind",
-			hint: "Show upstream counts.",
-			kind: "toggle",
-			value: (config: GlanceConfig) => onOff(config.git.showAheadBehind),
-			mutate: (config: GlanceConfig) => {
-				config.git.showAheadBehind = !config.git.showAheadBehind;
-			},
-		},
-		{
-			id: "git.sha",
-			label: "SHA",
-			hint: "Show commit SHA for detached HEAD or alongside branches.",
-			kind: "cycle",
-			value: (config: GlanceConfig) => config.git.shaMode,
-			mutate: (config: GlanceConfig) => {
-				config.git.shaMode = nextOption(config.git.shaMode, GIT_SHA_MODE_VALUES);
-			},
-		},
-		{
-			id: "git.polling",
-			label: "Polling",
-			hint: "Check external Git changes.",
-			kind: "cycle",
-			value: (config: GlanceConfig) => formatPolling(config.git.pollIntervalMs),
-			mutate: (config: GlanceConfig) => {
-				config.git.pollIntervalMs = nextOption(config.git.pollIntervalMs, POLL_INTERVALS);
-			},
-		},
+		toggleSetting("git.dirtyMarker", "Uncommitted changes", "Mark a branch with uncommitted changes. Conflicts always stay visible.", c => c.git.showDirty, (c, v) => { c.git.showDirty = v; }),
+		toggleSetting("git.aheadBehind", "Ahead / behind", "Show commits ahead of or behind the upstream branch.", c => c.git.showAheadBehind, (c, v) => { c.git.showAheadBehind = v; }),
+		choiceSetting("git.sha", "Commit ID", "Choose when to show the short commit ID.", [
+			{ value: "off", label: "Hidden" }, { value: "detached", label: "When detached", hint: "Show when no branch is checked out." }, { value: "always", label: "Always" },
+		], c => c.git.shaMode, (c, v) => { c.git.shaMode = v; }),
+		choiceSetting("git.polling", "Refresh interval", "How often to check Git changes made outside Pi.", POLL_INTERVALS.map(value => ({ value, label: `${value / 1000} seconds` })), c => c.git.pollIntervalMs, (c, v) => { c.git.pollIntervalMs = v; }, value => `${value / 1000} seconds`),
 	],
 	collect: collectGit,
 } as const satisfies SegmentFeature;

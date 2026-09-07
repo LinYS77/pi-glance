@@ -1,468 +1,242 @@
-import {
-	Key,
-	matchesKey,
-	SelectList,
-	truncateToWidth,
-	visibleWidth,
-	type Component,
-	type Keybinding,
-	type KeyId,
-	type SelectItem,
-	type TUI,
-} from "@earendil-works/pi-tui";
+import { Input, Key, decodeKittyPrintable, matchesKey, SelectList, truncateToWidth, visibleWidth, wrapTextWithAnsi, type Component, type Focusable, type Keybinding, type KeyId, type TUI } from "@earendil-works/pi-tui";
 import type { KeybindingsManager, Theme } from "@earendil-works/pi-coding-agent";
-import {
-	createPaneModel,
-	createPaneViewModel,
-	updatePaneModel,
-	type CategoryViewModel,
-	type GlancePaneViewModel,
-	type HelpShortcut,
-	type PaneIntent,
-	type PaneModelState,
-	type SettingViewModel,
-	type ThemeBrowserThemeViewModel,
-} from "./model.js";
+import { createPaneModel, createPaneViewModel, updatePaneModel, type PaneIntent, type PaneModelState, type GlancePaneViewModel, type HelpShortcut } from "./model.js";
+import { SETTINGS_SECTIONS } from "./catalog.js";
 import { WorkingSweep, type ScheduleSweepFrame } from "../runtime/working-sweep.js";
 import { renderInputSurface, renderInputSurfacePreview } from "../surface/renderer.js";
 import type { GlanceRenderStyleContext } from "../theme/adapter.js";
 import type { GlanceConfig, GlanceState } from "../types.js";
 
 type PaneResult = { action: "save"; config: GlanceConfig } | { action: "cancel" };
-type Done = (result: GlanceConfig | null) => void;
-type Tone = (text: string) => string;
-
 export interface GlancePaneOptions {
 	readonly previewNowMs?: () => number;
 	readonly schedulePreviewFrame?: ScheduleSweepFrame;
 	readonly renderStyleContext?: GlanceRenderStyleContext;
 }
 
-interface PaneColors {
-	accent: Tone;
-	muted: Tone;
-	dim: Tone;
-	warn: Tone;
-	success: Tone;
+/** Keep settings reachable when preview, terminal height or palette names change. */
+function viewport(total: number, selected: number, count: number): { start: number; end: number } {
+	const start = Math.max(0, Math.min(total - count, selected - Math.floor(count / 2)));
+	return { start, end: Math.min(total, start + count) };
 }
-
-interface PaneLayout {
-	width: number;
-	contentWidth: number;
-	outerPadding: string;
-	categoryWidth: number;
-	settingLabelWidth: number;
-	valueWidth: number;
-	settingsWidth: number;
-	asideWidth: number;
-	columnGap: string;
-	asideGap: string;
-	asideSeparator: string;
-	showAside: boolean;
-}
-
-const PANE_SPACING = {
-	outerPadding: 2,
-	contentInset: 4,
-	categoryWidth: 14,
-	settingLabelWidth: 20,
-	valueWidth: 16,
-	minValueWidth: 8,
-	asideWidth: 36,
-	minAsideWidth: 22,
-	columnGap: 4,
-	asideGap: 4,
-	minContentWidth: 10,
-	asideSeparator: "│",
-} as const;
-
-const THEME_VIEWPORT = {
-	minRows: 4,
-	maxRows: 8,
-	reservedRows: 16,
-	fallbackTerminalRows: 40,
-} as const;
-
-function themeViewportRows(terminalRows: number | undefined): number {
-	const rows = typeof terminalRows === "number" && Number.isFinite(terminalRows)
-		? Math.floor(terminalRows)
-		: THEME_VIEWPORT.fallbackTerminalRows;
-	return Math.max(THEME_VIEWPORT.minRows, Math.min(THEME_VIEWPORT.maxRows, rows - THEME_VIEWPORT.reservedRows));
-}
-
-function plainLine(parts: string[], width: number): string {
-	return truncateToWidth(parts.join(""), width, "…");
-}
-
-function makePaneLayout(width: number): PaneLayout {
-	const outerPaddingWidth = width < 72 ? 1 : PANE_SPACING.outerPadding;
-	const contentWidth = Math.max(PANE_SPACING.minContentWidth, width - outerPaddingWidth * 2);
-	const categoryWidth = PANE_SPACING.categoryWidth;
-	const columnGapWidth = width < 72 ? 2 : PANE_SPACING.columnGap;
-	const asideFrameWidth = PANE_SPACING.asideGap + visibleWidth(PANE_SPACING.asideSeparator) + 1;
-	const settingLabelWidth = PANE_SPACING.settingLabelWidth;
-	const labelWidthWithCursor = settingLabelWidth + 2;
-	const valueRoom = contentWidth - categoryWidth - columnGapWidth - labelWidthWithCursor - columnGapWidth;
-	const valueWidth = Math.max(PANE_SPACING.minValueWidth, Math.min(PANE_SPACING.valueWidth, valueRoom));
-	const settingsWidth = labelWidthWithCursor + columnGapWidth + valueWidth;
-	const coreWidth = categoryWidth + columnGapWidth + settingsWidth;
-	const asideRoom = contentWidth - coreWidth - asideFrameWidth;
-	const showAside = asideRoom >= PANE_SPACING.minAsideWidth;
-	const maxAsideWidth = width >= 120 ? 48 : PANE_SPACING.asideWidth;
-	const asideWidth = showAside ? Math.min(maxAsideWidth, asideRoom) : 0;
-
-	return {
-		width,
-		contentWidth,
-		outerPadding: " ".repeat(outerPaddingWidth),
-		categoryWidth,
-		settingLabelWidth,
-		valueWidth,
-		settingsWidth,
-		asideWidth,
-		columnGap: " ".repeat(columnGapWidth),
-		asideGap: " ".repeat(PANE_SPACING.asideGap),
-		asideSeparator: PANE_SPACING.asideSeparator,
-		showAside,
-	};
-}
-
-function paneLine(layout: PaneLayout, parts: string[]): string {
-	return plainLine([layout.outerPadding, ...parts], layout.width);
-}
-
-function padRightAnsi(text: string, width: number): string {
-	const extra = Math.max(0, width - visibleWidth(text));
-	return `${text}${" ".repeat(extra)}`;
-}
-
-function spreadAnsi(left: string, right: string, width: number): string {
-	const leftWidth = visibleWidth(left);
+function spread(left: string, right: string, width: number): string {
 	const rightWidth = visibleWidth(right);
-	if (leftWidth + rightWidth + 1 > width) {
-		const leftBudget = Math.max(0, width - rightWidth - 1);
-		if (leftBudget <= 0) return truncateToWidth(right, width, "…");
-		return `${truncateToWidth(left, leftBudget, "…")} ${right}`;
+	if (rightWidth + 4 >= width) return truncateToWidth(`${left} ${right}`, width, "");
+	const first = truncateToWidth(left, width - rightWidth - 2, "…");
+	return first + " ".repeat(Math.max(1, width - visibleWidth(first) - rightWidth)) + right;
+}
+
+function wrapShortcuts(items: string[], width: number): string[] {
+	const lines: string[] = [];
+	let line = "";
+	for (const item of items) {
+		if (line && visibleWidth(`${line}  ${item}`) > width) { lines.push(line); line = ""; }
+		line += (line ? "  " : "") + item;
 	}
-	return `${left}${" ".repeat(Math.max(0, width - leftWidth - rightWidth))}${right}`;
+	if (line) lines.push(line);
+	return lines;
 }
 
-function makePaneColors(theme: Theme): PaneColors {
-	return {
-		accent: (s: string) => theme.fg("accent", s),
-		muted: (s: string) => theme.fg("muted", s),
-		dim: (s: string) => theme.fg("dim", s),
-		warn: (s: string) => theme.fg("warning", s),
-		success: (s: string) => theme.fg("success", s),
-	};
-}
-
-function shortcut(colors: PaneColors, key: string, label: string): string {
-	return `${colors.accent(`[${key}]`)} ${colors.dim(label)}`;
-}
-
-function helpText(help: HelpShortcut[], colors: PaneColors): string {
-	return help.map((item) => shortcut(colors, item.key, item.label)).join(colors.dim("  ·  "));
-}
-
-function focusGap(gap: string, colors: PaneColors): string {
-	const gapWidth = visibleWidth(gap);
-	if (gapWidth <= 1) return colors.accent("›");
-	return `${" ".repeat(Math.max(0, gapWidth - 2))}${colors.accent("› ")}`;
-}
-
-function matchesPaneBinding(
-	data: string,
-	keybindings: KeybindingsManager | undefined,
-	action: Keybinding,
-	fallback: KeyId,
-): boolean {
-	return keybindings ? keybindings.matches(data, action) : matchesKey(data, fallback);
-}
-
-function paneIntentFromKey(data: string, keybindings: KeybindingsManager | undefined, pageSize: number): PaneIntent | undefined {
-	if (matchesKey(data, Key.ctrl("c"))) return { type: "cancel" };
-	if (matchesPaneBinding(data, keybindings, "tui.select.cancel", Key.escape) || data === "q" || data === "Q") return { type: "back" };
-	if (matchesKey(data, Key.left)) return { type: "move", direction: "left" };
-	if (matchesKey(data, Key.right)) return { type: "move", direction: "right" };
-	if (matchesPaneBinding(data, keybindings, "tui.select.up", Key.up)) return { type: "move", direction: "up" };
-	if (matchesPaneBinding(data, keybindings, "tui.select.down", Key.down)) return { type: "move", direction: "down" };
-	if (matchesPaneBinding(data, keybindings, "tui.select.pageUp", Key.pageUp)) return { type: "move", direction: "up", amount: pageSize };
-	if (matchesPaneBinding(data, keybindings, "tui.select.pageDown", Key.pageDown)) return { type: "move", direction: "down", amount: pageSize };
-	if (matchesPaneBinding(data, keybindings, "tui.select.confirm", Key.enter)) return { type: "activate" };
-	if (matchesKey(data, Key.space)) return { type: "noop" };
-	if (data === "s" || data === "S") return { type: "save" };
-	if (data === "r" || data === "R") return { type: "resetDefaults" };
-	if (data === "d" || data === "D") return { type: "cyclePreviewDensity" };
-	if (data === "j" || data === "J") return { type: "reorderSegment", direction: 1 };
-	if (data === "k" || data === "K") return { type: "reorderSegment", direction: -1 };
-	return undefined;
-}
-
-class GlanceConfigPane implements Component {
+export class GlanceConfigPane implements Component, Focusable {
 	private model: PaneModelState;
-	private readonly workingPreview: WorkingSweep;
+	private readonly clock: WorkingSweep;
+	private input = new Input();
+	private replaceNumberOnType = false;
+	private numberPasting = false;
 	private disposed = false;
+	private hasFocus = false;
+	private pageSize = 5;
+
+	get focused(): boolean { return this.hasFocus; }
+	set focused(value: boolean) { this.hasFocus = value; this.input.focused = value && this.model.page.kind === "number"; }
 
 	constructor(
 		initial: GlanceConfig,
-		private readonly theme: Theme,
-		private readonly done: Done,
+		private readonly theme: Pick<Theme, "fg"> & Partial<Pick<Theme, "bg">>,
+		private readonly done: (result: PaneResult) => void,
 		private readonly requestRender: () => void,
-		private readonly keybindings?: KeybindingsManager,
+		private readonly keybindings?: Pick<KeybindingsManager, "matches" | "getKeys">,
 		private readonly getTerminalRows: () => number | undefined = () => undefined,
 		private readonly previewState?: GlanceState,
 		private readonly options: GlancePaneOptions = {},
 	) {
 		this.model = createPaneModel(initial);
-		this.workingPreview = new WorkingSweep({
-			nowMs: options.previewNowMs ?? (() => performance.now()),
-			ownsEditor: () => !this.disposed,
-			requestRender,
-			setWorkingVisible: () => {},
-			schedule: options.schedulePreviewFrame,
+		this.clock = new WorkingSweep({
+			nowMs: options.previewNowMs ?? (() => performance.now()), ownsEditor: () => !this.disposed,
+			requestRender, setWorkingVisible: () => {}, schedule: options.schedulePreviewFrame,
 		});
-		this.workingPreview.attach();
+		this.clock.setSpeed(initial.editor.workingSweepSpeed);
+		this.clock.attach();
 	}
-
+	invalidate(): void { this.input.invalidate(); }
 	dispose(): void {
+		if (this.disposed) return;
 		this.disposed = true;
-		this.workingPreview.dispose();
+		this.clock.dispose();
 	}
-
-	invalidate(): void {}
-
+	private matches(data: string, action: Keybinding, fallback: KeyId): boolean {
+		return this.keybindings ? this.keybindings.matches(data, action) : matchesKey(data, fallback);
+	}
+	private bindingLabel(action: Keybinding, fallback: string): string | undefined {
+		const configured = this.keybindings?.getKeys?.(action);
+		if (configured === undefined) return fallback;
+		const key = configured.find(key => key !== "ctrl+c"); // Ctrl-C always discards the entire pane.
+		if (!key) return undefined;
+		const labels: Record<string, string> = { ctrl: "Ctrl", shift: "Shift", alt: "Alt", super: "Super", enter: "Enter", escape: "Esc", tab: "Tab", up: "↑", down: "↓", left: "←", right: "→", space: "Space" };
+		return key.split("+").map(part => labels[part] ?? (part.length === 1 ? part.toUpperCase() : part)).join("+");
+	}
+	private shortcut(item: HelpShortcut): string {
+		let key: string | undefined = item.key;
+		if (key === "Enter") key = this.bindingLabel("tui.select.confirm", "Enter");
+		else if (key === "Esc") {
+			key = this.bindingLabel("tui.select.cancel", "Esc");
+			if (!key) return "[Ctrl+C] Discard & close";
+		} else if (key === "↑↓") {
+			const up = this.bindingLabel("tui.select.up", "↑"), down = this.bindingLabel("tui.select.down", "↓");
+			key = up === "↑" && down === "↓" ? "↑↓" : [up, down].filter(Boolean).join("/");
+		} else if (key === "Tab/Shift+Tab") key = [this.bindingLabel("tui.input.tab", "Tab"), "Shift+Tab"].filter(Boolean).join("/");
+		return key ? `[${key}] ${item.label}` : "";
+	}
+	private editNumber(data: string): void {
+		const startsPaste = data.includes("\x1b[200~");
+		if (this.replaceNumberOnType && (/^[\x20-\x7e]+$/.test(data) || decodeKittyPrintable(data) !== undefined || startsPaste)) this.input.setValue("");
+		this.replaceNumberOnType = false;
+		if (startsPaste) this.numberPasting = true;
+		const pasteEnd = data.indexOf("\x1b[201~");
+		const end = pasteEnd < 0 ? data.length : pasteEnd + 6;
+		this.input.handleInput(data.slice(0, end));
+		if (pasteEnd >= 0) this.numberPasting = false;
+		this.dispatch({ type: "input", text: this.input.getValue() });
+		if (end < data.length) this.handleInput(data.slice(end));
+	}
+	private dispatch(intent: PaneIntent): void {
+		const wasNumber = this.model.page.kind === "number";
+		const result = updatePaneModel(this.model, intent);
+		this.model = result.model;
+		if (result.completion) { this.dispose(); this.done(result.completion); return; }
+		if (this.model.page.kind === "number" && !wasNumber) {
+			this.input = new Input();
+			this.input.handleInput(`\x1b[200~${this.model.page.text}\x1b[201~`);
+			this.replaceNumberOnType = true;
+			this.numberPasting = false;
+		}
+		this.input.focused = this.hasFocus && this.model.page.kind === "number";
+		this.clock.setSpeed(this.model.draft.editor.workingSweepSpeed);
+		if (createPaneViewModel(this.model).preview.working) this.clock.start(); else this.clock.settle();
+		this.requestRender();
+	}
 	handleInput(data: string): void {
 		if (this.disposed) return;
-		const pageSize = this.model.subview === "themeBrowser" ? themeViewportRows(this.getTerminalRows()) : 5;
-		const intent = paneIntentFromKey(data, this.keybindings, pageSize);
-		if (!intent) return;
-
-		const update = updatePaneModel(this.model, intent);
-		this.model = update.model;
-
-		if (update.completion) {
-			this.dispose();
-			this.done(update.completion.action === "cancel" ? null : update.completion.config);
-			return;
-		}
-
-		// Focus controls the demo; browsing unrelated settings does not run an animation.
-		if (createPaneViewModel(this.model, 80).preview.working) this.workingPreview.start();
-		else this.workingPreview.settle();
-		if (update.requestRender) this.requestRender();
+		// Paste payload is text, even when delivered in chunks containing command keys.
+		if (this.model.page.kind === "number" && (this.numberPasting || data.includes("\x1b[200~"))) { this.editNumber(data); return; }
+		if (matchesKey(data, Key.ctrl("c"))) { this.dispatch({ type: "cancel" }); return; }
+		if (this.matches(data, "tui.select.cancel", Key.escape)) { this.dispatch({ type: "back" }); return; }
+		if (this.matches(data, "tui.select.confirm", Key.enter)) { this.dispatch({ type: "activate" }); return; }
+		// Text entry owns letters and arrows; S/R/Q must not save/reset/close it.
+		if (this.model.page.kind === "number") { this.editNumber(data); return; }
+		if (this.matches(data, "tui.select.up", Key.up)) this.dispatch({ type: "move", direction: "up" });
+		else if (this.matches(data, "tui.select.down", Key.down)) this.dispatch({ type: "move", direction: "down" });
+		else if (this.matches(data, "tui.select.pageUp", Key.pageUp)) this.dispatch({ type: "move", direction: "up", amount: this.pageSize });
+		else if (this.matches(data, "tui.select.pageDown", Key.pageDown)) this.dispatch({ type: "move", direction: "down", amount: this.pageSize });
+		else if (this.matches(data, "tui.input.tab", Key.tab)) this.dispatch({ type: "section", direction: 1 });
+		else if (matchesKey(data, Key.shift("tab"))) this.dispatch({ type: "section", direction: -1 });
+		else if (matchesKey(data, Key.left)) this.dispatch({ type: "adjust", direction: -1 });
+		else if (matchesKey(data, Key.right)) this.dispatch({ type: "adjust", direction: 1 });
+		else if (matchesKey(data, Key.space)) this.dispatch({ type: "toggle" });
+		else if (/^[sS]$/.test(data)) this.dispatch({ type: "save" });
+		else if (/^[rR]$/.test(data)) this.dispatch({ type: "reset" });
+		else if (/^[qQ]$/.test(data)) this.dispatch({ type: "back" });
+		else if (/^[dD]$/.test(data)) this.dispatch({ type: "density" });
+		else if (/^[jJ]$/.test(data)) this.dispatch({ type: "reorder", direction: 1 });
+		else if (/^[kK]$/.test(data)) this.dispatch({ type: "reorder", direction: -1 });
 	}
 
-	private renderPreview(lines: string[], model: GlancePaneViewModel, layout: PaneLayout, colors: PaneColors): void {
-		lines.push(paneLine(layout, [colors.dim(`Preview · density ${model.previewDensityLabel} · [D] cycle${model.preview.working ? " · Working" : ""}`)]));
-		const previewOptions = {
-			workingElapsedMs: model.preview.working ? this.workingPreview.elapsedMs() : undefined,
-			contentLines: ["Ask pi to improve the input surface..."],
-			focused: true,
-			...(this.options.renderStyleContext ?? {}),
-			...(model.preview.density === "auto" ? {} : { previewDensity: model.preview.density }),
-			...(model.preview.ambientTone ? { ambientTone: model.preview.ambientTone } : {}),
+	private fg(tone: "accent" | "muted" | "dim" | "warning" | "success", text: string): string { return this.theme.fg(tone, text); }
+	private renderPreview(view: GlancePaneViewModel, width: number): string[] {
+		const config = view.preview.config;
+		if (!config.enabled) return [this.fg("dim", "Preview · Glance is off"), this.fg("dim", "Turn Glance on to preview the editor.")];
+		const options = {
+			...this.options.renderStyleContext,
+			...(view.preview.ambientTone ? { ambientTone: view.preview.ambientTone } : {}),
+			...(view.preview.density === "auto" ? {} : { previewDensity: view.preview.density }),
+			workingElapsedMs: view.preview.working ? this.clock.elapsedMs() : undefined,
+			contentLines: [config.enabled ? "Your next prompt…" : "Glance is off"], focused: true,
 		};
-		const preview = this.previewState
-			? renderInputSurface(this.previewState, model.preview.config, layout.width, previewOptions)
-			: renderInputSurfacePreview(model.preview.config, layout.width, previewOptions);
-		for (const previewLine of preview) {
-			lines.push(previewLine);
+		const preview = this.previewState ? renderInputSurface(this.previewState, config, width, options) : renderInputSurfacePreview(config, width, options);
+		const densityLabel = view.preview.density[0]!.toUpperCase() + view.preview.density.slice(1);
+		const label = view.section === "status" ? `Preview · ${densityLabel}` : `Preview${view.preview.working ? ` · Working · ${config.editor.workingSweepSpeed} cols/s` : ""}`;
+		return [this.fg("dim", label), ...preview];
+	}
+	private renderRow(row: GlancePaneViewModel["rows"][number], width: number): string {
+		const mark = row.selected ? "› " : "  ";
+		const value = row.kind === "number" ? `‹ ${row.value} ›` : row.value + (row.kind === "theme" || row.kind === "choice" || row.kind === "segment" ? "  ›" : "");
+		const left = mark + row.label + (row.changed ? " *" : "");
+		const tone = row.selected ? "accent" : row.value === "Off" ? "dim" : "muted";
+		const rendered = this.fg(tone, spread(left, value, width));
+		return row.selected ? this.theme.bg?.("selectedBg", rendered) ?? rendered : rendered;
+	}
+	render(availableWidth: number): string[] {
+		const width = Math.max(0, Math.min(100, Math.floor(availableWidth)));
+		const terminalRows = this.getTerminalRows();
+		const height = Math.max(1, Number.isFinite(terminalRows) ? Math.floor(terminalRows!) - 2 : 30);
+		const view = createPaneViewModel(this.model);
+		const sectionIndex = SETTINGS_SECTIONS.findIndex(section => section.id === view.section);
+		const tabs = width >= 46
+			? SETTINGS_SECTIONS.map(section => section.id === view.section ? this.fg("accent", `[ ${section.label} ]`) : this.fg("muted", `  ${section.label}  `)).join(" ")
+			: this.fg("accent", `${SETTINGS_SECTIONS[sectionIndex]!.label} (${sectionIndex + 1}/3)`);
+		const header = [spread(this.fg("accent", "◌ Glance"), this.fg(view.dirty ? "warning" : "dim", view.dirty ? "Unsaved changes" : "No changes"), width), tabs];
+		const help = view.help.map(item => this.shortcut(item)).filter(Boolean);
+		const footer = wrapShortcuts(help, Math.max(1, width)).slice(0, 2).map(line => this.fg("dim", line));
+		const actions = view.actions.map(item => this.shortcut(item)).filter(Boolean);
+		footer.push(...wrapShortcuts(actions, Math.max(1, width)).slice(0, 2).map(line => this.fg("accent", line)));
+		const hint = wrapTextWithAnsi(this.fg(this.model.page.kind === "number" && this.model.page.error ? "warning" : "dim", view.hint), Math.max(1, width)).slice(0, 2);
+		const preview = this.renderPreview(view, width);
+		const title = this.fg("muted", view.title);
+		const base = header.length + 1 + hint.length + footer.length + 2;
+		const minimumRows = view.page === "number" ? 1 : Math.min(4, view.page === "list" ? view.rows.length : view.choices.length);
+		const showPreview = height - base - preview.length >= minimumRows;
+		const prefix = [...header, ...(showPreview ? preview : []), title];
+		const budget = Math.max(1, height - prefix.length - hint.length - footer.length - 1);
+		const body: string[] = [];
+		if (view.page === "number") {
+			body.push(...this.input.render(Math.max(1, width)));
+		} else if (view.page !== "list") {
+			this.pageSize = Math.max(1, Math.min(8, budget - 1));
+			const list = new SelectList(view.choices.map((choice, index) => ({ value: String(index), label: `${choice.checked ? "✓ " : "  "}${choice.label}` })), this.pageSize, {
+				selectedPrefix: text => this.fg("accent", text), selectedText: text => this.fg("accent", text), description: text => this.fg("dim", text), scrollInfo: text => this.fg("dim", text), noMatch: text => this.fg("warning", text),
+			});
+			list.setSelectedIndex(Math.max(0, view.choices.findIndex(choice => choice.selected)));
+			body.push(...list.render(Math.max(1, width)));
+		} else {
+			const count = Math.max(1, Math.min(8, budget - (view.rows.length > budget ? 1 : 0)));
+			this.pageSize = count;
+			const selected = Math.max(0, view.rows.findIndex(row => row.selected));
+			const { start, end } = viewport(view.rows.length, selected, count);
+			body.push(...view.rows.slice(start, end).map(row => this.renderRow(row, width)));
+			if (start > 0 || end < view.rows.length) body.push(this.fg("dim", `${start + 1}–${end} of ${view.rows.length} · ${this.shortcut({ key: "↑↓", label: "Scroll" })}`));
 		}
-	}
-
-	private renderCategoryRow(cat: CategoryViewModel, colors: PaneColors): string {
-		let labelTone = colors.muted;
-
-		if (cat.selected) {
-			labelTone = cat.hasFocus ? colors.accent : colors.muted;
-		} else if (cat.enabled === false) {
-			labelTone = colors.dim;
+		let lines = [...prefix, ...body.slice(0, budget), "", ...hint, ...footer];
+		// At tiny heights keep the selected setting and an exit hint, not a clipped header.
+		if (lines.length > height) {
+			const selected = view.rows.find(row => row.selected);
+			const confirm = view.help.find(item => item.key === "Enter") ?? view.actions[0]!;
+			const cancel = view.actions.find(item => item.key === "Esc")!;
+			lines = [view.page === "list" && selected ? this.renderRow(selected, width) : body[0] ?? title, this.fg("dim", `${this.shortcut(confirm)}  ${this.shortcut(cancel)}`)].slice(0, height);
 		}
-
-		let cursor = "  ";
-		if (cat.selected) {
-			cursor = cat.hasFocus ? colors.accent("» ") : colors.dim("› ");
-		}
-		return `${cursor}${labelTone(cat.label)}`;
-	}
-
-	private renderLeftPane(model: GlancePaneViewModel, colors: PaneColors): string[] {
-		return model.categories.map((cat) => this.renderCategoryRow(cat, colors));
-	}
-
-	private renderSettingValue(row: SettingViewModel, colors: PaneColors): string {
-		if (row.kind === "info") return colors.dim(row.value);
-		const valueTone = row.selected && row.valueHasFocus ? colors.accent : row.value === "on" ? colors.success : row.value === "off" ? colors.dim : colors.muted;
-		let displayValue = row.value;
-		if (row.selected && row.valueHasFocus) {
-			displayValue = `[ ${row.value} ]`;
-		}
-		return valueTone(displayValue);
-	}
-
-	private renderSettingRow(row: SettingViewModel, layout: PaneLayout, colors: PaneColors): string {
-		let labelTone = colors.muted;
-
-		if (row.selected) {
-			labelTone = row.labelHasFocus ? colors.accent : colors.muted;
-		} else if (row.kind === "info") {
-			labelTone = colors.dim;
-		}
-
-		const label = truncateToWidth(row.label, layout.settingLabelWidth, "…");
-		const cursor = row.selected ? (row.labelHasFocus ? colors.accent("» ") : colors.dim("› ")) : "  ";
-		const paddedLabel = padRightAnsi(`${cursor}${labelTone(label)}`, layout.settingLabelWidth + 2);
-		const gap = row.selected && row.valueHasFocus ? focusGap(layout.columnGap, colors) : layout.columnGap;
-		const valueStr = this.renderSettingValue(row, colors);
-		const value = truncateToWidth(valueStr, layout.valueWidth, "…");
-		return `${paddedLabel}${gap}${value}`;
-	}
-
-	private renderSettingsPane(model: GlancePaneViewModel, layout: PaneLayout, colors: PaneColors): string[] {
-		if (!model.selectedCategory) return [];
-
-		if (model.settings.length === 0) {
-			return [colors.dim("No settings available.")];
-		}
-
-		return model.settings.map((row) => this.renderSettingRow(row, layout, colors));
-	}
-
-	private themeBrowserItems(browser: NonNullable<GlancePaneViewModel["themeBrowser"]>): SelectItem[] {
-		return browser.themes.map((theme) => {
-			const previewMarker = theme.previewed ? "●" : " ";
-			const savedMarker = theme.saved ? "✓" : " ";
-			const restoreMarker = theme.restored && !theme.saved ? "↩" : " ";
-			return {
-				value: theme.id,
-				label: `${previewMarker} ${savedMarker}${restoreMarker} ${theme.label}`,
-			};
-		});
-	}
-
-	private renderThemeBrowserList(
-		browser: NonNullable<GlancePaneViewModel["themeBrowser"]>,
-		layout: PaneLayout,
-		colors: PaneColors,
-	): string[] {
-		const list = new SelectList(this.themeBrowserItems(browser), themeViewportRows(this.getTerminalRows()), {
-			selectedPrefix: colors.accent,
-			selectedText: colors.accent,
-			description: colors.muted,
-			scrollInfo: colors.dim,
-			noMatch: colors.warn,
-		});
-		list.setSelectedIndex(browser.highlightedThemeIndex);
-		return list.render(layout.contentWidth).map((line) => paneLine(layout, [line]));
-	}
-
-	private renderThemeBrowserDetail(theme: ThemeBrowserThemeViewModel, layout: PaneLayout, colors: PaneColors): string[] {
-		const tags = theme.detailTags.join(" · ");
-		const summary = ["Selected", theme.groupLabel, tags].filter(Boolean).join(" · ");
-		return [paneLine(layout, [colors.muted(summary)]), paneLine(layout, [colors.dim(theme.detailDescription)])];
-	}
-
-	private renderThemeBrowser(lines: string[], model: GlancePaneViewModel, layout: PaneLayout, colors: PaneColors): void {
-		const browser = model.themeBrowser;
-		if (!browser) return;
-
-		const selected = browser.themes[browser.highlightedThemeIndex] ?? browser.themes.find((theme) => theme.selected);
-		const title = `${browser.slotLabel} · preview ${browser.previewLabel}`;
-		const restore = browser.restoreTheme === browser.savedTheme ? `saved ${browser.savedLabel}` : `saved ${browser.savedLabel} · Esc returns ${browser.restoreLabel}`;
-		lines.push(paneLine(layout, [colors.muted(title)]));
-		lines.push(paneLine(layout, [colors.dim(restore)]));
-		lines.push(...this.renderThemeBrowserList(browser, layout, colors));
-
-		if (selected) {
-			lines.push("");
-			lines.push(...this.renderThemeBrowserDetail(selected, layout, colors));
-		}
-	}
-
-	private renderAsidePane(model: GlancePaneViewModel, layout: PaneLayout, colors: PaneColors): string[] {
-		const hint = model.selectedHint ? truncateToWidth(model.selectedHint, layout.asideWidth - 2, "…") : "";
-		return [colors.muted(model.settingsTitle), hint ? colors.dim(`“${hint}”`) : ""];
-	}
-
-	private renderSettingsColumns(lines: string[], model: GlancePaneViewModel, layout: PaneLayout, colors: PaneColors): void {
-		const categories = this.renderLeftPane(model, colors);
-		const settings = this.renderSettingsPane(model, layout, colors);
-		const aside = layout.showAside ? this.renderAsidePane(model, layout, colors) : [];
-
-		const maxLines = Math.max(categories.length, settings.length, aside.length);
-		for (let i = 0; i < maxLines; i++) {
-			const category = padRightAnsi(categories[i] ?? "", layout.categoryWidth);
-			const selectedSetting = model.settings[i];
-			const categoryGap = selectedSetting?.selected && selectedSetting.labelHasFocus ? focusGap(layout.columnGap, colors) : layout.columnGap;
-			const setting = padRightAnsi(settings[i] ?? "", layout.settingsWidth);
-			const asideLine = aside[i] ?? "";
-			const asidePart = layout.showAside ? [layout.asideGap, colors.dim(`${layout.asideSeparator} `), asideLine] : [];
-			lines.push(paneLine(layout, [category, categoryGap, setting, ...asidePart]));
-		}
-	}
-
-	private renderSettings(lines: string[], model: GlancePaneViewModel, layout: PaneLayout, colors: PaneColors): void {
-		if (model.subview === "themeBrowser") {
-			this.renderThemeBrowser(lines, model, layout, colors);
-			return;
-		}
-
-		this.renderSettingsColumns(lines, model, layout, colors);
-		if (!layout.showAside && model.selectedHint) {
-			const hint = truncateToWidth(model.selectedHint, layout.contentWidth, "…");
-			lines.push("");
-			lines.push(paneLine(layout, [colors.dim(`“${hint}”`)]));
-		}
-	}
-
-	private renderFooter(lines: string[], model: GlancePaneViewModel, layout: PaneLayout, colors: PaneColors): void {
-		const footerLeft = helpText(model.help, colors);
-		const footerRight = model.dirty ? colors.warn("● Unsaved changes") : colors.success("✓ Saved");
-		lines.push(paneLine(layout, [spreadAnsi(footerLeft, footerRight, layout.contentWidth)]));
-	}
-
-	render(width: number): string[] {
-		const colors = makePaneColors(this.theme);
-		const layout = makePaneLayout(width);
-		const model = createPaneViewModel(this.model, width);
-		const lines: string[] = [];
-
-		if (model.status) lines.push(paneLine(layout, [colors.dim(model.status)]));
-
-		this.renderPreview(lines, model, layout, colors);
-		lines.push("");
-
-		this.renderSettings(lines, model, layout, colors);
-		lines.push("");
-
-		this.renderFooter(lines, model, layout, colors);
-		return lines;
+		const indent = " ".repeat(Math.max(0, Math.floor((availableWidth - width) / 2)));
+		return lines.map(line => truncateToWidth(indent + truncateToWidth(line, width, ""), Math.max(0, availableWidth), ""));
 	}
 }
 
 interface GlancePaneUI {
-	custom<T>(
-		factory: (tui: TUI, theme: Theme, keybindings: KeybindingsManager, done: (result: T) => void) => Component,
-	): Promise<T>;
+	custom<T>(factory: (tui: TUI, theme: Theme, keybindings: KeybindingsManager, done: (result: T) => void) => Component): Promise<T>;
 }
-
-export async function showGlancePane(
-	initial: GlanceConfig,
-	ctx: { ui: GlancePaneUI },
-	previewState?: GlanceState,
-	options: GlancePaneOptions = {},
-): Promise<PaneResult> {
-	return ctx.ui.custom<PaneResult>((tui, theme, keybindings, done) => {
-		return new GlanceConfigPane(
-			initial,
-			theme,
-			(result) => done(result ? { action: "save", config: result } : { action: "cancel" }),
-			() => tui.requestRender(),
-			keybindings,
-			() => tui.terminal.rows,
-			previewState,
-			options,
-		);
-	});
+export async function showGlancePane(initial: GlanceConfig, ctx: { ui: GlancePaneUI }, previewState?: GlanceState, options: GlancePaneOptions = {}): Promise<PaneResult> {
+	let pane: GlanceConfigPane | undefined;
+	try {
+		return await ctx.ui.custom<PaneResult>((tui, theme, keybindings, done) => {
+			pane = new GlanceConfigPane(initial, theme, done, () => tui.requestRender(), keybindings, () => tui.terminal?.rows, previewState, options);
+			return pane;
+		});
+	} finally { pane?.dispose(); }
 }

@@ -1,28 +1,8 @@
-import { TOKENS_CACHE_MODE_VALUES, TOKENS_DISPLAY_MODE_VALUES, nextOption } from "../config/options.js";
+import { choiceSetting, type SegmentFeature } from "./feature.js";
 import { formatTokens } from "./display-primitives.js";
-import type { SegmentFeature } from "./feature.js";
-import type { GlanceConfig, SegmentData, SegmentRenderContext, UsageTotals } from "../types.js";
-
-const TOKENS_DISPLAY_LABELS: Record<GlanceConfig["tokens"]["display"], string> = {
-	"input-output": "input / output",
-	total: "total",
-};
-
-const TOKENS_CACHE_LABELS: Record<GlanceConfig["tokens"]["cache"], string> = {
-	rate: "rate",
-	"read-write": "read/write",
-	hide: "hide",
-};
+import type { SegmentData, SegmentRenderContext, UsageTotals } from "../types.js";
 
 const TOKEN_CACHE_RATE_NERD_ICON = "󰑐"; // nf-md-refresh (U+F0450)
-
-function tokensDisplayLabel(mode: GlanceConfig["tokens"]["display"]): string {
-	return TOKENS_DISPLAY_LABELS[mode];
-}
-
-function tokensCacheLabel(mode: GlanceConfig["tokens"]["cache"]): string {
-	return TOKENS_CACHE_LABELS[mode];
-}
 
 function shouldShowTokenCache(ctx: SegmentRenderContext): boolean {
 	return ctx.config.tokens.cache !== "hide";
@@ -81,26 +61,12 @@ export const tokensSegmentFeature = {
 	label: "Tokens",
 	defaultEnabled: true,
 	settings: [
-		{
-			id: "tokens.display",
-			label: "Display",
-			hint: "Choose input/output or total.",
-			kind: "cycle",
-			value: (config: GlanceConfig) => tokensDisplayLabel(config.tokens.display),
-			mutate: (config: GlanceConfig) => {
-				config.tokens.display = nextOption(config.tokens.display, TOKENS_DISPLAY_MODE_VALUES);
-			},
-		},
-		{
-			id: "tokens.cache",
-			label: "Cache",
-			hint: "Cache rate, read/write counts, or hidden.",
-			kind: "cycle",
-			value: (config: GlanceConfig) => tokensCacheLabel(config.tokens.cache),
-			mutate: (config: GlanceConfig) => {
-				config.tokens.cache = nextOption(config.tokens.cache, TOKENS_CACHE_MODE_VALUES);
-			},
-		},
+		choiceSetting("tokens.display", "Show", "Session input and output token counts.", [
+			{ value: "input-output", label: "Input + output" }, { value: "total", label: "Combined total" },
+		], c => c.tokens.display, (c, v) => { c.tokens.display = v; }),
+		choiceSetting("tokens.cache", "Cache details", "Choose which prompt-cache information to show.", [
+			{ value: "rate", label: "Hit rate" }, { value: "read-write", label: "Read / write tokens" }, { value: "hide", label: "Hidden" },
+		], c => c.tokens.cache, (c, v) => { c.tokens.cache = v; }),
 	],
 	collect: collectTokens,
 } as const satisfies SegmentFeature;

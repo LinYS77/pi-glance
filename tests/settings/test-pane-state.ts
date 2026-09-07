@@ -3,36 +3,26 @@ import { test } from "node:test";
 import { defaultConfig } from "../../src/config/model.js";
 import { createPaneModel, createPaneViewModel, updatePaneModel, type PaneModelState } from "../../src/settings/model.js";
 
-// Compile-time contracts: browser data is mandatory in browser state and absent in settings.
-function checkStateTypes(base: PaneModelState): void {
-	// @ts-expect-error a theme browser cannot exist without its navigation/restore state
-	const missingBrowser: PaneModelState = { ...base, subview: "themeBrowser", themeBrowser: undefined };
-	if (base.subview === "themeBrowser") {
-		// @ts-expect-error settings cannot retain browser-only state
-		const staleBrowser: PaneModelState = { ...base, subview: "settings" };
-		void staleBrowser;
-	}
-	void missingBrowser;
+function checkStateTypes(): void {
+	// @ts-expect-error a palette picker needs its slot, parent row and restore config
+	const missing: PaneModelState["page"] = { kind: "theme", index: 0 };
+	// @ts-expect-error a list cannot retain numeric editor state
+	const stale: PaneModelState["page"] = { kind: "list", index: 0, text: "47" };
+	void missing; void stale;
 }
 void checkStateTypes;
 
-test("preview view model carries draft, density and edited slot through accept and restore", () => {
-	const initial = defaultConfig();
-	const root = createPaneModel(initial);
-	const opened = updatePaneModel({ ...root, focus: "values", settingIndex: 2 }, { type: "activate" }).model;
-	const previewed = updatePaneModel(opened, { type: "move", direction: "down" }).model;
-	const dense = updatePaneModel(previewed, { type: "cyclePreviewDensity" }).model;
-	const view = createPaneViewModel(dense, 120);
-	assert.equal(view.preview.ambientTone, "dark");
-	assert.equal(view.preview.density, "full");
-	assert.equal(view.preview.config.theme.dark, "catppuccin-mocha");
-	assert.equal(initial.theme.dark, "dark");
-	const restored = createPaneViewModel(updatePaneModel(dense, { type: "back" }).model, 120);
-	assert.equal(restored.preview.ambientTone, undefined);
-	assert.equal(restored.preview.config.theme.dark, "dark");
-	assert.equal(restored.dirty, false);
-	const accepted = createPaneViewModel(updatePaneModel(dense, { type: "activate" }).model, 120);
-	assert.equal(accepted.preview.ambientTone, undefined);
-	assert.equal(accepted.preview.config.theme.dark, "catppuccin-mocha");
-	assert.equal(accepted.dirty, true);
+test("cancelling a palette picker preserves an earlier unsaved change and parent selection", () => {
+	let model = createPaneModel(defaultConfig());
+	model = updatePaneModel(model, { type: "toggle" }).model;
+	model = updatePaneModel(model, { type: "move", direction: "down", amount: 2 }).model;
+	model = updatePaneModel(model, { type: "activate" }).model;
+	model = updatePaneModel(model, { type: "move", direction: "down" }).model;
+	assert.equal(createPaneViewModel(model).preview.ambientTone, "dark");
+	assert.notEqual(model.draft.theme.dark, "dark");
+	model = updatePaneModel(model, { type: "back" }).model;
+	assert.equal(model.draft.enabled, false);
+	assert.equal(model.draft.theme.dark, "dark");
+	assert.equal(createPaneViewModel(model).rows.find(row => row.selected)?.label, "Dark palette");
+	assert.equal(createPaneViewModel(model).dirty, true);
 });

@@ -26,7 +26,7 @@ pi-glance handles:
 - the Glance editor frame and status line;
 - always-on adaptive segment fitting;
 - the `/glance` settings pane, bounded theme browser, and transient density preview;
-- Pi selection keybindings and category → setting → value navigation;
+- Pi selection keybindings, three settings sections and direct row editing;
 - six display features: Git, Cost, Model speed, Context, Tokens, and Model;
 - its 22 palettes;
 - asynchronous cached Git status collection;
@@ -117,13 +117,18 @@ Each segment returns display content, a color level, and any custom icon spacing
 
 ## `/glance` interaction rules
 
-- Navigation follows category → setting → value. Enter/Right descends one level; Esc/Left ascends one level without changing the selected parent.
-- Vertical selection movement, paging, confirmation, and cancellation use the `KeybindingsManager` injected into `ctx.ui.custom()`.
-- Ctrl-C remains an unconditional pane cancel; extension-specific save/reset/reorder/density keys remain local commands.
-- The theme catalog remains complete, but `SelectList` renders only a terminal-height-aware 4–8 row viewport.
-- `GlanceConfigPane` translates keys into model intents rather than calling `SelectList.handleInput()`, so it uses the keybindings supplied by Pi.
-- Preview density cycles through Auto, Full, Compact, and Minimal without entering `GlanceConfig` or dirty comparison.
-- Pane state is a discriminated union: theme browsing always carries its slot and restore state; normal settings cannot retain browser state. Rendering receives preview config, density, and edited slot through the view model, not raw navigation state.
+- The pane has three sections: **Appearance**, **Status line**, and **Working**. Tab/Shift+Tab cycles sections while in a list. Sections remember their last list/detail page, and each segment remembers its selected detail row. There is no separate value-focus column.
+- Up/Down selects a row; lists and paged moves stop at their ends. Left/Right means previous/next for choices and palettes, slower/faster for speed, and Off/On for booleans and status items. Directional adjustments do not wrap or toggle repeatedly. Enter toggles a boolean or opens its editor/details; Space toggles boolean/status rows. Pi selection bindings are used for input and displayed in the hints.
+- Appearance owns the Glance toggle, light/dark palettes, icons, workspace label, editor height and top spacing. Palette labels explicitly describe Glance colors, not Pi theme switching.
+- The Status line overview owns visibility and ordering. Space toggles a segment, Left/Right sets Off/On, J/K reorders it, and Enter opens its detail settings. Detail pages do not duplicate the visibility toggle or show read-only facts as editable rows. Disabled segments remain configurable and are marked Off in the detail title.
+- Working owns animation mode and sweep speed. The speed accepts whole numbers from 10 to 120 columns/second, defaults to 47, and adjusts by one with Left/Right. Enter opens Pi's `Input` for direct entry. The first printable key replaces the original number, including Kitty input; editing keys allow normal cursor editing. Valid input previews immediately. Incomplete/invalid text retains the last valid preview and shows an error only on confirmation. Paste payloads and letter shortcuts remain text while editing.
+- Every field editor uses **Enter Confirm / Esc Cancel**: confirm keeps the value in the draft and returns to the same row; cancel restores the pre-edit value without losing earlier draft changes. Choices/palettes preview with arrow keys and keep their original option list stable. A saved custom value remains explicitly selectable rather than being replaced on open.
+- Only lists expose S to save and close, R to reset, and Tab to change sections. Field editors must be confirmed or cancelled first, so browsing a palette cannot accidentally save the entire draft. The view model supplies both navigation hints and actions; the TUI adapter resolves Pi's actual keybindings and does not invent page-specific actions. No file is written by the pane itself.
+- Reset and leaving the root with unsaved changes require confirmation, initially selecting **Keep editing**. Ctrl-C remains an unconditional cancel. Reset changes the draft only until saved and retains the current section/selected setting.
+- The pane uses one list, at most 100 columns wide. Lists keep the selection visible and adapt to terminal height; the preview is omitted when there is not enough room. Descriptions stay near the list and action shortcuts are kept separate from navigation hints.
+- The palette catalog remains complete, with a bounded Pi `SelectList` viewport. Pi's `Input` supplies editing and cursor markers; Glance propagates `Focusable` state to it. The custom UI adapter disposes its clock even on external close or rejection.
+- D cycles Auto, Full, Compact and Minimal preview layouts in the Status line section only. This remains transient and does not affect dirty comparison or config.
+- Navigation state distinguishes the list, choice picker, palette picker, number input and confirmation. Pickers carry their parent row and restore config; rendering uses the view model, not an additional navigation state.
 
 ## Usage calculations
 
@@ -164,9 +169,9 @@ Pi has no public footer getter or zero-height hidden footer. An empty footer row
 
 ## Working animation
 
-`editor.workingSweep` offers `top`, `perimeter` (default), and `off`. `/glance` → General → Working animation displays them as `top edge`, `full border`, and `off`. Saving changes takes effect on the current editor without replacing its factory or clearing input. Cancelling the pane, a failed save, or a read-only config leaves the active setting unchanged. The settings pane animates its preview only while this row is focused and not off, and disposes the preview clock on close. `npm run preview:working -- --perimeter` previews the loop without model calls, installation changes, or configuration writes.
+`editor.workingSweep` offers `top`, `perimeter` (default), and `off`. `/glance` → Working displays them as **Top edge**, **Full border**, and **Off** under Animation. Saving changes takes effect on the current editor without replacing its factory or clearing input. Cancelling the pane, a failed save, or a read-only config leaves the active setting unchanged. The settings pane runs its preview in the Working section while Glance and animation are on, and disposes the clock on close. `npm run preview:working -- --perimeter` previews the loop without model calls, installation changes, or configuration writes.
 
-Both modes move at **47 horizontal columns per second**, defined once by `sweepMotion` in `src/surface/sweep.ts`. The 30 FPS clock is unchanged. Cycle time comes from route length rather than separate duration limits, so resizing, editor height and status fitting do not change travel speed. Top-edge travel includes the feathered entrance and exit beyond its visible region; the perimeter is closed and has no off-frame interval.
+Both modes use `editor.workingSweepSpeed`, defaulting to **47 horizontal columns per second**, through `sweepMotion` in `src/surface/sweep.ts`. The allowed range is 10–120; the 30 FPS clock is unchanged. The live and preview clocks retime elapsed time when speed changes so travelled distance is preserved. Cycle time comes from route length rather than separate duration limits, so resizing, editor height and status fitting do not change travel speed. Top-edge travel includes the feathered entrance and exit beyond its visible region; the perimeter is closed and has no off-frame interval.
 
 Top-edge mode crosses the title and its connector; corners, right-hand status, scroll labels and other edges remain unchanged. Perimeter mode follows one clockwise closed path through the title, visible top border, corners, sides and bottom. It uses circular distance for a seamless wrap, including the feathered tail. One vertical row counts as two horizontal cells to approximate terminal-cell proportions. The loop uses the actual rendered body height, excluding top spacing and autocomplete. Status text and its surrounding spaces do not consume path distance: the beam bridges that gap instead of disappearing behind metadata. Status bytes and scroll labels remain unchanged in both modes.
 
@@ -232,9 +237,10 @@ At extremely narrow widths, the inherited editor is given enough room for a two-
 
 ## Configuration
 
-- Current on-disk schema version: `10`.
+- Current on-disk schema version: `11`.
 - New-install and settings-reset defaults use Nerd Font icons, smart workspace paths, one top-margin row, and all six segments enabled. Other defaults include a three-row editor, full-border Working animation, light/dark palette slots, input/output Tokens with cache rate, and automatic provider/thinking labels. Defaults fill missing or invalid values; valid saved choices are preserved. Changing defaults does not change the schema version.
 - Missing or invalid `editor.workingSweep` defaults to `perimeter`; legacy `true` remains `top` and `false` remains `off`. Explicit saved modes are preserved. Migration is in memory and writes only on an explicit save.
+- Missing or invalid `editor.workingSweepSpeed` defaults to 47. Finite numbers are rounded and clamped to 10–120. Older config files gain the field in memory; loading does not rewrite them.
 - Legacy theme strings migrate to the same palette in both slots.
 - Legacy Tokens Cache values migrate as `auto -> rate` and `show -> read-write`.
 - Adaptive width is always on; legacy `display.adaptive` is discarded.
@@ -260,8 +266,9 @@ At extremely narrow widths, the inherited editor is given enough room for a two-
 
 `docs/` and `.pi/` are reserved for local notes and Pi settings and are ignored by Git. `.github/release-notes/` keeps the current release notes; previous versions remain in Git history and GitHub Releases. `npm run clean` removes only `.tmp-test/`, leaving dependencies, local settings and release tarballs intact. `npm run build:dev` cleans before compiling.
 
-`npm ci`, `npm run check` and `npm test` install dependencies, typecheck, and run the full test suite. Use `npm run pack:dry` to inspect the package or `npm pack` to create a release tarball.
+`npm ci`, `npm run check` and `npm test` install dependencies, typecheck, and run the full test suite. `npm run test:pane` covers the settings suite, including interaction, preview and save behavior; `npm run test:config` covers validation, migration and file storage. Use `npm run pack:dry` to inspect the package or `npm pack` to create a release tarball. The packaging tests also check that the manifest, lockfile and current release notes use the same version.
 
 Developer utilities:
 - `npm run debug:git -- /path/to/repo` prints a Git snapshot.
+- `npm run preview:settings` opens the new settings pane with example data. Save/close exits the preview without writing configuration. Use `-- --light` or `-- --256` to check color modes.
 - `npm run preview:working` previews Working animation and status density without model calls or configuration writes. Use `M` for sweep modes, Left/Right for palettes, `C` for color depth, and resize the terminal to check fitting.

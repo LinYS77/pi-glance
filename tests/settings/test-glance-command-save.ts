@@ -159,7 +159,7 @@ async function main(): Promise<void> {
 		test.customResults.push({ action: "cancel" });
 		await command("", test.ctx);
 		const activeConfigPane = test.renderedPanes.at(-1)?.join("\n") ?? "";
-		assert.match(activeConfigPane, /Enabled\s+on/, "after failed save, the next /glance pane should still receive the previous enabled config");
+		assert.match(activeConfigPane, /Glance\s+On/, "after failed save, the next /glance pane should still receive the previous enabled config");
 
 		await rm(configDir, { force: true });
 		await mkdir(configDir, { recursive: true });
@@ -181,7 +181,7 @@ async function main(): Promise<void> {
 		test.customResults.push({ action: "cancel" });
 		await command("", test.ctx);
 		const disabledActivePane = test.renderedPanes.at(-1)?.join("\n") ?? "";
-		assert.match(disabledActivePane, /Enabled\s+off/, "after successful disabled save, the next /glance pane should receive disabled active config");
+		assert.match(disabledActivePane, /Glance\s+Off/, "after successful disabled save, the next /glance pane should receive disabled active config");
 		assert.equal(hasNotification(test.notifications.slice(notificationsBeforeCancel), "pi-glance configuration cancelled", "info"), true, "cancel should keep the existing cancellation notice");
 		assert.equal(
 			hasNotification(test.notifications.slice(notificationsBeforeCancel), "pi-glance configuration save failed; keeping previous configuration", "error"),

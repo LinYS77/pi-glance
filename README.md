@@ -33,14 +33,14 @@ Restart Pi or run `/reload`.
 
 - **Rounded editor** — Pi's editing, history, autocomplete, and keybindings stay the same.
 - **Adaptive status line** — Git · Cost · Model speed · Context · Tokens · Model. Folds as the terminal narrows.
-- **Working animation** — a sweep around the editor or along its top edge while Pi works.
+- **Working animation** — a sweep around the editor or along its top edge, with adjustable speed.
 - **22 palettes** — separate light and dark choices with live preview.
 
 No runtime dependencies. No telemetry.
 
 ## Configure
 
-Run `/glance` to choose palettes, toggle status items, and change their order. Changes preview live; press `S` to save.
+Run `/glance` for **Appearance**, **Status line**, and **Working** settings. Use `Tab` to switch sections, arrow keys to adjust, and `S` to save. Changes preview live.
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/LinYS77/pi-glance/main/assets/settings.png" alt="pi-glance settings pane">
@@ -52,7 +52,7 @@ Run `/glance` to choose palettes, toggle status items, and change their order. C
 
 ## Notes
 
-- Nerd Font icons are enabled by default. For regular fonts, select `plain` in `/glance` → **General** → **Icons**.
+- Nerd Font icons are enabled by default. For regular fonts, select `Plain` in `/glance` → **Appearance** → **Icons**.
 - Pi has one custom-editor slot; the last editor extension loaded wins.
 - Tested with Pi 0.84.4 and 0.85.1. Requires Node.js 22.19.0 or newer.
 
