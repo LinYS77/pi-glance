@@ -16,6 +16,7 @@ const RENDER_MODULES = new Set([
 	"src/surface/renderer.ts",
 	"src/settings/pane.ts",
 	"src/segments/render.ts",
+	"src/surface/text.ts",
 	"src/surface/layout.ts",
 	"src/surface/frame.ts",
 	"src/surface/footer.ts",
@@ -173,7 +174,7 @@ test("runtime local imports form an acyclic graph", () => {
 });
 
 test("pure models stay transitively free of IO and Pi runtime dependencies", () => {
-	for (const path of ["src/config/model.ts", "src/settings/model.ts", "src/settings/catalog.ts", "src/runtime/git-snapshot.ts", "src/runtime/throughput.ts", "src/runtime/throughput-run-tracker.ts"]) {
+	for (const path of ["src/config/model.ts", "src/config/settings.ts", "src/settings/model.ts", "src/settings/catalog.ts", "src/runtime/git-snapshot.ts", "src/runtime/throughput.ts", "src/runtime/throughput-run-tracker.ts"]) {
 		const forbidden = dependencyPath(files, path, (specifier) => IO_NETWORK_PROCESS_IMPORTS.has(specifier) || specifier.startsWith("@earendil-works/pi-"));
 		assert.equal(forbidden, undefined, forbidden?.join(" -> "));
 	}

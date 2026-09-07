@@ -77,6 +77,7 @@
     "test:readme": "npm run build:dev --silent && node .tmp-test/tests/packaging/test-readme.js",
     "test:pane:model": "npm run build:dev --silent && node .tmp-test/tests/settings/test-pane-model.js",
     "test:pane": "npm run build:dev --silent && node --test .tmp-test/tests/settings/test-*.js",
+    "bench:render": "npm run build:dev --silent && node .tmp-test/scripts/benchmark-render.js",
     "preview:settings": "npm run build:dev --silent && node .tmp-test/scripts/preview-settings.js",
     "preview:working": "npm run build:dev --silent && node .tmp-test/scripts/preview-working.js",
     "debug:git": "npm run build:dev --silent && node .tmp-test/scripts/debug-git.js",

@@ -4,11 +4,11 @@ import { gitSegmentFeature } from "./git.js";
 import { modelSegmentFeature } from "./model.js";
 import { throughputSegmentFeature } from "./throughput.js";
 import { tokensSegmentFeature } from "./tokens.js";
-import type { SegmentFeature, SegmentSettingDescriptor } from "./feature.js";
+import type { SegmentFeature } from "./feature.js";
+import type { SettingDescriptor } from "../config/settings.js";
 import type { SegmentConfig, SegmentId } from "../types.js";
 
 export { type SegmentId } from "../types.js";
-export type { SegmentSettingDescriptor } from "./feature.js";
 
 export const SEGMENT_IDS = ["git", "cost", "throughput", "context", "tokens", "model"] as const satisfies readonly SegmentId[];
 
@@ -55,6 +55,6 @@ export function segmentRecordCoverage(record: Record<string, unknown>): SegmentC
 	};
 }
 
-export function getSegmentSettings(id: SegmentId): readonly SegmentSettingDescriptor[] {
+export function getSegmentSettings(id: SegmentId): readonly SettingDescriptor[] {
 	return SEGMENT_BY_ID.get(id)?.settings ?? [];
 }

@@ -1,4 +1,5 @@
-import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
+import { visibleWidth } from "@earendil-works/pi-tui";
+import { truncateStyledText } from "./text.js";
 import { renderGlanceLine } from "./status-line.js";
 import { createTopEdgeSweep } from "./top-edge-sweep.js";
 import { createPerimeterSweep, type PerimeterSweep } from "./perimeter-sweep.js";
@@ -124,7 +125,7 @@ function renderTopFrame(input: InputSurfaceFrameInput, plan: ReturnType<typeof p
 		}
 		return chunk.text;
 	}).join("");
-	return truncateToWidth(rendered, plan.safeWidth, border("…"));
+	return truncateStyledText(rendered, plan.safeWidth, border("…"));
 }
 
 function rowBorder(border: TextStyler, width: number, row: number, perimeter?: PerimeterSweep): TextStyler {

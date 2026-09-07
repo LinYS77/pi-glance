@@ -2,7 +2,7 @@ import { CustomEditor, type KeybindingsManager } from "@earendil-works/pi-coding
 import { truncateToWidth, visibleWidth, type EditorOptions, type EditorTheme, type TUI } from "@earendil-works/pi-tui";
 import { stripControls } from "./format.js";
 import { measureInputSurfaceFrame, renderInputSurfaceFrame } from "./frame.js";
-import { renderGlanceLine } from "./status-line.js";
+import { GlanceLineRenderer } from "./status-line.js";
 import { formatSurfaceScrollIndicator } from "./layout.js";
 import { resolveGlanceRenderStyles, type GlanceRenderStyleContext, type ResolvedGlanceStyles } from "../theme/adapter.js";
 import type { GlanceConfig, GlanceState } from "../types.js";
@@ -51,12 +51,7 @@ function indentAutocompleteLine(line: string, width: number, indentWidth: number
 }
 
 export class GlanceEditor extends CustomEditor {
-	private cachedVersion = -1;
-	private cachedConfig?: GlanceConfig;
-	private cachedWidth = -1;
-	private cachedProviderCount = -1;
-	private cachedStatusStyleKey = "";
-	private cachedStatus = "";
+	private readonly statusLine = new GlanceLineRenderer();
 
 	constructor(
 		tui: TUI,
@@ -82,28 +77,6 @@ export class GlanceEditor extends CustomEditor {
 		// and theme changes. Preserve its cue only on the live Bash frame; title and
 		// status remain Glance-owned, so their cache key must not change.
 		return this.getText().trimStart().startsWith("!") ? { ...styles, border: this.borderColor } : styles;
-	}
-
-	private renderStatus(width: number, styles: ResolvedGlanceStyles): string {
-		const state = this.getState();
-		const config = this.getConfig();
-		if (
-			this.cachedWidth === width &&
-			this.cachedVersion === state.version &&
-			this.cachedConfig === config &&
-			this.cachedProviderCount === state.providers.availableCount &&
-			this.cachedStatusStyleKey === styles.cacheKey
-		) {
-			return this.cachedStatus;
-		}
-		const status = renderGlanceLine(state, config, width, state.providers.availableCount, { styles });
-		this.cachedWidth = width;
-		this.cachedVersion = state.version;
-		this.cachedConfig = config;
-		this.cachedProviderCount = state.providers.availableCount;
-		this.cachedStatusStyleKey = styles.cacheKey;
-		this.cachedStatus = status;
-		return status;
 	}
 
 	private extractScrollIndicator(line: string, width: number): string | undefined {
@@ -138,8 +111,9 @@ export class GlanceEditor extends CustomEditor {
 		const body = lines.slice(1, bottomIndex);
 		const autocomplete = lines.slice(bottomIndex + 1);
 		const contentLines = body.length > 0 ? body : [""];
+		const state = this.getState();
 		const frame = renderInputSurfaceFrame({
-			state: this.getState(),
+			state,
 			config,
 			width,
 			styles,
@@ -151,7 +125,7 @@ export class GlanceEditor extends CustomEditor {
 				bottomScrollIndicator: this.extractScrollIndicator(bottomOriginal, metrics.safeWidth),
 			},
 			status: {
-				render: (budget, frameStyles) => this.renderStatus(budget, frameStyles),
+				render: (budget, frameStyles) => this.statusLine.render(state, config, budget, state.providers.availableCount, { styles: frameStyles }),
 			},
 		});
 

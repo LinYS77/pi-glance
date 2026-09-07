@@ -1,6 +1,7 @@
 import { homedir } from "node:os";
 import { basename } from "node:path";
 import { visibleWidth } from "@earendil-works/pi-tui";
+import { truncatePlainText } from "./text.js";
 import type { WorkspaceLabelMode } from "../types.js";
 export { formatCost, formatPercent, formatTokens } from "../segments/display-primitives.js";
 
@@ -53,31 +54,19 @@ function safeHomePath(cwd: string): string {
 	return `…/${parts.slice(-Math.min(3, parts.length)).join("/")}`;
 }
 
-function truncatePlainToWidth(text: string, width: number): string {
-	if (width <= 0) return "";
-	if (visibleWidth(text) <= width) return text;
-	if (width <= 1) return "…";
-	let out = "";
-	for (const char of text) {
-		if (visibleWidth(`${out}${char}…`) > width) break;
-		out += char;
-	}
-	return `${out}…`;
-}
-
 function fitSafePath(label: string, width: number): string {
 	if (width <= 0) return "";
 	if (visibleWidth(label) <= width) return label;
 	const parts = label.split("/").filter(Boolean);
 	const name = parts.at(-1) ?? label;
-	if (visibleWidth(name) >= width) return truncatePlainToWidth(name, width);
+	if (visibleWidth(name) >= width) return truncatePlainText(name, width);
 	if (label.startsWith("~/") && parts.length > 2) {
 		const compact = `~/${parts[1]}/…/${name}`;
 		if (visibleWidth(compact) <= width) return compact;
 	}
 	const tail = `…/${name}`;
 	if (visibleWidth(tail) <= width) return tail;
-	return truncatePlainToWidth(name, width);
+	return truncatePlainText(name, width);
 }
 
 function parentPathLabel(safePath: string): string {

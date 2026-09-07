@@ -1,4 +1,5 @@
-import { choiceSetting, type SegmentFeature } from "./feature.js";
+import { choiceSetting } from "../config/settings.js";
+import type { SegmentFeature } from "./feature.js";
 import { formatTokens } from "./display-primitives.js";
 import type { SegmentData, SegmentRenderContext, UsageTotals } from "../types.js";
 
@@ -61,12 +62,33 @@ export const tokensSegmentFeature = {
 	label: "Tokens",
 	defaultEnabled: true,
 	settings: [
-		choiceSetting("tokens.display", "Show", "Session input and output token counts.", [
-			{ value: "input-output", label: "Input + output" }, { value: "total", label: "Combined total" },
-		], c => c.tokens.display, (c, v) => { c.tokens.display = v; }),
-		choiceSetting("tokens.cache", "Cache details", "Choose which prompt-cache information to show.", [
-			{ value: "rate", label: "Hit rate" }, { value: "read-write", label: "Read / write tokens" }, { value: "hide", label: "Hidden" },
-		], c => c.tokens.cache, (c, v) => { c.tokens.cache = v; }),
+		choiceSetting(
+			"tokens.display",
+			"Show",
+			"Session input and output token counts.",
+			[
+				{ value: "input-output", label: "Input + output" },
+				{ value: "total", label: "Combined total" },
+			],
+			(c) => c.tokens.display,
+			(c, v) => {
+				c.tokens.display = v;
+			},
+		),
+		choiceSetting(
+			"tokens.cache",
+			"Cache details",
+			"Choose which prompt-cache information to show.",
+			[
+				{ value: "rate", label: "Hit rate" },
+				{ value: "read-write", label: "Read / write tokens" },
+				{ value: "hide", label: "Hidden" },
+			],
+			(c) => c.tokens.cache,
+			(c, v) => {
+				c.tokens.cache = v;
+			},
+		),
 	],
 	collect: collectTokens,
 } as const satisfies SegmentFeature;

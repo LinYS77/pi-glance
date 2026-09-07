@@ -1,4 +1,4 @@
-import { PALETTES, fg, fg256 } from "./palette.js";
+import { PALETTES, foregroundStyle } from "./palette.js";
 import { selectGlanceTheme, type GlanceAmbientTone } from "./selection.js";
 import { WORKING_ACCENTS } from "./working-colors.js";
 import type { GlanceThemeName, GlanceThemePair, Rgb, SegmentId } from "../types.js";
@@ -37,14 +37,10 @@ const builtInStyles = new Map<string, ResolvedGlanceStyles>();
 
 const STYLE_SEGMENT_IDS = ["git", "model", "context", "tokens", "cost", "throughput"] as const satisfies readonly SegmentId[];
 
-function styleFromRgb(color: Rgb, colorMode: GlanceColorMode): TextStyler {
-	return colorMode === "truecolor" ? (text) => fg(color, text) : (text) => fg256(color, text);
-}
-
 function resolveBuiltInSegmentStyles(theme: GlanceThemeName, colorMode: GlanceColorMode): Record<SegmentId, ResolvedGlanceSegmentStyles> {
 	const palette = PALETTES[theme];
 	return Object.fromEntries(
-		STYLE_SEGMENT_IDS.map((segment) => [segment, { fg: styleFromRgb(palette.segments[segment].fg, colorMode) }]),
+		STYLE_SEGMENT_IDS.map((segment) => [segment, { fg: foregroundStyle(palette.segments[segment].fg, colorMode) }]),
 	) as Record<SegmentId, ResolvedGlanceSegmentStyles>;
 }
 
@@ -55,13 +51,13 @@ export function resolveBuiltInGlanceStyles(theme: GlanceThemeName, colorMode: Gl
 	const palette = PALETTES[theme];
 	const styles: ResolvedGlanceStyles = {
 		cacheKey,
-		text: styleFromRgb(palette.text, colorMode),
-		dim: styleFromRgb(palette.dim, colorMode),
-		warn: styleFromRgb(palette.warn, colorMode),
-		error: styleFromRgb(palette.error, colorMode),
-		separator: styleFromRgb(palette.separator, colorMode),
-		border: styleFromRgb(palette.border, colorMode),
-		title: styleFromRgb(palette.title, colorMode),
+		text: foregroundStyle(palette.text, colorMode),
+		dim: foregroundStyle(palette.dim, colorMode),
+		warn: foregroundStyle(palette.warn, colorMode),
+		error: foregroundStyle(palette.error, colorMode),
+		separator: foregroundStyle(palette.separator, colorMode),
+		border: foregroundStyle(palette.border, colorMode),
+		title: foregroundStyle(palette.title, colorMode),
 		segments: resolveBuiltInSegmentStyles(theme, colorMode),
 	};
 	const peak = WORKING_ACCENTS[theme];
@@ -79,7 +75,7 @@ export function resolveBuiltInGlanceStyles(theme: GlanceThemeName, colorMode: Gl
 			let shade = cache.get(level);
 			if (!shade) {
 				const mix = (from: number, to: number) => Math.round(from + (to - from) * level / 32);
-				const colorStyle = styleFromRgb({ r: mix(color.r, peak.r), g: mix(color.g, peak.g), b: mix(color.b, peak.b) }, colorMode);
+				const colorStyle = foregroundStyle({ r: mix(color.r, peak.r), g: mix(color.g, peak.g), b: mix(color.b, peak.b) }, colorMode);
 				shade = level >= 24 ? (text) => `\x1b[1m${colorStyle(text)}\x1b[22m` : colorStyle;
 				cache.set(level, shade);
 			}

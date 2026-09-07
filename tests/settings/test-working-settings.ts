@@ -54,6 +54,25 @@ test("animation off keeps the speed, stops preview, and re-enables a single cloc
 	h.pane.dispose();
 });
 
+test("hidden Working previews stop the clock and resume after resizing", () => {
+	const h = paneHarness();
+	h.height(10);
+	h.press(k.backTab);
+	const stale = h.stale();
+	assert.doesNotMatch(h.text(), /Preview/);
+	assert.equal(h.pending(), 0);
+	const renders = h.renders();
+	stale(); h.advance(5000);
+	assert.equal(h.renders(), renders);
+	h.height(32);
+	const first = frame(h.pane.render(100));
+	assert.equal(h.pending(), 1);
+	h.advance(900);
+	assert.notDeepEqual(frame(h.pane.render(100)), first);
+	assert.equal(h.pending(), 1);
+	h.pane.dispose();
+});
+
 test("closing a preview invalidates pending callbacks and further input", () => {
 	const h = paneHarness(); h.press(k.backTab);
 	const stale = h.stale();

@@ -1,5 +1,6 @@
 import { THROUGHPUT_PRECISION_DESCRIPTOR } from "../config/schema.js";
-import { choiceSetting, type SegmentFeature } from "./feature.js";
+import { choiceSetting } from "../config/settings.js";
+import type { SegmentFeature } from "./feature.js";
 import type { SegmentData, SegmentRenderContext, ThroughputPrecision, ModelSpeedMeasurement } from "../types.js";
 
 function fixedPrecision(value: number, precision: 0 | 1): string {
@@ -61,9 +62,19 @@ export const throughputSegmentFeature = {
 	iconSpacing: { nerd: 2 },
 	defaultEnabled: true,
 	settings: [
-		choiceSetting("throughput.precision", "Decimal places", "Output tokens per second, excluding reasoning and tool waits.", THROUGHPUT_PRECISION_DESCRIPTOR.values.map(value => ({
-			value, label: value === "auto" ? "Automatic" : value === 1 ? "1 decimal" : "Whole numbers",
-		})), c => c.throughput.precision, (c, v) => { c.throughput.precision = v; }),
+		choiceSetting(
+			"throughput.precision",
+			"Decimal places",
+			"Output tokens per second, excluding reasoning and tool waits.",
+			THROUGHPUT_PRECISION_DESCRIPTOR.values.map((value) => ({
+				value,
+				label: value === "auto" ? "Automatic" : value === 1 ? "1 decimal" : "Whole numbers",
+			})),
+			(c) => c.throughput.precision,
+			(c, v) => {
+				c.throughput.precision = v;
+			},
+		),
 	],
 	collect: collectThroughput,
 } as const satisfies SegmentFeature;

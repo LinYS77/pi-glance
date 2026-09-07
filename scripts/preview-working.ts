@@ -7,7 +7,7 @@ import { createConfigStore } from "../src/config/store.js";
 import { WORKING_SWEEP_MODE_VALUES, nextOption } from "../src/config/options.js";
 import { WorkingSweep } from "../src/runtime/working-sweep.js";
 import { renderInputSurfaceFrame } from "../src/surface/frame.js";
-import { renderGlanceLine } from "../src/surface/status-line.js";
+import { GlanceLineRenderer } from "../src/surface/status-line.js";
 import { resolveBuiltInGlanceStyles, type ResolvedGlanceStyles } from "../src/theme/adapter.js";
 import { GLANCE_THEME_IDS, isGlanceThemeName, type GlanceThemeName } from "../src/theme/themes.js";
 import { selectGlanceTheme, type GlanceAmbientTone } from "../src/theme/selection.js";
@@ -50,12 +50,9 @@ let running = config.editor.workingSweep !== "off";
 let shortPath = false;
 let warnings = false;
 let closed = false;
-let cachedStatus: { budget: number; styleKey: string; version: number; text: string } | undefined;
+const statusLine = new GlanceLineRenderer();
 function renderStatus(budget: number, styles: ResolvedGlanceStyles): string {
-	if (cachedStatus?.budget === budget && cachedStatus.styleKey === styles.cacheKey && cachedStatus.version === state.version) return cachedStatus.text;
-	const text = renderGlanceLine(state, config, budget, state.providers.availableCount, { styles });
-	cachedStatus = { budget, styleKey: styles.cacheKey, version: state.version, text };
-	return text;
+	return statusLine.render(state, config, budget, state.providers.availableCount, { styles });
 }
 const terminal = new ProcessTerminal();
 const tui = new TuiAltScreen(terminal, false, undefined, { mouse: false });

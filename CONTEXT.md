@@ -63,6 +63,7 @@ The following are outside Glance's scope:
 index.ts                              stable Pi package entry and path selection
   -> src/config/store.ts              config reads and atomic writes
        -> src/config/model.ts         defaults, validation, migration, transforms
+          src/config/settings.ts      shared setting descriptors and choices
   -> src/runtime/runtime.ts           Pi wiring and input-surface ownership
        -> refresh-session.ts          lifecycle semantics and render decisions
             -> snapshot.ts            public Pi facts -> Glance inputs
@@ -96,7 +97,7 @@ scripts/                              developer utilities, not test implementati
 
 `src/runtime/runtime.ts` connects Pi events to the refresh session and manages editor/footer installation. State updates belong in `state.ts`, session accounting in `refresh-session.ts`, and frame rendering in `src/surface/`.
 
-Configuration rules, settings state and catalog, Git status parsing, and Model speed tracking have no file/process IO or Pi runtime imports, including through local dependencies. File access stays in `src/config/store.ts`; Git execution stays in `src/runtime/git.ts`.
+Configuration rules, setting descriptors, settings state and catalog, Git status parsing, and Model speed tracking have no file/process IO or Pi runtime imports, including through local dependencies. File access stays in `src/config/store.ts`; Git execution stays in `src/runtime/git.ts`.
 
 `RuntimeRefreshSession` exposes lifecycle methods such as `modelSelect`, `sessionTree`, `messageEnd`, and `agentSettled`. It handles snapshot selection and update ordering internally.
 
@@ -179,7 +180,11 @@ Top-edge mode crosses the title and its connector; corners, right-hand status, s
 
 `src/runtime/working-sweep.ts` owns the 30 FPS display clock and ordinary Working-row visibility. It runs only while Glance owns the editor, pauses for blocking UI, and stops at `agent_settled` when Pi is idle. Disabling the effect or Glance restores the native Working row. Re-enabling during a prompt waits for `ui_prompt_end` before animating. Retry and compaction notices remain Pi-owned. Pi has no getter for Working-row visibility, so Glance cannot restore a different extension's prior hidden-row preference.
 
-The live editor retains its original status-string cache; animation does not recolor or collect status facts. `src/surface/sweep.ts` shades only glyphs near the beam and emits unlit text in bulk. Unicode measurements have a bounded cache (32 strings, at most 1,024 UTF-16 units each); palette/gradient resources are reused by theme and color mode. `top-edge-sweep.ts` supplies the open-path profile; `perimeter-sweep.ts` maps frame coordinates to the closed path. Animation does not share the Model speed clock, invalidate its data, or replay missed frames after a blocked event loop.
+The live editor, settings preview and Working demo share `GlanceLineRenderer` in `src/surface/status-line.ts`. Each surface keeps one cached status string, invalidated by state identity/revision, config replacement, available width, provider count, palette/color mode or explicit density. Config changes replace the config object; session facts increment `state.version`. Prompt content, cursor markers, frame layout and animation are never cached with the status line. Settings view models are rebuilt on input rather than every animation frame, and a hidden preview pauses its clock.
+
+`src/surface/text.ts` owns plain and styled clipping. Plain text is measured once per grapheme; styled text that already fits bypasses truncation, preserving its bytes. Overflow still uses Pi's ANSI-aware truncation. Palette and gradient styles precompute their escape prefixes, including ANSI256 conversion.
+
+Animation does not recolor or collect status facts. `src/surface/sweep.ts` shades only glyphs near the beam and emits unlit text in bulk. Unicode measurements have a bounded cache (32 strings, at most 1,024 UTF-16 units each); palette/gradient resources are reused by theme and color mode. `top-edge-sweep.ts` supplies the open-path profile; `perimeter-sweep.ts` maps frame coordinates to the closed path. Animation does not share the Model speed clock, invalidate its data, or replay missed frames after a blocked event loop.
 
 ## Status density
 
@@ -241,6 +246,7 @@ At extremely narrow widths, the inherited editor is given enough room for a two-
 - New-install and settings-reset defaults use Nerd Font icons, smart workspace paths, one top-margin row, and all six segments enabled. Other defaults include a three-row editor, full-border Working animation, light/dark palette slots, input/output Tokens with cache rate, and automatic provider/thinking labels. Defaults fill missing or invalid values; valid saved choices are preserved. Changing defaults does not change the schema version.
 - Missing or invalid `editor.workingSweep` defaults to `perimeter`; legacy `true` remains `top` and `false` remains `off`. Explicit saved modes are preserved. Migration is in memory and writes only on an explicit save.
 - Missing or invalid `editor.workingSweepSpeed` defaults to 47. Finite numbers are rounded and clamped to 10–120. Older config files gain the field in memory; loading does not rewrite them.
+- Git timeout, debounce and polling delays are capped at Node's timer limit (2,147,483,647 ms), preventing large saved values from turning into one-millisecond timers.
 - Legacy theme strings migrate to the same palette in both slots.
 - Legacy Tokens Cache values migrate as `auto -> rate` and `show -> read-write`.
 - Adaptive width is always on; legacy `display.adaptive` is discarded.
@@ -269,6 +275,7 @@ At extremely narrow widths, the inherited editor is given enough room for a two-
 `npm ci`, `npm run check` and `npm test` install dependencies, typecheck, and run the full test suite. `npm run test:pane` covers the settings suite, including interaction, preview and save behavior; `npm run test:config` covers validation, migration and file storage. Use `npm run pack:dry` to inspect the package or `npm pack` to create a release tarball. The packaging tests also check that the manifest, lockfile and current release notes use the same version.
 
 Developer utilities:
+- `npm run bench:render` measures live editor and settings render time in RGB/ANSI256, both sweep modes, and 80/160-column terminals. It uses a fixed clock and example data, with no terminal or config writes. Compare runs on the same Node version and machine; timings are not CI pass/fail thresholds.
 - `npm run debug:git -- /path/to/repo` prints a Git snapshot.
 - `npm run preview:settings` opens the new settings pane with example data. Save/close exits the preview without writing configuration. Use `-- --light` or `-- --256` to check color modes.
 - `npm run preview:working` previews Working animation and status density without model calls or configuration writes. Use `M` for sweep modes, Left/Right for palettes, `C` for color depth, and resize the terminal to check fitting.

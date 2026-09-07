@@ -1,4 +1,5 @@
-import { choiceSetting, type SegmentFeature } from "./feature.js";
+import { choiceSetting } from "../config/settings.js";
+import type { SegmentFeature } from "./feature.js";
 import { formatPercent, formatTokens } from "./display-primitives.js";
 import type { SegmentData, SegmentRenderContext } from "../types.js";
 
@@ -26,7 +27,8 @@ function contextCompactValue(ctx: SegmentRenderContext): string {
 
 function collectContext(ctx: SegmentRenderContext): SegmentData | undefined {
 	if (ctx.config.context.unknown === "hide" && contextIsUnknown(ctx)) return undefined;
-	const primary = ctx.config.context.display === "tokens" ? contextTokenRatio(ctx) : formatPercent(ctx.state.context.percent);
+	const primary =
+		ctx.config.context.display === "tokens" ? contextTokenRatio(ctx) : formatPercent(ctx.state.context.percent);
 	const secondary = ctx.config.context.display === "percent+tokens" ? contextTokenRatio(ctx) : undefined;
 	const compact = contextCompactValue(ctx);
 	const percent = ctx.state.context.percent;
@@ -47,12 +49,33 @@ export const contextSegmentFeature = {
 	label: "Context",
 	defaultEnabled: true,
 	settings: [
-		choiceSetting("context.display", "Show", "Choose how context usage appears.", [
-			{ value: "percent+tokens", label: "Percentage + tokens" }, { value: "percent", label: "Percentage" }, { value: "tokens", label: "Tokens" },
-		], c => c.context.display, (c, v) => { c.context.display = v; }),
-		choiceSetting("context.unknown", "When unavailable", "What to show when Pi cannot report context usage.", [
-			{ value: "show", label: "Show ?" }, { value: "hide", label: "Hide" },
-		], c => c.context.unknown, (c, v) => { c.context.unknown = v; }),
+		choiceSetting(
+			"context.display",
+			"Show",
+			"Choose how context usage appears.",
+			[
+				{ value: "percent+tokens", label: "Percentage + tokens" },
+				{ value: "percent", label: "Percentage" },
+				{ value: "tokens", label: "Tokens" },
+			],
+			(c) => c.context.display,
+			(c, v) => {
+				c.context.display = v;
+			},
+		),
+		choiceSetting(
+			"context.unknown",
+			"When unavailable",
+			"What to show when Pi cannot report context usage.",
+			[
+				{ value: "show", label: "Show ?" },
+				{ value: "hide", label: "Hide" },
+			],
+			(c) => c.context.unknown,
+			(c, v) => {
+				c.context.unknown = v;
+			},
+		),
 	],
 	collect: collectContext,
 } as const satisfies SegmentFeature;

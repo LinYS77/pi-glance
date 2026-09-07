@@ -139,9 +139,10 @@ function parseIntInRange(value: unknown, fallback: number, min: number, max: num
 	return Math.max(min, Math.min(max, Math.floor(value)));
 }
 
-function parseIntAtLeast(value: unknown, fallback: number, min: number): number {
+function parseTimerMs(value: unknown, fallback: number, min: number): number {
 	if (typeof value !== "number" || !Number.isFinite(value)) return fallback;
-	return Math.max(min, Math.floor(value));
+	// Node turns overflowing delays into 1 ms instead of waiting longer.
+	return Math.min(2_147_483_647, Math.max(min, Math.floor(value)));
 }
 
 // Preserve known segment order and enabled flags, appending missing defaults.
@@ -235,9 +236,9 @@ export function normalizeConfig(raw: unknown): GlanceConfig {
 			showDirty: parseBool(git.showDirty, defaults.git.showDirty),
 			showAheadBehind: parseBool(git.showAheadBehind, defaults.git.showAheadBehind),
 			shaMode: parseStringEnum(git.shaMode, GIT_SHA_MODES, defaults.git.shaMode),
-			timeoutMs: parseIntAtLeast(git.timeoutMs, defaults.git.timeoutMs, 100),
-			refreshDebounceMs: parseIntAtLeast(git.refreshDebounceMs, defaults.git.refreshDebounceMs, 0),
-			pollIntervalMs: parseIntAtLeast(git.pollIntervalMs, defaults.git.pollIntervalMs, 1000),
+			timeoutMs: parseTimerMs(git.timeoutMs, defaults.git.timeoutMs, 100),
+			refreshDebounceMs: parseTimerMs(git.refreshDebounceMs, defaults.git.refreshDebounceMs, 0),
+			pollIntervalMs: parseTimerMs(git.pollIntervalMs, defaults.git.pollIntervalMs, 1000),
 		},
 		context: {
 			display: parseStringEnum(context.display, CONTEXT_DISPLAY_MODES, defaults.context.display),

@@ -2,7 +2,11 @@ import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import { ICONS } from "../theme/palette.js";
 import { SEGMENT_BY_ID } from "../segments/registry.js";
 import { renderSegment } from "../segments/render.js";
-import { resolveGlanceRenderStyles, type GlanceRenderStyleContext, type ResolvedGlanceStyles } from "../theme/adapter.js";
+import {
+	resolveGlanceRenderStyles,
+	type GlanceRenderStyleContext,
+	type ResolvedGlanceStyles,
+} from "../theme/adapter.js";
 import type { GlanceConfig, GlanceState, SegmentRenderContext, SegmentRenderResult, WidthMode } from "../types.js";
 
 const RESET = "\x1b[0m";
@@ -104,4 +108,52 @@ export function renderGlanceLine(
 		return truncateToWidth(line.text, width, styles.dim("…"));
 	}
 	return line.text;
+}
+
+/** One entry per surface. State revisions and replaced configs invalidate it. */
+export class GlanceLineRenderer {
+	private cached?: {
+		state: GlanceState;
+		version: number;
+		config: GlanceConfig;
+		width: number;
+		providerCount: number;
+		styleKey: string;
+		widthMode?: WidthMode;
+		text: string;
+	};
+
+	render(
+		state: GlanceState,
+		config: GlanceConfig,
+		width: number,
+		providerCount = state.providers.availableCount,
+		options: GlanceLineRenderOptions = {},
+	): string {
+		const styles = resolveGlanceRenderStyles(config.theme, options);
+		const previous = this.cached;
+		if (
+			previous?.state === state &&
+			previous.version === state.version &&
+			previous.config === config &&
+			previous.width === width &&
+			previous.providerCount === providerCount &&
+			previous.styleKey === styles.cacheKey &&
+			previous.widthMode === options.widthMode
+		) {
+			return previous.text;
+		}
+		const text = renderGlanceLine(state, config, width, providerCount, { styles, widthMode: options.widthMode });
+		this.cached = {
+			state,
+			version: state.version,
+			config,
+			width,
+			providerCount,
+			styleKey: styles.cacheKey,
+			widthMode: options.widthMode,
+			text,
+		};
+		return text;
+	}
 }

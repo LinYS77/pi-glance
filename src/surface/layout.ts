@@ -1,5 +1,6 @@
-import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
+import { visibleWidth } from "@earendil-works/pi-tui";
 import { formatWorkspaceLabel } from "./format.js";
+import { truncatePlainText, truncateStyledText } from "./text.js";
 import type { WorkspaceLabelMode } from "../types.js";
 
 export const SURFACE_TITLE_MAX_WIDTH = 48;
@@ -131,22 +132,9 @@ function stripControls(text: string): string {
 	return text.replace(ANSI_PATTERN, "").replace(/[\r\n\t]/g, " ");
 }
 
-function truncatePlainToWidth(text: string, width: number, ellipsis: string): string {
-	const safeWidth = Math.max(0, finiteFloor(width, 0));
-	if (safeWidth <= 0) return "";
-	if (visibleWidth(text) <= safeWidth) return text;
-	const marker = ellipsis && visibleWidth(ellipsis) <= safeWidth ? ellipsis : "";
-	let out = "";
-	for (const char of text) {
-		if (visibleWidth(`${out}${char}${marker}`) > safeWidth) break;
-		out += char;
-	}
-	return `${out}${marker}`;
-}
-
 function truncateSurfaceText(text: string, width: number, ellipsis: string): string {
-	if (CONTROL_PATTERN.test(text) || CONTROL_PATTERN.test(ellipsis)) return truncateToWidth(text, width, ellipsis);
-	return truncatePlainToWidth(text, width, ellipsis);
+	if (CONTROL_PATTERN.test(text) || CONTROL_PATTERN.test(ellipsis)) return truncateStyledText(text, width, ellipsis);
+	return truncatePlainText(text, width, ellipsis);
 }
 
 export function safeSurfaceWidth(width: number): number {

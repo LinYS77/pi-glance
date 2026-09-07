@@ -75,6 +75,11 @@ function rgbToAnsi256Fg(color: Rgb): string {
 	return `\x1b[38;5;${rgbToAnsi256(color)}m`;
 }
 
+export function foregroundStyle(color: Rgb, mode: "truecolor" | "ansi256"): (text: string) => string {
+	const prefix = mode === "truecolor" ? rgbToFg(color) : rgbToAnsi256Fg(color);
+	return text => `${prefix}${text}\x1b[39m`;
+}
+
 export function fg(color: Rgb, text: string): string {
 	return `${rgbToFg(color)}${text}\x1b[39m`;
 }

@@ -1,4 +1,5 @@
-import { choiceSetting, type SegmentFeature } from "./feature.js";
+import { choiceSetting } from "../config/settings.js";
+import type { SegmentFeature } from "./feature.js";
 import type { SegmentData, SegmentRenderContext } from "../types.js";
 
 function shouldShowThinking(ctx: SegmentRenderContext, thinking: string): boolean {
@@ -10,13 +11,17 @@ function shouldShowThinking(ctx: SegmentRenderContext, thinking: string): boolea
 function withoutProviderPrefix(name: string, provider: string | undefined): string {
 	if (!provider) return name;
 	const prefix = `${provider}-`;
-	return name.length > prefix.length && name.toLowerCase().startsWith(prefix.toLowerCase()) ? name.slice(prefix.length) : name;
+	return name.length > prefix.length && name.toLowerCase().startsWith(prefix.toLowerCase())
+		? name.slice(prefix.length)
+		: name;
 }
 
 function collectModel(ctx: SegmentRenderContext): SegmentData | undefined {
 	const modelId = ctx.state.model.id;
 	const originalName = ctx.state.model.displayName || modelId || "no-model";
-	const hasCustomName = Boolean(modelId && Object.keys(ctx.config.model.customNames).some(pattern => modelId.includes(pattern)));
+	const hasCustomName = Boolean(
+		modelId && Object.keys(ctx.config.model.customNames).some((pattern) => modelId.includes(pattern)),
+	);
 	const shortName = hasCustomName ? originalName : withoutProviderPrefix(originalName, ctx.state.model.provider);
 	const name = ctx.widthMode === "minimal" ? shortName : originalName;
 	let provider = ctx.showProvider && ctx.state.model.provider ? `${ctx.state.model.provider}/` : "";
@@ -49,12 +54,34 @@ export const modelSegmentFeature = {
 	label: "Model",
 	defaultEnabled: true,
 	settings: [
-		choiceSetting("model.providerLabel", "Provider name", "Show the provider alongside the model name.", [
-			{ value: "auto", label: "Automatic", hint: "Only when useful and there is room." }, { value: "always", label: "Always" }, { value: "never", label: "Never" },
-		], c => c.display.showProvider, (c, v) => { c.display.showProvider = v; }),
-		choiceSetting("model.thinkingLabel", "Thinking level", "Show the model's current thinking level.", [
-			{ value: "auto", label: "Automatic", hint: "Hide when off or space is limited." }, { value: "always", label: "Always" }, { value: "never", label: "Never" },
-		], c => c.model.showThinking, (c, v) => { c.model.showThinking = v; }),
+		choiceSetting(
+			"model.providerLabel",
+			"Provider name",
+			"Show the provider alongside the model name.",
+			[
+				{ value: "auto", label: "Automatic", hint: "Only when useful and there is room." },
+				{ value: "always", label: "Always" },
+				{ value: "never", label: "Never" },
+			],
+			(c) => c.display.showProvider,
+			(c, v) => {
+				c.display.showProvider = v;
+			},
+		),
+		choiceSetting(
+			"model.thinkingLabel",
+			"Thinking level",
+			"Show the model's current thinking level.",
+			[
+				{ value: "auto", label: "Automatic", hint: "Hide when off or space is limited." },
+				{ value: "always", label: "Always" },
+				{ value: "never", label: "Never" },
+			],
+			(c) => c.model.showThinking,
+			(c, v) => {
+				c.model.showThinking = v;
+			},
+		),
 	],
 	collect: collectModel,
 } as const satisfies SegmentFeature;
