@@ -26,10 +26,11 @@ pi-glance handles:
 - the Glance editor frame and status line;
 - always-on adaptive segment fitting;
 - the `/glance` settings pane, bounded theme browser, and transient density preview;
-- Pi selection keybindings, three settings sections and direct row editing;
+- Pi selection keybindings, four settings sections and direct row editing;
 - six display features: Git, Cost, Model speed, Context, Tokens, and Model;
 - its 22 palettes;
-- asynchronous cached Git status collection;
+- asynchronous cached Git summaries and noninteractive upstream fetch;
+- a single session-local prompt stash with configurable shortcut;
 - the global config at `~/.pi/agent/pi-glance/config.json`;
 - migration and validation of known config fields;
 - atomic config replacement and load-error reporting.
@@ -64,13 +65,17 @@ index.ts                              stable Pi package entry and path selection
   -> src/config/store.ts              config reads and atomic writes
        -> src/config/model.ts         defaults, validation, migration, transforms
           src/config/settings.ts      shared setting descriptors and choices
+  -> src/input/store.ts               private, atomic per-session draft files
   -> src/runtime/runtime.ts           Pi wiring and input-surface ownership
        -> refresh-session.ts          lifecycle semantics and render decisions
             -> snapshot.ts            public Pi facts -> Glance inputs
             -> state.ts               visible-state mutations
             -> throughput-run-tracker.ts
-       -> git.ts                      asynchronous cached Git process adapter
-            -> git-snapshot.ts        snapshot construction and status parsing
+       -> git.ts                      local polling and summary collection
+            -> git-snapshot.ts        pure status and numstat parsing
+            -> git-command.ts         bounded, cancellable Git process IO
+            -> git-remote.ts          upstream fetch interval and retry policy
+       -> src/input/stash.ts          single-slot exchange, save before clearing
 
 src/surface/editor.ts
   -> frame.ts                         shared live/preview input-surface frame
@@ -97,7 +102,7 @@ scripts/                              developer utilities, not test implementati
 
 `src/runtime/runtime.ts` connects Pi events to the refresh session and manages editor/footer installation. State updates belong in `state.ts`, session accounting in `refresh-session.ts`, and frame rendering in `src/surface/`.
 
-Configuration rules, setting descriptors, settings state and catalog, Git status parsing, and Model speed tracking have no file/process IO or Pi runtime imports, including through local dependencies. File access stays in `src/config/store.ts`; Git execution stays in `src/runtime/git.ts`.
+Configuration rules, setting descriptors, settings state and catalog, Git status parsing, and Model speed tracking have no file/process IO or Pi runtime imports, including through local dependencies. File access stays in `src/config/store.ts` and `src/input/store.ts`; Git process IO stays in `src/runtime/git-command.ts`.
 
 `RuntimeRefreshSession` exposes lifecycle methods such as `modelSelect`, `sessionTree`, `messageEnd`, and `agentSettled`. It handles snapshot selection and update ordering internally.
 
@@ -118,9 +123,9 @@ Each segment returns display content, a color level, and any custom icon spacing
 
 ## `/glance` interaction rules
 
-- The pane has three sections: **Appearance**, **Status line**, and **Working**. Tab/Shift+Tab cycles sections while in a list. Sections remember their last list/detail page, and each segment remembers its selected detail row. There is no separate value-focus column.
+- The pane has four sections: **Appearance**, **Status line**, **Working**, and **Input**. Tab/Shift+Tab cycles sections while in a list. Sections remember their last list/detail page, and each segment remembers its selected detail row. There is no separate value-focus column.
 - Up/Down selects a row; lists and paged moves stop at their ends. Left/Right means previous/next for choices and palettes, slower/faster for speed, and Off/On for booleans and status items. Directional adjustments do not wrap or toggle repeatedly. Enter toggles a boolean or opens its editor/details; Space toggles boolean/status rows. Pi selection bindings are used for input and displayed in the hints.
-- Appearance owns the Glance toggle, light/dark palettes, icons, workspace label, editor height and top spacing. Palette labels explicitly describe Glance colors, not Pi theme switching.
+- Appearance owns the Glance toggle, light/dark palettes, icons and workspace label. Input owns editor height, top spacing, Prompt stash and its shortcut. Palette labels explicitly describe Glance colors, not Pi theme switching.
 - The Status line overview owns visibility and ordering. Space toggles a segment, Left/Right sets Off/On, J/K reorders it, and Enter opens its detail settings. Detail pages do not duplicate the visibility toggle or show read-only facts as editable rows. Disabled segments remain configurable and are marked Off in the detail title.
 - Working owns animation mode and sweep speed. The speed accepts whole numbers from 10 to 120 columns/second, defaults to 47, and adjusts by one with Left/Right. Enter opens Pi's `Input` for direct entry. The first printable key replaces the original number, including Kitty input; editing keys allow normal cursor editing. Valid input previews immediately. Incomplete/invalid text retains the last valid preview and shows an error only on confirmation. Paste payloads and letter shortcuts remain text while editing.
 - Every field editor uses **Enter Confirm / Esc Cancel**: confirm keeps the value in the draft and returns to the same row; cancel restores the pre-edit value without losing earlier draft changes. Choices/palettes preview with arrow keys and keep their original option list stable. A saved custom value remains explicitly selectable rather than being replaced on open.
@@ -129,7 +134,7 @@ Each segment returns display content, a color level, and any custom icon spacing
 - The pane uses one list, at most 100 columns wide. Lists keep the selection visible and adapt to terminal height; the preview is omitted when there is not enough room. Descriptions stay near the list and action shortcuts are kept separate from navigation hints.
 - The palette catalog remains complete, with a bounded Pi `SelectList` viewport. Pi's `Input` supplies editing and cursor markers; Glance propagates `Focusable` state to it. The custom UI adapter disposes its clock even on external close or rejection.
 - D cycles Auto, Full, Compact and Minimal preview layouts in the Status line section only. This remains transient and does not affect dirty comparison or config.
-- Navigation state distinguishes the list, choice picker, palette picker, number input and confirmation. Pickers carry their parent row and restore config; rendering uses the view model, not an additional navigation state.
+- Navigation state distinguishes the list, choice picker, palette picker, number input, shortcut recorder and confirmation. Pickers carry their parent row and restore config; rendering uses the view model, not an additional navigation state.
 
 ## Usage calculations
 
@@ -168,13 +173,37 @@ An enabled-to-enabled config save does not reinstall the editor or footer, prese
 
 Pi has no public footer getter or zero-height hidden footer. An empty footer row therefore remains in fullscreen mode.
 
+## Prompt stash
+
+`alt+s` exchanges the main editor's text with one draft slot. An empty slot takes the prompt and clears the editor; an empty editor restores and clears the slot; two nonempty buffers swap. Neither operation submits input, changes Pi's queue, or interrupts a running model. Empty/empty is silent. The bottom border uses the same connector and padding as the workspace title: `╰─ draft · alt+s ─`. Nerd Font mode replaces `draft` with the inbox glyph ``; both use lowercase shortcut labels. The hint appears only while occupied, shortens to its label at narrow widths, and yields to Pi's scroll label. Border labels share one layout rule rather than being passed through scroll-indicator formatting.
+
+Glance uses the editor's public expanded-text getter so collapsed paste markers never replace their payload. Restored text uses Pi's normal setter, placing the cursor at the end and retaining native undo behavior. Shortcut changes are read from the active config without replacing the editor. Pi's effective bindings and existing extension handlers take precedence; paste payloads, unfocused editors and Kitty repeat events cannot trigger Stash.
+
+`/glance` → Input records one key combination. Enter confirms, Esc cancels, and Ctrl+C discards the pane. Conflicting Pi actions are named; plain text and pasted key strings cannot be bound. Only the outer Save commits the shortcut.
+
+Drafts live at `<agent-dir>/pi-glance/drafts/<session-id>.json`, separate from configuration and Pi's conversation. New files are mode 0600 and are atomically replaced; restoring removes the file. A failed save leaves input and stash unchanged. A malformed/unreadable file is preserved and disables Stash for that runtime, with a warning. `/reload` and resuming the same session make the slot available again but do not auto-fill the editor. New/forked sessions have independent slots. `--no-session` uses memory only. File references are text; Glance does not copy referenced files or clipboard images. Drafts belonging to abandoned sessions remain until restored or explicitly removed by the user.
+
+## Git
+
+`git.changes` is Hidden, Marker or Summary. Summary is the new-install default, and **all pre-v12 dirty preferences migrate to Summary**, including a previously hidden marker. The Git segment's enabled flag and its order remain unchanged. Once saved as v12, all three choices round-trip without further migration.
+
+Summary collects a NUL-delimited porcelain status with explicit untracked-file enumeration. Each status record describes one current path; the extra rename source field is skipped. This counts a file once even when both index and working tree differ. Only aggregate numbers enter `GlanceState`, not file lists. Tracked line counts compare the working tree with HEAD (or the empty tree before the first commit), rather than adding staged and unstaged diffs. Untracked file contents are not read for line counts. Binary/incomplete numstat results omit the line totals. External diff and textconv drivers are disabled.
+
+Full density offers file and line counts plus upstream commits; compact offers files; minimal restores the dirty marker. Counts replace the ordinary dirty marker, but never a conflict marker. Zero line counts stay hidden. Optional Git summary detail yields before another segment is shortened or dropped, down to the equivalent Marker display. This exception does not change the configured priority of existing primary facts. Temporary collection failures retain the last known branch with `?` and hide potentially outdated upstream/line counts.
+
+Local collection has one in-flight request, bounded debounce for tool bursts (an existing deadline is never postponed), a total timeout, an output limit, cancellation on disposal and a polling fallback. Configured Marker/Hidden modes skip diff statistics. Git IO never runs during rendering or animation.
+
+`git.autoFetch` defaults on. It requires TUI mode, an enabled Git segment, a writable config, a trusted project, and no `PI_OFFLINE=1`. Invalid or future configs never opt into network access through fallback defaults. The actual branch upstream supplies the remote and refspec; there is no fixed `origin/main` comparison. On first collection and then every five minutes, a separate bounded task fetches only that upstream tracking ref. It never merges, checks out, writes FETCH_HEAD, fetches tags, recurses submodules or starts automatic maintenance. Local status collection does not wait for the network. Successful fetch schedules a local refresh; failure retries after 1, 2, 4, 8, 16 and then 30 minutes without notifications. Counts still describe local tracking refs, not a continuously live remote.
+
+Git children use pipes and a separate process session on POSIX; Git/SSH/credential-manager interactive prompts are disabled for fetch. Network requests time out after ten seconds per command and are cancelled when Git or auto-fetch is disabled or the runtime shuts down. Auto fetch can be disabled in Status line → Git. It uses existing Git authentication; Glance does not provide login UI.
+
 ## Working animation
 
 `editor.workingSweep` offers `top`, `perimeter` (default), and `off`. `/glance` → Working displays them as **Top edge**, **Full border**, and **Off** under Animation. Saving changes takes effect on the current editor without replacing its factory or clearing input. Cancelling the pane, a failed save, or a read-only config leaves the active setting unchanged. The settings pane runs its preview in the Working section while Glance and animation are on, and disposes the clock on close. `npm run preview:working -- --perimeter` previews the loop without model calls, installation changes, or configuration writes.
 
 Both modes use `editor.workingSweepSpeed`, defaulting to **47 horizontal columns per second**, through `sweepMotion` in `src/surface/sweep.ts`. The allowed range is 10–120; the 30 FPS clock is unchanged. The live and preview clocks retime elapsed time when speed changes so travelled distance is preserved. Cycle time comes from route length rather than separate duration limits, so resizing, editor height and status fitting do not change travel speed. Top-edge travel includes the feathered entrance and exit beyond its visible region; the perimeter is closed and has no off-frame interval.
 
-Top-edge mode crosses the title and its connector; corners, right-hand status, scroll labels and other edges remain unchanged. Perimeter mode follows one clockwise closed path through the title, visible top border, corners, sides and bottom. It uses circular distance for a seamless wrap, including the feathered tail. One vertical row counts as two horizontal cells to approximate terminal-cell proportions. The loop uses the actual rendered body height, excluding top spacing and autocomplete. Status text and its surrounding spaces do not consume path distance: the beam bridges that gap instead of disappearing behind metadata. Status bytes and scroll labels remain unchanged in both modes.
+Top-edge mode crosses the title and its connector; corners, right-hand status, scroll labels and other edges remain unchanged. Perimeter mode follows one clockwise closed path through the title, visible top border, corners, sides and bottom. It uses circular distance for a seamless wrap, including the feathered tail. One vertical row counts as two horizontal cells to approximate terminal-cell proportions. The loop uses the actual rendered body height, excluding top spacing and autocomplete. Status text and the draft hint, including their surrounding spaces, do not consume path distance: the beam bridges those gaps instead of disappearing behind metadata. Status bytes, draft labels and scroll labels remain unchanged in both modes.
 
 `src/theme/working-colors.ts` assigns one chromatic accent per palette; title and border share that peak and intensity. Tests check Oklab color separation from both original foregrounds and at least 4.5:1 peak contrast on reference backgrounds in RGB and ANSI256. Reference backgrounds include black/white and `#282828`/`#f5f5f5`; no terminal-background query is made, so arbitrary terminal backgrounds are not guaranteed. The radius is bounded to 9–28 columns, reduced further on tiny loops, with a broad bold core and smooth edges. Unlit text retains its original color. Both modes preserve input bytes, cursor markers, Pi's Bash border callback and unfocused dimming; one-column frames remain static in perimeter mode.
 
@@ -194,7 +223,7 @@ The shared meaning is **details → primary facts → identity/essential state**
 
 | Segment | Full | Compact | Minimal |
 | --- | --- | --- | --- |
-| Git | Branch, dirty/conflict marker, upstream counts | Branch and dirty/conflict marker | Same as compact |
+| Git | Branch, change summary, upstream counts | Branch and changed-file count | Branch and dirty/conflict marker |
 | Cost | Compact USD | Same | Same |
 | Model speed | `43 tok/s` | `43/s` | Same as compact |
 | Context | Percentage and token capacity | Percentage | Same as compact |
@@ -242,8 +271,8 @@ At extremely narrow widths, the inherited editor is given enough room for a two-
 
 ## Configuration
 
-- Current on-disk schema version: `11`.
-- New-install and settings-reset defaults use Nerd Font icons, smart workspace paths, one top-margin row, and all six segments enabled. Other defaults include a three-row editor, full-border Working animation, light/dark palette slots, input/output Tokens with cache rate, and automatic provider/thinking labels. Defaults fill missing or invalid values; valid saved choices are preserved. Changing defaults does not change the schema version.
+- Current on-disk schema version: `12`.
+- New-install and settings-reset defaults use Nerd Font icons, smart workspace paths, one top-margin row, and all six segments enabled. Other defaults include a three-row editor, full-border Working animation, light/dark palette slots, input/output Tokens with cache rate, and automatic provider/thinking labels. Defaults fill missing or invalid values; saved choices are preserved except for the deliberate pre-v12 Git Summary migration. Changing defaults does not change the schema version.
 - Missing or invalid `editor.workingSweep` defaults to `perimeter`; legacy `true` remains `top` and `false` remains `off`. Explicit saved modes are preserved. Migration is in memory and writes only on an explicit save.
 - Missing or invalid `editor.workingSweepSpeed` defaults to 47. Finite numbers are rounded and clamped to 10–120. Older config files gain the field in memory; loading does not rewrite them.
 - Git timeout, debounce and polling delays are capped at Node's timer limit (2,147,483,647 ms), preventing large saved values from turning into one-millisecond timers.
@@ -277,5 +306,6 @@ At extremely narrow widths, the inherited editor is given enough room for a two-
 Developer utilities:
 - `npm run bench:render` measures live editor and settings render time in RGB/ANSI256, both sweep modes, and 80/160-column terminals. It uses a fixed clock and example data, with no terminal or config writes. Compare runs on the same Node version and machine; timings are not CI pass/fail thresholds.
 - `npm run debug:git -- /path/to/repo` prints a Git snapshot.
+- `npm run preview:input` exercises the real editor, Stash and settings with sample Git facts. F2 opens settings, Enter clears the prompt and Ctrl+C closes. No model, network, config or draft-file writes occur.
 - `npm run preview:settings` opens the new settings pane with example data. Save/close exits the preview without writing configuration. Use `-- --light` or `-- --256` to check color modes.
 - `npm run preview:working` previews Working animation and status density without model calls or configuration writes. Use `M` for sweep modes, Left/Right for palettes, `C` for color depth, and resize the terminal to check fitting.

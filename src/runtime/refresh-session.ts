@@ -52,7 +52,7 @@ export interface RuntimeRefreshSessionHost {
 }
 
 type SnapshotMode = "none" | "reliable" | "lifecycle" | "thinking";
-type GitRefreshMode = "never" | "onWorkspaceChange" | "immediate";
+type GitRefreshMode = "never" | "onWorkspaceChange" | "immediate" | "afterTool";
 type RenderMode = "never" | "changed" | "always";
 
 interface RefreshPlan {
@@ -114,6 +114,7 @@ const LIFECYCLE_NO_MODEL_ON_WORKSPACE_CHANGE: RefreshPlan = {
 const TOOL_EXECUTION_END: RefreshPlan = {
 	...LIFECYCLE_MODEL_IMMEDIATE,
 	refreshModel: false,
+	git: "afterTool",
 };
 
 const ASSISTANT_MESSAGE_END: RefreshPlan = {
@@ -238,7 +239,8 @@ export class RuntimeRefreshSession {
 	}
 
 	private applyGitScheduling(plan: RefreshPlan, workspaceChanged: boolean): void {
-		if (plan.git === "immediate") this.host.scheduleGitRefresh(true);
+		if (plan.git === "afterTool") this.host.scheduleGitRefresh(workspaceChanged);
+		else if (plan.git === "immediate") this.host.scheduleGitRefresh(true);
 		else if (plan.git === "onWorkspaceChange" && workspaceChanged) this.host.scheduleGitRefresh(true);
 	}
 

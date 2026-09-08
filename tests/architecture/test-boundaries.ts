@@ -127,7 +127,7 @@ function assertRenderPathsStayIoFree(files: SourceFile[]): void {
 function assertHighValueImportRules(files: SourceFile[]): void {
 	const index = files.find((file) => file.path === "index.ts");
 	assert.ok(index, "index.ts should exist");
-	const allowedIndexImports = new Set(["node:path", "@earendil-works/pi-coding-agent", "./src/config/store.js", "./src/settings/pane.js", "./src/runtime/runtime.js"]);
+	const allowedIndexImports = new Set(["node:path", "@earendil-works/pi-coding-agent", "./src/input/store.js", "./src/config/store.js", "./src/settings/pane.js", "./src/runtime/runtime.js"]);
 	for (const record of importsFrom(index)) {
 		if (!allowedIndexImports.has(record.specifier)) fail(`index.ts: thin wiring must not import ${record.specifier}`);
 	}
@@ -174,7 +174,7 @@ test("runtime local imports form an acyclic graph", () => {
 });
 
 test("pure models stay transitively free of IO and Pi runtime dependencies", () => {
-	for (const path of ["src/config/model.ts", "src/config/settings.ts", "src/settings/model.ts", "src/settings/catalog.ts", "src/runtime/git-snapshot.ts", "src/runtime/throughput.ts", "src/runtime/throughput-run-tracker.ts"]) {
+	for (const path of ["src/input/stash.ts", "src/input/shortcut.ts", "src/config/model.ts", "src/config/settings.ts", "src/settings/model.ts", "src/settings/catalog.ts", "src/runtime/git-snapshot.ts", "src/runtime/throughput.ts", "src/runtime/throughput-run-tracker.ts"]) {
 		const forbidden = dependencyPath(files, path, (specifier) => IO_NETWORK_PROCESS_IMPORTS.has(specifier) || specifier.startsWith("@earendil-works/pi-"));
 		assert.equal(forbidden, undefined, forbidden?.join(" -> "));
 	}

@@ -77,6 +77,16 @@ function joinSegments(styles: ResolvedGlanceStyles, segments: SegmentRenderResul
 function fitSegments(styles: ResolvedGlanceStyles, segments: SegmentRenderResult[], width: number): JoinedSegments {
 	const fitted = [...segments];
 	let joined = joinSegments(styles, fitted);
+	// New optional detail must not crowd out facts that fit before it was added.
+	for (let i = 0; i < fitted.length && joined.width > width; i++) {
+		const segment = fitted[i]!;
+		for (const text of segment.detailFallbacks ?? []) {
+			if (visibleWidth(text) >= visibleWidth(fitted[i]!.text)) continue;
+			fitted[i] = { ...segment, text };
+			joined = joinSegments(styles, fitted);
+			if (joined.width <= width) break;
+		}
+	}
 	while (fitted.length > 0 && joined.width > width) {
 		// Preserve configured priority: try shortening the trailing segment before
 		// removing it, without sacrificing earlier facts to keep later ones.

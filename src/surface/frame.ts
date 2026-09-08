@@ -1,4 +1,6 @@
 import { visibleWidth } from "@earendil-works/pi-tui";
+import { DRAFT_LABELS } from "../theme/palette.js";
+import { shortcutLabel } from "../input/shortcut.js";
 import { truncateStyledText } from "./text.js";
 import { renderGlanceLine } from "./status-line.js";
 import { createTopEdgeSweep } from "./top-edge-sweep.js";
@@ -37,6 +39,7 @@ export interface InputSurfaceFrameChrome {
 	showTitle?: boolean;
 	topScrollIndicator?: string;
 	bottomScrollIndicator?: string;
+	hasDraft?: boolean;
 }
 
 export interface InputSurfaceFrameStatus {
@@ -186,10 +189,22 @@ function renderBodyRow(input: InputSurfaceFrameInput, text: string, index: numbe
 		: renderEditorRow(input, text, index, width, perimeter);
 }
 
-function renderBottomFrame(input: InputSurfaceFrameInput, width: number, row: number, perimeter?: PerimeterSweep): string {
-	const border = shouldDimChrome(input) ? input.styles.dim : input.styles.border;
+function planBottomFrame(input: InputSurfaceFrameInput, width: number) {
+	const label = DRAFT_LABELS[input.config.icons];
+	const key = input.config.editor.stashEnabled ? shortcutLabel(input.config.editor.stashShortcut) : "off";
+	return planSurfaceBottomFrame({
+		width, scrollIndicator: input.chrome?.bottomScrollIndicator,
+		label: input.chrome?.hasDraft ? { full: `${label} · ${key}`, compact: label } : undefined,
+	});
+}
+
+function renderBottomFrame(input: InputSurfaceFrameInput, plan: ReturnType<typeof planBottomFrame>, row: number, perimeter?: PerimeterSweep): string {
+	const dim = shouldDimChrome(input);
+	const border = dim ? input.styles.dim : input.styles.border;
+	const title = dim ? input.styles.dim : input.styles.title;
 	let column = 0;
-	return renderSurfaceChunks(planSurfaceBottomFrame({ width, scrollIndicator: input.chrome?.bottomScrollIndicator }).chunks, {
+	return renderSurfaceChunks(plan.chunks, {
+		title: text => { column += visibleWidth(text); return title(text); },
 		border: (text) => {
 			const start = column;
 			column += visibleWidth(text);
@@ -213,10 +228,11 @@ export function renderInputSurfaceFrame(input: InputSurfaceFrameInput): string[]
 	const sourceLines = bodyLines(input.body);
 	const rows = Math.max(minContentRows(input.config), sourceLines.length);
 	const top = planTopFrame(input, metrics);
+	const bottom = planBottomFrame(input, metrics.safeWidth);
 	const topGap = top.status.text ? { column: 1 + top.leftWidth + top.fillerWidth, width: top.status.width + 2 } : undefined;
 	const elapsed = input.chrome?.workingElapsedMs;
 	const perimeter = input.config.enabled && input.config.editor.workingSweep === "perimeter" && !shouldDimChrome(input) && elapsed !== undefined
-		? createPerimeterSweep(metrics.safeWidth, rows, elapsed, input.styles, topGap, input.config.editor.workingSweepSpeed)
+		? createPerimeterSweep(metrics.safeWidth, rows, elapsed, input.styles, topGap, input.config.editor.workingSweepSpeed, bottom.labelGap)
 		: undefined;
 	const lines = [
 		...renderSurfaceTopMargin(metrics.safeWidth, input.config.editor.topMarginRows),
@@ -227,6 +243,6 @@ export function renderInputSurfaceFrame(input: InputSurfaceFrameInput): string[]
 		lines.push(renderBodyRow(input, sourceLines[i] ?? "", i, metrics.safeWidth, perimeter));
 	}
 
-	lines.push(renderBottomFrame(input, metrics.safeWidth, rows + 1, perimeter));
+	lines.push(renderBottomFrame(input, bottom, rows + 1, perimeter));
 	return lines;
 }

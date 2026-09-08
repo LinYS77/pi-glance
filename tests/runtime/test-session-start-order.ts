@@ -39,6 +39,7 @@ function createContext(calls: string[], mode: "tui" | "rpc" | "json" | "print" =
 	return {
 		mode,
 		isIdle: () => true,
+		isProjectTrusted: () => false,
 		hasUI: mode === "tui" || mode === "rpc",
 		cwd: process.cwd(),
 		model: { id: "test-model", provider: "test-provider", contextWindow: 200_000 },
@@ -46,6 +47,8 @@ function createContext(calls: string[], mode: "tui" | "rpc" | "json" | "print" =
 			getAvailable: () => [{ provider: "test-provider", id: "test-model" }],
 		},
 		sessionManager: {
+			getSessionId: () => "session-test",
+			getSessionFile: () => undefined,
 			getCwd: () => process.cwd(),
 			getEntries: () => [],
 			getBranch: () => [],

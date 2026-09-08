@@ -13,7 +13,7 @@ const selected = (model: PaneModelState) => createPaneViewModel(model).rows.find
 test("Left means off and Right means on for every boolean and status row", () => {
 	const root = createPaneModel(defaultConfig());
 	const status = section(root);
-	const details = step(status, { type: "activate" });
+	const details = down(step(status, { type: "activate" }));
 	for (const start of [root, status, details]) {
 		let model = start;
 		for (let i = 0; i < 3; i++) {
@@ -77,7 +77,7 @@ test("incomplete numbers do not show an error until confirmation", () => {
 
 test("opening an existing custom value neither substitutes a preset nor loses it during preview", () => {
 	const config = defaultConfig(); config.git.pollIntervalMs = 7500;
-	const row = down(step(section(createPaneModel(config)), { type: "activate" }), 3);
+	const row = down(step(section(createPaneModel(config)), { type: "activate" }), 4);
 	const opened = step(row, { type: "activate" });
 	const choices = createPaneViewModel(opened).choices;
 	assert.match(choices.find(choice => choice.selected)!.label, /7\.5 seconds/);
@@ -105,7 +105,7 @@ test("sections remember the detail page; returning and re-entering restores its 
 test("list navigation clamps, including paging and destructive confirmation choices", () => {
 	const root = createPaneModel(defaultConfig());
 	assert.equal(selected(step(root, { type: "move", direction: "up" })).label, "Glance");
-	assert.equal(selected(down(root, 999)).label, "Space above editor");
+	assert.equal(selected(down(root, 999)).label, "Workspace label");
 	const confirmation = step(root, { type: "reset" });
 	assert.equal(createPaneViewModel(step(confirmation, { type: "move", direction: "up" })).choices.find(c => c.selected)!.label, "Keep editing");
 	const palette = step(down(root), { type: "activate" });
@@ -122,7 +122,7 @@ test("reset affects settings, not navigation, including reordered status items",
 });
 
 test("field editors do not advertise Save or section switching", () => {
-	for (const enter of [[k.down, k.enter], [k.backTab, k.enter], [k.backTab, k.down, k.enter]]) {
+	for (const enter of [[k.down, k.enter], [k.backTab, k.backTab, k.enter], [k.backTab, k.backTab, k.down, k.enter]]) {
 		const pane = paneHarness();
 		pane.press(...enter);
 		assert.ok(!pane.text(40).includes("Save & close"));
@@ -135,14 +135,14 @@ test("field editors do not advertise Save or section switching", () => {
 
 test("number replacement works for Kitty key events and fragmented paste stays text", () => {
 	const kitty = paneHarness();
-	kitty.press(k.backTab, k.down, k.enter, "\x1b[55u", "\x1b[52u", k.enter, "s");
+	kitty.press(k.backTab, k.backTab, k.down, k.enter, "\x1b[55u", "\x1b[52u", k.enter, "s");
 	const saved = kitty.completion();
 	if (saved?.action !== "save") throw new Error("not saved");
 	assert.equal(saved.config.editor.workingSweepSpeed, 74);
 	kitty.pane.dispose();
 
 	const paste = paneHarness();
-	paste.press(k.backTab, k.down, k.enter, "\x1b[200~", "80", "\r", "s", "r", "q", "\x1b[201~");
+	paste.press(k.backTab, k.backTab, k.down, k.enter, "\x1b[200~", "80", "\r", "s", "r", "q", "\x1b[201~");
 	assert.equal(paste.completion(), undefined);
 	assert.match(paste.text(), /Sweep speed/);
 	assert.doesNotMatch(paste.text(), /Reset all settings\?/);
@@ -150,7 +150,7 @@ test("number replacement works for Kitty key events and fragmented paste stays t
 	assert.match(paste.text(), /47 cols\/s/);
 	paste.pane.dispose();
 	const trailingEnter = paneHarness();
-	trailingEnter.press(k.backTab, k.down, k.enter, "\x1b[200~74\x1b[201~\r", "s");
+	trailingEnter.press(k.backTab, k.backTab, k.down, k.enter, "\x1b[200~74\x1b[201~\r", "s");
 	const done = trailingEnter.completion();
 	if (done?.action !== "save") throw new Error("confirmation following paste was lost");
 	assert.equal(done.config.editor.workingSweepSpeed, 74);

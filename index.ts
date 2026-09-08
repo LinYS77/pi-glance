@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { getAgentDir, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { createDraftStore } from "./src/input/store.js";
 import { createConfigStore } from "./src/config/store.js";
 import { showGlancePane } from "./src/settings/pane.js";
 import { createGlanceRuntime } from "./src/runtime/runtime.js";
@@ -8,6 +9,7 @@ export default function piGlance(pi: ExtensionAPI): void {
 	const store = createConfigStore(join(getAgentDir(), "pi-glance", "config.json"));
 	const runtime = createGlanceRuntime({
 		getThinkingLevel: () => pi.getThinkingLevel(),
+		...createDraftStore(join(getAgentDir(), "pi-glance", "drafts")),
 		...store,
 		showPane: showGlancePane,
 	});

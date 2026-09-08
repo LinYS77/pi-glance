@@ -34,9 +34,9 @@ for (const raw of [undefined, null, false, true, 0, 1, "", "{}", []]) {
 assert.equal(defaults.icons, "nerd", "new configs should use Nerd Font icons");
 assert.equal(defaults.editor.topMarginRows, 1, "new configs should leave one row above the editor");
 assert.equal(defaults.display.workspaceLabel, "smart", "new configs should show a smart workspace path");
-assert.equal(defaults.version, 11, "Working speed uses config schema v11");
-assert.equal(normalizeConfig({ version: 0 }).version, 11, "old raw version should normalize to current schema version");
-assert.equal(normalizeConfig({ version: 999 }).version, 11, "future raw version should normalize to current schema version");
+assert.equal(defaults.version, 12, "v0.7 uses config schema v12");
+assert.equal(normalizeConfig({ version: 0 }).version, 12, "old raw version should normalize to current schema version");
+assert.equal(normalizeConfig({ version: 999 }).version, 12, "future raw version should normalize to current schema version");
 assert.deepEqual(defaults.theme, { light: "light", dark: "dark" }, "default theme pair should use light for light tone and dark for dark tone");
 assert.equal(defaults.tokens.cache, "rate", "new configs should default Tokens cache details to aggregate hit rate");
 assert.equal(defaults.throughput.precision, THROUGHPUT_PRECISION_DESCRIPTOR.defaultValue, "default config throughput precision should come from descriptor default");
@@ -179,11 +179,13 @@ const userConfig = normalizeConfig({
 assert.deepEqual(
 	userConfig,
 	{
-		version: 11,
+		version: 12,
 		enabled: false,
 		theme: { light: "tokyo-night", dark: "tokyo-night" },
 		icons: "nerd",
 		editor: {
+			stashEnabled: true,
+			stashShortcut: "alt+s",
 			minContentRows: 4,
 			topMarginRows: 2,
 			workingSweep: "perimeter",
@@ -209,7 +211,8 @@ assert.deepEqual(
 			showThinking: "always",
 		},
 		git: {
-			showDirty: false,
+			changes: "summary",
+			autoFetch: true,
 			showAheadBehind: false,
 			shaMode: "always",
 			timeoutMs: 2500,

@@ -67,6 +67,7 @@ interface SurfaceTopFramePlan extends SurfaceFramePlan {
 interface SurfaceBottomFramePlan extends SurfaceFramePlan {
 	indicator: string;
 	fillerWidth: number;
+	labelGap?: { column: number; width: number };
 }
 
 interface SurfaceRowPlan extends SurfaceFramePlan {
@@ -96,6 +97,7 @@ interface SurfaceTopFrameOptions {
 interface SurfaceBottomFrameOptions {
 	width: number;
 	scrollIndicator?: string;
+	label?: { full: string; compact: string };
 }
 
 interface SurfaceRowOptions {
@@ -169,6 +171,12 @@ export function renderSurfaceChunks(chunks: readonly SurfaceChunk[], renderers: 
 	}).join("");
 }
 
+function insetLabel(label: string): SurfaceInlinePlan {
+	const padding = " ".repeat(SURFACE_TITLE_PADDING_X);
+	const chunks = [chunk("border", SURFACE_BORDER.horizontal), chunk("title", `${padding}${label}${padding}`)];
+	return { chunks, width: surfaceChunksWidth(chunks) };
+}
+
 export function planWorkspaceTitle(options: WorkspaceTitlePlanOptions): SurfaceTitlePlan {
 	const innerWidth = Math.max(0, finiteFloor(options.innerWidth, 0));
 	const surfaceWidth = safeSurfaceWidth(options.surfaceWidth);
@@ -185,10 +193,9 @@ export function planWorkspaceTitle(options: WorkspaceTitlePlanOptions): SurfaceT
 
 	const labelBudget = Math.max(1, budget - SURFACE_TITLE_PADDING_X * 2);
 	const label = formatWorkspaceLabel(options.workspacePath, options.workspaceName || "workspace", options.mode, labelBudget, surfaceWidth);
-	const rawTitle = `${" ".repeat(SURFACE_TITLE_PADDING_X)}${label}${" ".repeat(SURFACE_TITLE_PADDING_X)}`;
-	const title = truncateSurfaceText(rawTitle, budget, "…");
-	const chunks = [chunk("border", SURFACE_BORDER.horizontal), chunk("title", title)];
-	return { kind: "workspace", budget, label, title, chunks, width: surfaceChunksWidth(chunks) };
+	const left = insetLabel(label);
+	const title = left.chunks[1]!.text;
+	return { kind: "workspace", budget, label, title, ...left };
 }
 
 export function planSurfaceStatusBudget(innerWidth: number, leftWidth: number): number {
@@ -269,6 +276,20 @@ export function planSurfaceBottomFrame(options: SurfaceBottomFrameOptions): Surf
 		return { ...metrics, chunks, width: surfaceChunksWidth(chunks), indicator: "", fillerWidth: 0 };
 	}
 
+	const labelBudget = Math.max(0, metrics.innerWidth - 2 - SURFACE_TITLE_PADDING_X * 2);
+	const label = !options.scrollIndicator && options.label
+		? [options.label.full, options.label.compact].find(text => visibleWidth(text) <= labelBudget)
+		: undefined;
+	if (label) {
+		const left = insetLabel(label);
+		const fillerWidth = metrics.innerWidth - left.width;
+		const chunks = [
+			chunk("border", SURFACE_BORDER.bottomLeft), ...left.chunks,
+			chunk("border", repeat(SURFACE_BORDER.horizontal, fillerWidth)), chunk("border", SURFACE_BORDER.bottomRight),
+		];
+		return { ...metrics, chunks, width: surfaceChunksWidth(chunks), indicator: "", fillerWidth,
+			labelGap: { column: 2, width: left.width - 1 } };
+	}
 	const indicator = options.scrollIndicator ? truncateSurfaceText(options.scrollIndicator, metrics.innerWidth, "") : "";
 	const indicatorWidth = visibleWidth(indicator);
 	const fillerWidth = Math.max(0, metrics.innerWidth - indicatorWidth);

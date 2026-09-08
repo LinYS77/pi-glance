@@ -68,7 +68,8 @@ for (const trueColor of [true, false]) {
 					renderStyleContext: { trueColor },
 				},
 			);
-			pane.handleInput("\x1b[Z"); // Working section
+			pane.handleInput("\t");
+			pane.handleInput("\t"); // Working section
 			for (const [name, component] of [
 				["editor", editor],
 				["settings", pane],

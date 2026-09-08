@@ -195,7 +195,8 @@ function assertFixture(fixture: Fixture): void {
 }
 
 const testConfig: GitConfig = {
-	showDirty: true,
+	changes: "summary",
+	autoFetch: false,
 	showAheadBehind: true,
 	shaMode: "off",
 	timeoutMs: 1000,

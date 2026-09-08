@@ -12,6 +12,7 @@ export type IconMode = "nerd" | "plain";
 export type WidthMode = "full" | "compact" | "minimal";
 export type GitStatus = "clean" | "dirty" | "conflict" | "unknown";
 export type GitShaMode = "off" | "detached" | "always";
+export type GitChangesMode = "hidden" | "marker" | "summary";
 export type ContextDisplayMode = "percent+tokens" | "percent" | "tokens";
 export type ContextUnknownMode = "show" | "hide";
 export type TokensDisplayMode = "input-output" | "total";
@@ -33,6 +34,8 @@ interface DisplayConfig {
 }
 
 interface EditorConfig {
+	stashEnabled: boolean;
+	stashShortcut: string;
 	workingSweep: WorkingSweepMode;
 	workingSweepSpeed: number;
 	minContentRows: number;
@@ -40,7 +43,8 @@ interface EditorConfig {
 }
 
 export interface GitConfig {
-	showDirty: boolean;
+	changes: GitChangesMode;
+	autoFetch: boolean;
 	showAheadBehind: boolean;
 	shaMode: GitShaMode;
 	timeoutMs: number;
@@ -67,7 +71,7 @@ interface ThroughputConfig {
 }
 
 export interface GlanceConfig {
-	version: 11;
+	version: 12;
 	enabled: boolean;
 	theme: GlanceThemePair;
 	icons: IconMode;
@@ -119,6 +123,12 @@ export interface ModelSpeedMeasurement {
 	usage: ModelSpeedUsage;
 }
 
+export interface GitChangeSummary {
+	files: number;
+	additions: number | null;
+	deletions: number | null;
+}
+
 export interface GitSnapshot {
 	repo: boolean;
 	branch: string | null;
@@ -133,6 +143,9 @@ export interface GitSnapshot {
 	conflicts: number;
 	dirty: boolean;
 	status: GitStatus;
+	/** Missing when file enumeration or line statistics are unavailable. */
+	summary?: GitChangeSummary;
+	stale?: boolean;
 	updatedAt: number;
 }
 
@@ -201,6 +214,8 @@ export interface SegmentData {
 	primary: string;
 	secondary?: string;
 	display?: SegmentDisplay;
+	/** Optional details yield before lower-priority segments are removed. */
+	detailFallbacks?: readonly string[];
 	/** Ordered shorter labels, followed by a name that can be middle-ellipsized. */
 	fit?: {
 		alternatives: readonly string[];
@@ -220,6 +235,7 @@ export interface SegmentRenderResult {
 	id: SegmentId;
 	text: string;
 	tone: SegmentTone;
+	detailFallbacks?: readonly string[];
 	/** Returns a meaningful label within the available columns, or no fit. */
 	fit?: (width: number) => string | undefined;
 }

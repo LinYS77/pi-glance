@@ -1,3 +1,4 @@
+import { shortcutLabel } from "../input/shortcut.js";
 import { cloneConfig } from "../config/model.js";
 import { WORKING_SPEED } from "../config/schema.js";
 import { choiceSetting, toggleSetting, type SettingDescriptor, type SettingOption } from "../config/settings.js";
@@ -7,11 +8,12 @@ import type { GlanceThemeSlot } from "../theme/selection.js";
 import type { GlanceConfig, GlanceThemeName, SegmentId } from "../types.js";
 
 export type { GlanceThemeSlot } from "../theme/selection.js";
-export type SettingsSectionId = "appearance" | "status" | "working";
+export type SettingsSectionId = "appearance" | "status" | "working" | "input";
 export const SETTINGS_SECTIONS = [
 	{ id: "appearance", label: "Appearance" },
 	{ id: "status", label: "Status line" },
 	{ id: "working", label: "Working" },
+	{ id: "input", label: "Input" },
 ] as const;
 
 interface RowBase {
@@ -28,6 +30,7 @@ export type SettingsRow = RowBase &
 				options: readonly SettingOption[];
 				select(config: GlanceConfig, index: number): GlanceConfig;
 		  }
+		| { kind: "shortcut"; key: string }
 		| { kind: "theme"; slot: GlanceThemeSlot }
 		| {
 				kind: "number";
@@ -112,8 +115,11 @@ const appearance = [
 			c.display.workspaceLabel = v;
 		},
 	),
+];
+
+const inputSettings = [
 	choiceSetting(
-		"appearance.rows",
+		"input.rows",
 		"Editor height",
 		"Minimum input rows. The editor can grow as you type.",
 		[2, 3, 4].map((value) => ({ value, label: `${value} rows` })),
@@ -123,7 +129,7 @@ const appearance = [
 		},
 	),
 	choiceSetting(
-		"appearance.spacing",
+		"input.spacing",
 		"Space above editor",
 		"Blank rows between the conversation and the editor.",
 		[
@@ -136,6 +142,8 @@ const appearance = [
 			c.editor.topMarginRows = v;
 		},
 	),
+	toggleSetting("input.stash", "Prompt stash", "Keep a draft while you ask another question. Press the shortcut again to restore or swap.",
+		c => c.editor.stashEnabled, (c, value) => { c.editor.stashEnabled = value; }),
 ];
 
 const animation = choiceSetting(
@@ -175,6 +183,14 @@ export function getSettingsRows(config: GlanceConfig, section: SettingsSectionId
 			enabled,
 		}));
 	}
+	if (section === "input") return [
+		...inputSettings.map(setting => descriptorRow(config, setting)),
+		{
+			id: "input.shortcut", label: "Stash shortcut", value: shortcutLabel(config.editor.stashShortcut),
+			hint: "Press Enter, then a shortcut. Pi's own bindings cannot be replaced.",
+			kind: "shortcut", key: config.editor.stashShortcut,
+		},
+	];
 	if (section === "working")
 		return [
 			descriptorRow(config, animation),

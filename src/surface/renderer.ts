@@ -27,6 +27,7 @@ const PREVIEW_STATE: GlanceState = {
 		conflicts: 0,
 		dirty: true,
 		status: "dirty",
+		summary: { files: 2, additions: 42, deletions: 8 },
 		updatedAt: 0,
 	},
 	providers: { availableCount: 2 },

@@ -9,7 +9,7 @@ import { resolveBuiltInGlanceStyles } from "../../src/theme/adapter.js";
 import { paneHarness, keys as k } from "../support/pane-harness.js";
 import { stripAnsi } from "../support/surface-test-harness.js";
 
-test("new users see three sections, readable values and save/close without focus columns", () => {
+test("new users see four sections, readable values and save/close without focus columns", () => {
 	const h = paneHarness();
 	const text = h.text();
 	for (const label of ["Appearance", "Status line", "Working", "Light palette", "Dark palette", "Nerd Font", "Smart path", "Save & close", "No changes"]) assert.ok(text.includes(label), label);
@@ -94,7 +94,7 @@ test("Pi selection bindings take precedence; Ctrl-C always cancels and input own
 
 test("number input supports correction, validation, cursor focus and local restore", () => {
 	const h = paneHarness();
-	h.press(k.backTab, k.down, k.enter);
+	h.press(k.backTab, k.backTab, k.down, k.enter);
 	assert.ok(h.pane.render(100).join("").includes(CURSOR_MARKER));
 	h.pane.focused = false;
 	assert.ok(!h.pane.render(100).join("").includes(CURSOR_MARKER));
@@ -116,7 +116,7 @@ test("number input supports correction, validation, cursor focus and local resto
 
 test("typing a speed replaces the initial number without requiring a delete shortcut", () => {
 	const h = paneHarness();
-	h.press(k.backTab, k.down, k.enter, "74", k.enter, "s");
+	h.press(k.backTab, k.backTab, k.down, k.enter, "74", k.enter, "s");
 	const saved = h.completion();
 	assert.equal(saved?.action, "save");
 	if (saved?.action === "save") assert.equal(saved.config.editor.workingSweepSpeed, 74);
@@ -162,6 +162,7 @@ test("custom UI rejection and external completion dispose the preview clock", as
 		let active = 0;
 		const promise = showGlancePane(defaultConfig(), { ui: { custom: async <T>(factory: (tui: TUI, theme: Theme, keys: KeybindingsManager, done: (result: T) => void) => Component) => {
 			const pane = factory({ terminal: { rows: 32 }, requestRender() {} } as unknown as TUI, { fg: (_tone: string, text: string) => text } as unknown as Theme, undefined as unknown as KeybindingsManager, () => {});
+			pane.handleInput?.(k.backTab);
 			pane.handleInput?.(k.backTab);
 			assert.equal(active, 1);
 			if (fail) throw new Error("UI closed");

@@ -68,7 +68,7 @@ test("the reported half-screen frame folds Git and Model details alongside Conte
 test("density preserves alerts, explicit detail choices and model always labels", () => {
 	const config = defaultConfig(), state = densityState();
 	config.icons = "plain";
-	config.git.showDirty = false;
+	config.git.changes = "hidden";
 	config.git.shaMode = "always";
 	config.context.display = "tokens";
 	config.display.showProvider = "always";

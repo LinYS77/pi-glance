@@ -1,3 +1,4 @@
+import { normalizeStashShortcut, shortcutLabel } from "../input/shortcut.js";
 import { cloneConfig, defaultConfig, moveSegment, toggleSegment } from "../config/model.js";
 import {
 	getSettingsRows,
@@ -24,6 +25,7 @@ interface EditorPageBase {
 type EditorPage =
 	| (EditorPageBase & { kind: "choices"; index: number })
 	| (EditorPageBase & { kind: "theme"; index: number; slot: GlanceThemeSlot })
+	| (EditorPageBase & { kind: "shortcut"; key: string; error: string })
 	| (EditorPageBase & { kind: "number"; text: string; error: string });
 type ContentPage = ListPage | EditorPage;
 type PanePage = ContentPage | { kind: "confirm"; action: "discard" | "reset"; index: number; previous: ContentPage };
@@ -42,6 +44,7 @@ export type PaneIntent =
 	| { type: "adjust"; direction: -1 | 1 }
 	| { type: "section"; direction: -1 | 1 }
 	| { type: "reorder"; direction: -1 | 1 }
+	| { type: "shortcut"; key?: string; error?: string }
 	| { type: "input"; text: string }
 	| { type: "activate" | "toggle" | "back" | "cancel" | "save" | "reset" | "density" };
 export interface PaneUpdateResult {
@@ -81,6 +84,7 @@ export function createPaneModel(initial: GlanceConfig): PaneModelState {
 			appearance: { kind: "list", index: 0 },
 			status: { kind: "list", index: 0 },
 			working: { kind: "list", index: 0 },
+			input: { kind: "list", index: 0 },
 		},
 		detailRows: {},
 		page: { kind: "list", index: 0 },
@@ -214,6 +218,12 @@ function activate(model: PaneModelState): PaneUpdateResult {
 		);
 		return { model: withList({ ...model, draft }, { ...parent, index }) };
 	}
+	if (page.kind === "shortcut") {
+		if (page.error) return { model };
+		const draft = cloneConfig(model.draft);
+		draft.editor.stashShortcut = page.key;
+		return { model: { ...model, draft, page: page.parent } };
+	}
 	if (page.kind === "number") {
 		const next = updateNumber(model, page.text, true);
 		return { model: next.page.kind === "number" && next.page.error ? next : { ...next, page: page.parent } };
@@ -244,6 +254,7 @@ function activate(model: PaneModelState): PaneUpdateResult {
 				},
 			},
 		};
+	if (row.kind === "shortcut") return { model: { ...model, page: { ...base, kind: "shortcut", key: row.key, error: "" } } };
 	if (row.kind === "number")
 		return { model: { ...model, page: { ...base, kind: "number", text: String(row.number), error: "" } } };
 	return {
@@ -256,6 +267,7 @@ function activate(model: PaneModelState): PaneUpdateResult {
 
 function adjustRow(config: GlanceConfig, row: SettingsRow, direction: -1 | 1): GlanceConfig {
 	switch (row.kind) {
+		case "shortcut": return config;
 		case "segment":
 			return row.enabled === (direction === 1) ? config : toggleSegment(config, row.segment);
 		case "toggle":
@@ -286,6 +298,11 @@ export function updatePaneModel(model: PaneModelState, intent: PaneIntent): Pane
 		return page.kind === "list"
 			? { model, completion: { action: "save", config: cloneConfig(model.draft) } }
 			: { model };
+	if (intent.type === "shortcut") {
+		if (page.kind !== "shortcut") return { model };
+		const key = normalizeStashShortcut(intent.key);
+		return { model: { ...model, page: { ...page, key: key ?? page.key, error: intent.error ?? (key ? "" : "Use Ctrl, Alt or a function key.") } } };
+	}
 	if (intent.type === "input") return { model: updateNumber(model, intent.text) };
 	if (intent.type === "adjust" && (page.kind === "theme" || page.kind === "choices")) {
 		return { model: selectChoice(model, page, clampIndex(page.index + intent.direction, pickerCount(model, page))) };
@@ -293,7 +310,7 @@ export function updatePaneModel(model: PaneModelState, intent: PaneIntent): Pane
 	if (intent.type === "move") {
 		const amount = Number.isFinite(intent.amount) ? Math.max(1, Math.floor(intent.amount!)) : 1;
 		const step = (intent.direction === "up" ? -1 : 1) * amount;
-		if (page.kind === "number") return { model };
+		if (page.kind === "number" || page.kind === "shortcut") return { model };
 		if (page.kind === "confirm")
 			return { model: { ...model, page: { ...page, index: clampIndex(page.index + step, 2) } } };
 		if (page.kind === "theme" || page.kind === "choices")
@@ -373,6 +390,11 @@ export function createPaneViewModel(model: PaneModelState): GlancePaneViewModel 
 			{ key: "Enter", label: "Confirm" },
 			{ key: "Esc", label: "Back" },
 		];
+	} else if (page.kind === "shortcut") {
+		title = `Stash shortcut · ${shortcutLabel(page.key)}`;
+		hint = page.error || "Press a shortcut, then Enter to confirm. Esc keeps the previous key.";
+		help = [];
+		actions = [{ key: "Enter", label: "Confirm" }, { key: "Esc", label: "Cancel" }];
 	} else if (page.kind === "number") {
 		title = row?.label ?? "Sweep speed";
 		hint = page.error || "Type to replace the speed (10–120 cols/s). Default: 47.";
@@ -432,6 +454,7 @@ export function createPaneViewModel(model: PaneModelState): GlancePaneViewModel 
 			},
 			{ key: "Enter", label: row?.kind === "segment" ? "Details" : row?.kind === "toggle" ? "Toggle" : "Edit" },
 		];
+		if (row?.kind === "shortcut") help = help.filter(item => item.key !== "←→");
 		if (row?.kind === "segment" || row?.kind === "toggle") help.push({ key: "Space", label: "Toggle" });
 		if (row?.kind === "segment") help.push({ key: "J/K", label: "Reorder" });
 		if (model.section === "status") help.push({ key: "D", label: "Preview layout" });

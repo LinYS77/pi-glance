@@ -52,6 +52,7 @@ function renderCollectedSegment(ctx: SegmentRenderContext, segment: SegmentDefin
 	return {
 		id: segment.id,
 		tone: data.tone ?? "normal",
+		detailFallbacks: data.detailFallbacks?.map(value => `${prefix}${value}`.trim()),
 		text,
 		...(fit ? { fit: (width: number) => fitCollectedSegment(fit, prefix, width) } : {}),
 	};

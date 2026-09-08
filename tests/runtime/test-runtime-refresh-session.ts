@@ -117,7 +117,7 @@ function createSessionHarness(initialConfig: GlanceConfig = cloneConfig()): Sess
 	await harness.session.toolExecutionEnd(ctx.ctx);
 	await harness.session.sessionTree(ctx.ctx);
 	assert.equal(harness.getRenderCount(), renderBaseline, "immediate Git events should still skip render when all visible facts are unchanged");
-	assert.deepEqual(harness.schedules, [true, true, true], "change-driven rendering should preserve immediate Git scheduling side effects");
+	assert.deepEqual(harness.schedules, [true, false, true], "tool bursts use bounded debounce; structural events remain immediate");
 
 	let beforeRenderCalls = 0;
 	await harness.session.configSaved(ctx.ctx, () => {

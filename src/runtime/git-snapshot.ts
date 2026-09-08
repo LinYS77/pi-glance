@@ -103,14 +103,42 @@ function snapshotStatus(counts: GitCounts): GitStatus {
 	return "clean";
 }
 
+/** Numstat rename records have two extra NUL paths; neither is a statistics row. */
+export function parseGitDiffStat(output: string): { additions: number; deletions: number } | undefined {
+	const fields = output.split("\0");
+	let additions = 0, deletions = 0;
+	for (let i = 0; i < fields.length; i++) {
+		const field = fields[i]!;
+		if (!field && i === fields.length - 1) continue;
+		const row = /^(\d+|-)\t(\d+|-)\t([\s\S]*)$/.exec(field);
+		if (!row || row[1] === "-" || row[2] === "-") return undefined;
+		additions += Number(row[1]);
+		deletions += Number(row[2]);
+		if (row[3] === "") {
+			if (!fields[i + 1] || !fields[i + 2]) return undefined;
+			i += 2;
+		}
+	}
+	return { additions, deletions };
+}
+
 export function parseGitStatus(output: string, now = Date.now()): GitSnapshot {
 	const branch = emptyBranchInfo();
 	const counts: GitCounts = { staged: 0, unstaged: 0, untracked: 0, conflicts: 0 };
 
-	for (const line of output.split(/\r?\n/)) {
+	const records = output.includes("\0") ? output.split("\0") : output.split(/\r?\n/);
+	let files = 0;
+	for (let index = 0; index < records.length; index++) {
+		const line = records[index]!;
 		if (!line) continue;
 		if (line.startsWith("# ")) parseBranchHeader(line, branch);
-		else parseStatusRecord(line, counts);
+		else {
+			parseStatusRecord(line, counts);
+			// Porcelain emits one record per current path, even with both X and Y
+			// modified. A rename's extra NUL field is its old path, not another file.
+			if (/^[12u?] /.test(line)) files++;
+			if (line.startsWith("2 ") && output.includes("\0")) index++;
+		}
 	}
 
 	const status = snapshotStatus(counts);
@@ -128,6 +156,7 @@ export function parseGitStatus(output: string, now = Date.now()): GitSnapshot {
 		conflicts: counts.conflicts,
 		dirty: status !== "clean",
 		status,
+		summary: { files, additions: status === "clean" ? 0 : null, deletions: status === "clean" ? 0 : null },
 		updatedAt: now,
 	};
 }

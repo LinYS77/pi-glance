@@ -30,6 +30,9 @@ export interface RuntimeMutableContextUsage {
 }
 
 export interface RuntimeTestContextOptions {
+	sessionId?: string;
+	persistent?: boolean;
+	trusted?: boolean;
 	idle?: boolean;
 	cwd?: string;
 	mode?: RuntimeMode;
@@ -77,6 +80,8 @@ export interface RuntimeGitHarness {
 }
 
 export interface RuntimeHarnessOptions {
+	loadDraft?: GlanceRuntimeAdapters["loadDraft"];
+	saveDraft?: GlanceRuntimeAdapters["saveDraft"];
 	workingSweepNowMs?: () => number;
 	nowMs?: () => number;
 	scheduleSweepFrame?: GlanceRuntimeAdapters["scheduleSweepFrame"];
@@ -256,6 +261,7 @@ export function createRuntimeTestContext(options: RuntimeTestContextOptions = {}
 		mode,
 		hasUI,
 		isIdle: () => idle,
+		isProjectTrusted: () => options.trusted ?? true,
 		get cwd() {
 			return cwd;
 		},
@@ -269,6 +275,8 @@ export function createRuntimeTestContext(options: RuntimeTestContextOptions = {}
 			return scopedProviders.map((provider) => ({ model: { provider, id: `${provider}-scoped-model` } }));
 		},
 		sessionManager: {
+			getSessionId: () => options.sessionId ?? "test-session",
+			getSessionFile: () => options.persistent === false ? undefined : "/test/session.jsonl",
 			getCwd: () => cwd,
 			getEntries: () => {
 				entryReads++;
@@ -378,6 +386,8 @@ export function createRuntimeHarness(options: RuntimeHarnessOptions = {}): Runti
 	const loadConfigResult = options.loadConfigResult ?? loadedConfigResult(loadConfigConfig);
 	const showPaneResults = [...(options.showPaneResults ?? [])];
 	const adapters: GlanceRuntimeAdapters = {
+		loadDraft: options.loadDraft,
+		saveDraft: options.saveDraft,
 		workingSweepNowMs: options.workingSweepNowMs,
 		nowMs: options.nowMs,
 		scheduleSweepFrame: options.scheduleSweepFrame ?? (() => () => {}),

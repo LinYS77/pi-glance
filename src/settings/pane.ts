@@ -3,6 +3,7 @@ import {
 	Key,
 	decodeKittyPrintable,
 	matchesKey,
+	parseKey,
 	SelectList,
 	visibleWidth,
 	wrapTextWithAnsi,
@@ -22,6 +23,8 @@ import {
 	type GlancePaneViewModel,
 	type HelpShortcut,
 } from "./model.js";
+import { shortcutConflict } from "../input/keybinding.js";
+import { normalizeStashShortcut, shortcutLabel } from "../input/shortcut.js";
 import { SETTINGS_SECTIONS } from "./catalog.js";
 import { WorkingSweep, type ScheduleSweepFrame } from "../runtime/working-sweep.js";
 import { truncateStyledText } from "../surface/text.js";
@@ -71,6 +74,7 @@ export class GlanceConfigPane implements Component, Focusable {
 	private input = new Input();
 	private replaceNumberOnType = false;
 	private numberPasting = false;
+	private shortcutPasting = false;
 	private disposed = false;
 	private hasFocus = false;
 	private pageSize = 5;
@@ -88,7 +92,7 @@ export class GlanceConfigPane implements Component, Focusable {
 		private readonly theme: Pick<Theme, "fg"> & Partial<Pick<Theme, "bg">>,
 		private readonly done: (result: PaneResult) => void,
 		private readonly requestRender: () => void,
-		private readonly keybindings?: Pick<KeybindingsManager, "matches" | "getKeys">,
+		private readonly keybindings?: Pick<KeybindingsManager, "matches" | "getKeys"> & Partial<Pick<KeybindingsManager, "getEffectiveConfig">>,
 		private readonly getTerminalRows: () => number | undefined = () => undefined,
 		previewState?: GlanceState,
 		private readonly options: GlancePaneOptions = {},
@@ -143,7 +147,8 @@ export class GlanceConfigPane implements Component, Focusable {
 	}
 	private shortcut(item: HelpShortcut): string {
 		let key: string | undefined = item.key;
-		if (key === "Enter") key = this.bindingLabel("tui.select.confirm", "Enter");
+		if (this.model.page.kind === "shortcut") key = item.key;
+		else if (key === "Enter") key = this.bindingLabel("tui.select.confirm", "Enter");
 		else if (key === "Esc") {
 			key = this.bindingLabel("tui.select.cancel", "Esc");
 			if (!key) return "[Ctrl+C] Discard & close";
@@ -200,8 +205,29 @@ export class GlanceConfigPane implements Component, Focusable {
 			this.editNumber(data);
 			return;
 		}
+		if (this.model.page.kind === "shortcut" && (this.shortcutPasting || data.includes("\x1b[200~"))) {
+			this.shortcutPasting = true;
+			const end = data.indexOf("\x1b[201~");
+			this.dispatch({ type: "shortcut", error: "Press a shortcut; pasted text cannot be bound." });
+			if (end >= 0) {
+				this.shortcutPasting = false;
+				if (end + 6 < data.length) this.handleInput(data.slice(end + 6));
+			}
+			return;
+		}
 		if (matchesKey(data, Key.ctrl("c"))) {
 			this.dispatch({ type: "cancel" });
+			return;
+		}
+		if (this.model.page.kind === "shortcut") {
+			if (matchesKey(data, "escape")) this.dispatch({ type: "back" });
+			else if (matchesKey(data, "enter")) this.dispatch({ type: "activate" });
+			else {
+				const key = normalizeStashShortcut(parseKey(data));
+				const getEffectiveConfig = this.keybindings?.getEffectiveConfig;
+				const conflict = key && getEffectiveConfig ? shortcutConflict(data, key, { getEffectiveConfig: () => getEffectiveConfig.call(this.keybindings) }) : undefined;
+				this.dispatch({ type: "shortcut", key, error: conflict ? `Used by Pi: ${conflict}. Choose another shortcut.` : undefined });
+			}
 			return;
 		}
 		if (this.matches(data, "tui.select.cancel", Key.escape)) {
@@ -264,7 +290,7 @@ export class GlanceConfigPane implements Component, Focusable {
 		const value =
 			row.kind === "number"
 				? `‹ ${row.value} ›`
-				: row.value + (row.kind === "theme" || row.kind === "choice" || row.kind === "segment" ? "  ›" : "");
+				: row.value + (row.kind === "theme" || row.kind === "choice" || row.kind === "segment" || row.kind === "shortcut" ? "  ›" : "");
 		const left = mark + row.label + (row.changed ? " *" : "");
 		const tone = row.selected ? "accent" : row.value === "Off" ? "dim" : "muted";
 		const rendered = this.fg(tone, spread(left, value, width));
@@ -277,13 +303,13 @@ export class GlanceConfigPane implements Component, Focusable {
 		const view = this.view;
 		const sectionIndex = SETTINGS_SECTIONS.findIndex((section) => section.id === view.section);
 		const tabs =
-			width >= 46
+			width >= 64
 				? SETTINGS_SECTIONS.map((section) =>
 						section.id === view.section
 							? this.fg("accent", `[ ${section.label} ]`)
 							: this.fg("muted", `  ${section.label}  `),
 					).join(" ")
-				: this.fg("accent", `${SETTINGS_SECTIONS[sectionIndex]!.label} (${sectionIndex + 1}/3)`);
+				: this.fg("accent", `${SETTINGS_SECTIONS[sectionIndex]!.label} (${sectionIndex + 1}/${SETTINGS_SECTIONS.length})`);
 		const header = [
 			spread(
 				this.fg("accent", "◌ Glance"),
@@ -303,14 +329,14 @@ export class GlanceConfigPane implements Component, Focusable {
 				.map((line) => this.fg("accent", line)),
 		);
 		const hint = wrapTextWithAnsi(
-			this.fg(this.model.page.kind === "number" && this.model.page.error ? "warning" : "dim", view.hint),
+			this.fg(this.model.page.kind === "number" && this.model.page.error || this.model.page.kind === "shortcut" && this.model.page.error ? "warning" : "dim", view.hint),
 			Math.max(1, width),
 		).slice(0, 2);
 		let preview = this.renderPreview(view, width);
 		const title = this.fg("muted", view.title);
 		const base = header.length + 1 + hint.length + footer.length + 2;
 		const minimumRows =
-			view.page === "number" ? 1 : Math.min(4, view.page === "list" ? view.rows.length : view.choices.length);
+			view.page === "number" || view.page === "shortcut" ? 1 : Math.min(4, view.page === "list" ? view.rows.length : view.choices.length);
 		const showPreview = height - base - preview.length >= minimumRows;
 		if (showPreview !== this.previewVisible) {
 			this.previewVisible = showPreview;
@@ -320,7 +346,9 @@ export class GlanceConfigPane implements Component, Focusable {
 		const prefix = [...header, ...(showPreview ? preview : []), title];
 		const budget = Math.max(1, height - prefix.length - hint.length - footer.length - 1);
 		const body: string[] = [];
-		if (view.page === "number") {
+		if (view.page === "shortcut" && this.model.page.kind === "shortcut") {
+			body.push(this.fg("accent", shortcutLabel(this.model.page.key)));
+		} else if (view.page === "number") {
 			body.push(...this.input.render(Math.max(1, width)));
 		} else if (view.page !== "list") {
 			this.pageSize = Math.max(1, Math.min(8, budget - 1));

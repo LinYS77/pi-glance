@@ -33,6 +33,7 @@ Restart Pi or run `/reload`.
 
 - **Rounded editor** — Pi's editing, history, autocomplete, and keybindings stay the same.
 - **Adaptive status line** — Git · Cost · Model speed · Context · Tokens · Model. Folds as the terminal narrows.
+- **Prompt stash** — `alt+s` puts a prompt aside. Press again to restore or swap with current input.
 - **Working animation** — a sweep around the editor or along its top edge, with adjustable speed.
 - **22 palettes** — separate light and dark choices with live preview.
 
@@ -40,7 +41,7 @@ No runtime dependencies. No telemetry.
 
 ## Configure
 
-Run `/glance` for **Appearance**, **Status line**, and **Working** settings. Use `Tab` to switch sections, arrow keys to adjust, and `S` to save. Changes preview live.
+Run `/glance` for **Appearance**, **Status line**, **Working**, and **Input** settings. `Tab` switches sections, arrows adjust, and `S` saves. Input includes the Stash shortcut.
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/LinYS77/pi-glance/main/assets/settings.png" alt="pi-glance settings pane">
@@ -53,6 +54,8 @@ Run `/glance` for **Appearance**, **Status line**, and **Working** settings. Use
 ## Notes
 
 - Nerd Font icons are enabled by default. For regular fonts, select `Plain` in `/glance` → **Appearance** → **Icons**.
+- Git defaults and upgrades use **Summary**: changed files and tracked `+ / −` lines. **Auto fetch** updates the upstream every 5 minutes; turn it off under **Status line → Git**.
+- Drafts are stored locally per session, survive reloads, and are deleted on restore. `--no-session` keeps them in memory only.
 - Pi has one custom-editor slot; the last editor extension loaded wins.
 - Tested with Pi 0.84.4 and 0.85.1. Requires Node.js 22.19.0 or newer.
 

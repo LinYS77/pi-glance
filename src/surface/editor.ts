@@ -1,5 +1,7 @@
 import { CustomEditor, type KeybindingsManager } from "@earendil-works/pi-coding-agent";
-import { truncateToWidth, visibleWidth, type EditorOptions, type EditorTheme, type TUI } from "@earendil-works/pi-tui";
+import { isKeyRepeat, truncateToWidth, visibleWidth, type EditorOptions, type EditorTheme, type TUI } from "@earendil-works/pi-tui";
+import { matchesStashShortcut, shortcutConflict } from "../input/keybinding.js";
+import type { PromptStash } from "../input/stash.js";
 import { stripControls } from "./format.js";
 import { measureInputSurfaceFrame, renderInputSurfaceFrame } from "./frame.js";
 import { GlanceLineRenderer } from "./status-line.js";
@@ -8,6 +10,8 @@ import { resolveGlanceRenderStyles, type GlanceRenderStyleContext, type Resolved
 import type { GlanceConfig, GlanceState } from "../types.js";
 
 export interface GlanceEditorOptions {
+	readonly stash?: PromptStash;
+	readonly onStashError?: (message: string) => void;
 	readonly getWorkingElapsedMs?: () => number | undefined;
 	readonly editorOptions?: EditorOptions;
 	readonly renderStyleContext?: GlanceRenderStyleContext;
@@ -52,6 +56,7 @@ function indentAutocompleteLine(line: string, width: number, indentWidth: number
 
 export class GlanceEditor extends CustomEditor {
 	private readonly statusLine = new GlanceLineRenderer();
+	private pasting = false;
 
 	constructor(
 		tui: TUI,
@@ -66,6 +71,38 @@ export class GlanceEditor extends CustomEditor {
 	}
 
 	handleInput(data: string): void {
+		if (this.pasting || data.includes("\x1b[200~")) {
+			// A fragmented bracketed paste is text, even when a chunk looks like a shortcut.
+			if (data.includes("\x1b[200~")) this.pasting = true;
+			const end = data.indexOf("\x1b[201~");
+			const length = end < 0 ? data.length : end + 6;
+			super.handleInput(data.slice(0, length));
+			if (end >= 0) this.pasting = false;
+			if (length < data.length) this.handleInput(data.slice(length));
+			return;
+		}
+		const config = this.getConfig();
+		if (this.focused && config.enabled && config.editor.stashEnabled && this.glanceOptions?.stash && matchesStashShortcut(data, config.editor.stashShortcut)) {
+			if (isKeyRepeat(data)) return;
+			const conflict = shortcutConflict(data, config.editor.stashShortcut, this.appKeybindings);
+			if (conflict) {
+				this.glanceOptions.onStashError?.(`Stash shortcut is used by ${conflict}. Change it in /glance → Input.`);
+			} else {
+				// Existing extension shortcuts retain precedence over this editor feature.
+				if (this.onExtensionShortcut?.(data)) return;
+				const current = this.getExpandedText();
+				let restored: string;
+				try {
+					restored = this.glanceOptions.stash.exchange(current);
+				} catch {
+					this.glanceOptions.onStashError?.("Could not save the draft. Input was kept.");
+					return;
+				}
+				if (current !== restored) this.setText(restored);
+				this.tui.requestRender();
+				return;
+			}
+		}
 		const isThinkingCycle = this.appKeybindings.matches(data, "app.thinking.cycle");
 		super.handleInput(data);
 		if (isThinkingCycle) this.onThinkingLevelMaybeChanged?.();
@@ -123,6 +160,7 @@ export class GlanceEditor extends CustomEditor {
 				focus: isFocused ? "focused" : "unfocused",
 				topScrollIndicator: this.extractScrollIndicator(topOriginal, metrics.safeWidth),
 				bottomScrollIndicator: this.extractScrollIndicator(bottomOriginal, metrics.safeWidth),
+				hasDraft: this.glanceOptions?.stash?.hasDraft,
 			},
 			status: {
 				render: (budget, frameStyles) => this.statusLine.render(state, config, budget, state.providers.availableCount, { styles: frameStyles }),

@@ -69,12 +69,15 @@ function createContext(customResults: PaneResult[]): TestContext {
 		mode: "tui",
 		hasUI: true,
 		isIdle: () => true,
+		isProjectTrusted: () => false,
 		cwd: process.cwd(),
 		model: { id: "test-model", provider: "test-provider", contextWindow: 200_000 },
 		modelRegistry: {
 			getAvailable: () => [{ provider: "test-provider", id: "test-model" }],
 		},
 		sessionManager: {
+			getSessionId: () => "session-test",
+			getSessionFile: () => undefined,
 			getCwd: () => process.cwd(),
 			getEntries: () => [],
 			getBranch: () => [],
@@ -131,6 +134,7 @@ async function main(): Promise<void> {
 		const configDir = join(agentDir, "pi-glance");
 		const configPath = join(configDir, "config.json");
 		const initialConfig = defaultConfig();
+		initialConfig.git.autoFetch = false;
 		await mkdir(configDir, { recursive: true });
 		await writeFile(configPath, configToText(initialConfig), "utf8");
 

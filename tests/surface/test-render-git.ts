@@ -41,7 +41,7 @@ assert.equal(gitLine({ status: "clean" }), "git main", "clean branch stays quiet
 assert.equal(gitLine({ status: "dirty", dirty: true, unstaged: 1 }), "git main *", "dirty marker defaults on");
 assert.equal(
 	gitLine({ status: "dirty", dirty: true, unstaged: 1 }, (config) => {
-		config.git.showDirty = false;
+		config.git.changes = "hidden";
 	}),
 	"git main",
 	"dirty marker can be hidden",
@@ -50,7 +50,7 @@ assert.equal(
 	gitLine(
 		{ status: "conflict", dirty: true, conflicts: 1 },
 		(config) => {
-			config.git.showDirty = false;
+			config.git.changes = "hidden";
 		},
 	),
 	"git main !",
@@ -59,7 +59,7 @@ assert.equal(
 assert.equal(gitLine({ status: "conflict", dirty: true, conflicts: 1 }, undefined), "git main !", "conflict marker defaults on");
 assert.equal(gitLine({ ahead: 2, behind: 1 }), "git main ↑2 ↓1", "ahead/behind defaults on");
 assert.equal(gitLine({ status: "dirty", dirty: true, ahead: 2, behind: 1 }, undefined, 80), "git main *", "compact Git keeps branch/state and folds upstream detail");
-assert.equal(gitLine({ status: "conflict", conflicts: 1, ahead: 2 }, config => { config.git.showDirty = false; }, 80), "git main !", "compact Git must retain conflicts even with dirty markers disabled");
+assert.equal(gitLine({ status: "conflict", conflicts: 1, ahead: 2 }, config => { config.git.changes = "hidden"; }, 80), "git main !", "compact Git must retain conflicts even with dirty markers disabled");
 assert.equal(gitLine({ status: "dirty", dirty: true, unstaged: 1, ahead: 2, behind: 1 }, undefined, 48), "git main *", "minimal git keeps status over upstream counts");
 assert.equal(
 	gitLine({ ahead: 2, behind: 1 }, (config) => {
@@ -79,5 +79,11 @@ assert.equal(
 	"git a1b2c3d",
 	"sha detached shows sha on detached head",
 );
+
+assert.equal(gitLine({ status: "dirty", dirty: true, summary: { files: 3, additions: 42, deletions: 8 } }), "git main Δ3 +42 −8");
+assert.equal(gitLine({ status: "dirty", dirty: true, summary: { files: 3, additions: 42, deletions: 8 } }, undefined, 80), "git main Δ3");
+assert.equal(gitLine({ status: "dirty", dirty: true, summary: { files: 3, additions: 42, deletions: 8 } }, undefined, 48), "git main *");
+assert.equal(gitLine({ status: "conflict", conflicts: 2, summary: { files: 3, additions: null, deletions: null } }), "git main ! Δ3");
+assert.equal(gitLine({ status: "dirty", dirty: true, summary: { files: 1, additions: 0, deletions: 0 } }), "git main Δ1");
 
 console.log("✓ git render settings checks passed");

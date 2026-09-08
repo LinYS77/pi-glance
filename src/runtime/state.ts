@@ -135,7 +135,11 @@ function gitSnapshotsEqual(a: GitSnapshot, b: GitSnapshot): boolean {
 		a.untracked === b.untracked &&
 		a.conflicts === b.conflicts &&
 		a.dirty === b.dirty &&
-		a.status === b.status
+		a.status === b.status &&
+		a.stale === b.stale &&
+		a.summary?.files === b.summary?.files &&
+		a.summary?.additions === b.summary?.additions &&
+		a.summary?.deletions === b.summary?.deletions
 	);
 }
 

@@ -21,33 +21,39 @@ function gitStatusMark(ctx: SegmentRenderContext): string {
 	return "";
 }
 
-function gitDetailParts(ctx: SegmentRenderContext): string[] {
-	const git = ctx.state.git;
-	const parts: string[] = [];
-	const status = gitStatusMark(ctx);
-	if (status && (ctx.config.git.showDirty || git.status === "conflict")) parts.push(status);
-	if (ctx.config.git.showAheadBehind) {
-		if (git.ahead > 0) parts.push(`↑${git.ahead}`);
-		if (git.behind > 0) parts.push(`↓${git.behind}`);
-	}
-	return parts;
-}
-
 function collectGit(ctx: SegmentRenderContext): SegmentData | undefined {
 	const git = ctx.state.git;
 	if (!git.repo) return undefined;
 	const branch = gitBranchLabel(ctx);
-	const parts = gitDetailParts(ctx);
-	const secondary = parts.join(" ") || undefined;
-	const coreStatus = git.status === "conflict" || ctx.config.git.showDirty ? gitStatusMark(ctx) : "";
-	const core = [branch, coreStatus].filter(Boolean).join(" ");
+	const showMark = git.status === "conflict" || ctx.config.git.changes !== "hidden";
+	const mark = [showMark ? gitStatusMark(ctx) : "", git.stale ? "?" : ""].filter(Boolean).join(" ");
+	const core = [branch, mark].filter(Boolean).join(" ");
+	const summary = ctx.config.git.changes === "summary" && git.status !== "clean" && !git.stale ? git.summary : undefined;
+	const fileLabel = summary?.files ? `Δ${summary.files}` : "";
+	const compact = fileLabel
+		? [branch, git.status === "conflict" ? mark : "", fileLabel].filter(Boolean).join(" ")
+		: core;
+	const full = [compact];
+	if (fileLabel && summary && summary.additions !== null && summary.deletions !== null) {
+		if (summary.additions) full.push(`+${summary.additions}`);
+		if (summary.deletions) full.push(`−${summary.deletions}`);
+	}
+	const upstream: string[] = [];
+	if (ctx.config.git.showAheadBehind && !git.stale) {
+		if (git.ahead) upstream.push(`↑${git.ahead}`);
+		if (git.behind) upstream.push(`↓${git.behind}`);
+	}
+	full.push(...upstream);
+	let detailFallbacks: string[] | undefined;
+	if (fileLabel && ctx.widthMode !== "minimal") {
+		detailFallbacks = ctx.widthMode === "full"
+			? [[compact, ...upstream].join(" "), [core, ...upstream].join(" ")]
+			: [core];
+	}
 	return {
-		primary: branch,
-		secondary,
-		display: {
-			compact: core,
-			minimal: core,
-		},
+		primary: full.join(" "),
+		display: { compact, minimal: core },
+		detailFallbacks,
 	};
 }
 
@@ -56,13 +62,18 @@ export const gitSegmentFeature = {
 	label: "Git",
 	defaultEnabled: true,
 	settings: [
-		toggleSetting(
-			"git.dirtyMarker",
-			"Uncommitted changes",
-			"Mark a branch with uncommitted changes. Conflicts always stay visible.",
-			(c) => c.git.showDirty,
+		choiceSetting(
+			"git.changes",
+			"Changes",
+			"Show a marker or a compact change summary. Conflicts stay visible.",
+			[
+				{ value: "hidden", label: "Hidden" },
+				{ value: "marker", label: "Marker" },
+				{ value: "summary", label: "Summary" },
+			],
+			(c) => c.git.changes,
 			(c, v) => {
-				c.git.showDirty = v;
+				c.git.changes = v;
 			},
 		),
 		toggleSetting(
@@ -87,6 +98,12 @@ export const gitSegmentFeature = {
 			(c, v) => {
 				c.git.shaMode = v;
 			},
+		),
+		toggleSetting(
+			"git.fetch", "Auto fetch",
+			"Refresh the upstream branch every 5 minutes. No sign-in prompts; failures retry later.",
+			c => c.git.autoFetch,
+			(c, value) => { c.git.autoFetch = value; },
 		),
 		choiceSetting(
 			"git.polling",

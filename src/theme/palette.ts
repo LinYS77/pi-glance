@@ -5,6 +5,8 @@ export const PALETTES: Record<GlanceThemeName, GlancePalette> = Object.fromEntri
 	GLANCE_THEME_CATALOG.map((theme) => [theme.id, theme.palette]),
 ) as Record<GlanceThemeName, GlancePalette>;
 
+export const DRAFT_LABELS: Record<IconMode, string> = { nerd: "", plain: "draft" };
+
 export const ICONS: Record<IconMode, IconSet> = {
 	nerd: {
 		git: "",

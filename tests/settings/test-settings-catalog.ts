@@ -4,12 +4,15 @@ import { defaultConfig, configToText, configFromText } from "../../src/config/mo
 import { getSettingsRows, getThemeCatalogForSlot, SETTINGS_SECTIONS, type SettingsSectionId } from "../../src/settings/catalog.js";
 import { SEGMENT_IDS, type SegmentId } from "../../src/segments/registry.js";
 
-test("three sections have stable, user-facing labels and one home for each setting", () => {
+test("four sections have stable, user-facing labels and one home for each setting", () => {
 	const config = defaultConfig();
-	assert.deepEqual(SETTINGS_SECTIONS.map(s => s.label), ["Appearance", "Status line", "Working"]);
+	assert.deepEqual(SETTINGS_SECTIONS.map(s => s.label), ["Appearance", "Status line", "Working", "Input"]);
 	assert.deepEqual(getSettingsRows(config, "appearance").map(row => [row.label, row.value]), [
 		["Glance", "On"], ["Light palette", "Light"], ["Dark palette", "Dark"], ["Icons", "Nerd Font"],
-		["Workspace label", "Smart path"], ["Editor height", "3 rows"], ["Space above editor", "1 row"],
+		["Workspace label", "Smart path"],
+	]);
+	assert.deepEqual(getSettingsRows(config, "input").map(row => [row.label, row.value]), [
+		["Editor height", "3 rows"], ["Space above editor", "1 row"], ["Prompt stash", "On"], ["Stash shortcut", "alt+s"],
 	]);
 	assert.deepEqual(getSettingsRows(config, "working").map(row => [row.label, row.value]), [["Animation", "Full border"], ["Sweep speed", "47 cols/s"]]);
 	const rows = [...SETTINGS_SECTIONS.flatMap(s => getSettingsRows(config, s.id)), ...SEGMENT_IDS.flatMap(id => getSettingsRows(config, "status", id))];
@@ -23,13 +26,13 @@ test("three sections have stable, user-facing labels and one home for each setti
 
 test("all choices are directly selectable, immutable and round-trip through saved config", () => {
 	const config = defaultConfig(), before = structuredClone(config);
-	const rows = [...getSettingsRows(config, "appearance"), ...getSettingsRows(config, "working"), ...SEGMENT_IDS.flatMap(id => getSettingsRows(config, "status", id))];
+	const rows = [...getSettingsRows(config, "appearance"), ...getSettingsRows(config, "input"), ...getSettingsRows(config, "working"), ...SEGMENT_IDS.flatMap(id => getSettingsRows(config, "status", id))];
 	for (const row of rows) {
 		if (row.kind !== "choice" && row.kind !== "toggle") continue;
 		assert.equal(new Set(row.options.map(o => o.label)).size, row.options.length);
 		for (let index = 0; index < row.options.length; index++) {
 			const next = row.select(config, index);
-			const section: SettingsSectionId = row.id.startsWith("appearance") ? "appearance" : row.id.startsWith("working") ? "working" : "status";
+			const section: SettingsSectionId = row.id.startsWith("appearance") ? "appearance" : row.id.startsWith("input") ? "input" : row.id.startsWith("working") ? "working" : "status";
 			const segment: SegmentId | undefined = SEGMENT_IDS.find(id => row.id.startsWith(id + "."));
 			assert.equal(getSettingsRows(next, section, segment).find(r => r.id === row.id)!.value, row.options[index]!.label);
 			assert.deepEqual(configFromText(configToText(next)), next);

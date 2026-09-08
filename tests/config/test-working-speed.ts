@@ -36,7 +36,7 @@ test("schema v10 picks up speed in memory only and explicit save persists it ato
 		loaded.config.editor.workingSweepSpeed = 60;
 		await store.saveConfig(loaded.config);
 		const saved = JSON.parse(await readFile(path, "utf8"));
-		assert.equal(saved.version, 11);
+		assert.equal(saved.version, 12);
 		assert.equal(saved.editor.workingSweepSpeed, 60);
 		assert.equal(saved.editor.workingSweep, "top");
 	} finally { await rm(directory, { recursive: true, force: true }); }

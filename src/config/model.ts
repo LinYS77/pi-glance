@@ -1,3 +1,4 @@
+import { normalizeStashShortcut } from "../input/shortcut.js";
 import {
 	CONTEXT_DISPLAY_MODE_VALUES,
 	CONTEXT_UNKNOWN_MODE_VALUES,
@@ -30,12 +31,13 @@ import type {
 } from "../types.js";
 
 // CONFIG_VERSION is the on-disk config schema version, not the npm package version.
-export const CONFIG_VERSION = 11 as const;
+export const CONFIG_VERSION = 12 as const;
 
 const WORKING_SWEEP_MODES = new Set(WORKING_SWEEP_MODE_VALUES);
 const ICON_MODES = new Set<IconMode>(ICON_MODE_VALUES);
 const PROVIDER_MODES = new Set<GlanceConfig["display"]["showProvider"]>(PROVIDER_DISPLAY_MODE_VALUES);
 const WORKSPACE_LABEL_MODES = new Set<WorkspaceLabelMode>(WORKSPACE_LABEL_MODE_VALUES);
+const GIT_CHANGES_MODES = new Set(["hidden", "marker", "summary"] as const);
 const GIT_SHA_MODES = new Set<GitShaMode>(GIT_SHA_MODE_VALUES);
 const CONTEXT_DISPLAY_MODES = new Set<ContextDisplayMode>(CONTEXT_DISPLAY_MODE_VALUES);
 const CONTEXT_UNKNOWN_MODES = new Set<ContextUnknownMode>(CONTEXT_UNKNOWN_MODE_VALUES);
@@ -50,6 +52,8 @@ export function defaultConfig(): GlanceConfig {
 		theme: { light: "light", dark: "dark" },
 		icons: "nerd",
 		editor: {
+			stashEnabled: true,
+			stashShortcut: "alt+s",
 			minContentRows: 3,
 			topMarginRows: 1,
 			workingSweep: "perimeter",
@@ -65,7 +69,8 @@ export function defaultConfig(): GlanceConfig {
 			showThinking: "auto",
 		},
 		git: {
-			showDirty: true,
+			changes: "summary",
+			autoFetch: true,
 			showAheadBehind: true,
 			shaMode: "off",
 			timeoutMs: 1000,
@@ -209,6 +214,8 @@ export function normalizeConfig(raw: unknown): GlanceConfig {
 		theme: parseThemePair(record.theme, defaults.theme),
 		icons: parseStringEnum(record.icons, ICON_MODES, defaults.icons),
 		editor: {
+			stashEnabled: parseBool(editor.stashEnabled, defaults.editor.stashEnabled),
+			stashShortcut: normalizeStashShortcut(editor.stashShortcut) ?? defaults.editor.stashShortcut,
 			minContentRows: parseIntInRange(editor.minContentRows, defaults.editor.minContentRows, 2, 4),
 			workingSweepSpeed: WORKING_SPEED.normalize(editor.workingSweepSpeed),
 			workingSweep: typeof editor.workingSweep === "boolean"
@@ -233,7 +240,11 @@ export function normalizeConfig(raw: unknown): GlanceConfig {
 			showThinking: parseStringEnum(model.showThinking, MODEL_THINKING_MODES, defaults.model.showThinking),
 		},
 		git: {
-			showDirty: parseBool(git.showDirty, defaults.git.showDirty),
+			// v0.7 deliberately moves every legacy dirty preference to Summary.
+			changes: typeof record.version === "number" && record.version < 12
+				? "summary"
+				: parseStringEnum(git.changes, GIT_CHANGES_MODES, "summary"),
+			autoFetch: parseBool(git.autoFetch, defaults.git.autoFetch),
 			showAheadBehind: parseBool(git.showAheadBehind, defaults.git.showAheadBehind),
 			shaMode: parseStringEnum(git.shaMode, GIT_SHA_MODES, defaults.git.shaMode),
 			timeoutMs: parseTimerMs(git.timeoutMs, defaults.git.timeoutMs, 100),

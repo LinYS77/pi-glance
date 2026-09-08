@@ -25,7 +25,7 @@ test("first row edits immediately; source config and loaded-key order never crea
 	assert.equal(paneIsDirty(reset), false);
 });
 
-test("three sections keep their selected row and expose only task-relevant controls", () => {
+test("four sections keep their selected row and expose only task-relevant controls", () => {
 	let model = down(createPaneModel(defaultConfig()), 3);
 	assert.equal(selected(model).label, "Icons");
 	model = section(model);
@@ -33,6 +33,9 @@ test("three sections keep their selected row and expose only task-relevant contr
 	model = section(model);
 	assert.deepEqual(createPaneViewModel(model).rows.map(row => row.label), ["Animation", "Sweep speed"]);
 	assert.equal(createPaneViewModel(model).preview.working, true);
+	model = section(model);
+	assert.equal(model.section, "input");
+	assert.equal(createPaneViewModel(model).preview.working, false);
 	model = section(model);
 	assert.equal(selected(model).label, "Icons");
 	assert.equal(createPaneViewModel(model).preview.working, false);
@@ -49,8 +52,8 @@ test("status visibility, order and detail navigation are separate actions", () =
 	model = step(model, { type: "activate" });
 	assert.equal(createPaneViewModel(model).title, "Status line / Git (Off)");
 	assert.equal(createPaneViewModel(model).rows.some(row => row.label === "Enabled"), false);
-	const detailed = step(model, { type: "activate" });
-	assert.equal(detailed.draft.git.showDirty, false);
+	const detailed = step(step(step(model, { type: "activate" }), { type: "adjust", direction: -1 }), { type: "activate" });
+	assert.equal(detailed.draft.git.changes, "marker");
 	assert.equal(detailed.draft.segments.find(s => s.id === "git")!.enabled, false);
 	model = step(detailed, { type: "back" });
 	assert.equal(selected(model).label, "Git");

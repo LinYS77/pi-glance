@@ -13,7 +13,7 @@ function frame(lines: string[]): string[] {
 test("Working section previews mode and speed without touching the caller config", () => {
 	const h = paneHarness();
 	assert.equal(h.pending(), 0);
-	h.press(k.backTab);
+	h.press(k.backTab, k.backTab);
 	assert.equal(h.pending(), 1);
 	const first = frame(h.pane.render(100));
 	h.advance(900);
@@ -37,7 +37,7 @@ test("Working section previews mode and speed without touching the caller config
 
 test("animation off keeps the speed, stops preview, and re-enables a single clock", () => {
 	const h = paneHarness();
-	h.press(k.backTab, k.right, k.right); // perimeter -> top -> off
+	h.press(k.backTab, k.backTab, k.right, k.right); // perimeter -> top -> off
 	assert.equal(h.pending(), 0);
 	h.press(k.down, k.right);
 	assert.match(h.text(), /48 cols\/s/);
@@ -57,7 +57,7 @@ test("animation off keeps the speed, stops preview, and re-enables a single cloc
 test("hidden Working previews stop the clock and resume after resizing", () => {
 	const h = paneHarness();
 	h.height(10);
-	h.press(k.backTab);
+	h.press(k.backTab, k.backTab);
 	const stale = h.stale();
 	assert.doesNotMatch(h.text(), /Preview/);
 	assert.equal(h.pending(), 0);
@@ -74,7 +74,7 @@ test("hidden Working previews stop the clock and resume after resizing", () => {
 });
 
 test("closing a preview invalidates pending callbacks and further input", () => {
-	const h = paneHarness(); h.press(k.backTab);
+	const h = paneHarness(); h.press(k.backTab, k.backTab);
 	const stale = h.stale();
 	h.pane.dispose();
 	const renders = h.renders();

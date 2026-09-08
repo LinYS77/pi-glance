@@ -2,7 +2,8 @@ import { collectGitSnapshot } from "../src/runtime/git.js";
 import type { GitConfig } from "../src/types.js";
 
 const config: GitConfig = {
-	showDirty: true,
+	changes: "summary",
+	autoFetch: false,
 	showAheadBehind: true,
 	shaMode: "off",
 	timeoutMs: 1000,

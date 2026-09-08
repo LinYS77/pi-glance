@@ -56,7 +56,7 @@ test("loading old configs never rewrites them; explicit save persists the select
 			sync.config.editor.workingSweep = "perimeter";
 			await store.saveConfig(sync.config);
 			const saved = JSON.parse(await readFile(path, "utf8"));
-			assert.equal(saved.version, 11);
+			assert.equal(saved.version, 12);
 			assert.equal(saved.editor.workingSweep, "perimeter");
 			assert.equal(saved.icons, "nerd");
 			assert.equal(saved.display.workspaceLabel, "smart");

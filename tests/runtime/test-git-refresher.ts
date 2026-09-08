@@ -4,7 +4,8 @@ import { emptyGitSnapshot, parseGitStatus } from "../../src/runtime/git-snapshot
 import type { GitConfig, GitSnapshot } from "../../src/types.js";
 
 const config: GitConfig = {
-	showDirty: true,
+	changes: "summary",
+	autoFetch: false,
 	showAheadBehind: true,
 	shaMode: "off",
 	timeoutMs: 1000,
@@ -51,6 +52,8 @@ async function assertDebouncedSchedule(): Promise<void> {
 	const scheduler = createScheduler();
 	const refresher = new GitRefresher(() => config, () => "/repo", () => {}, { setTimer: scheduler.setTimer });
 	refresher.schedule(false);
+	refresher.schedule(false);
+	assert.equal(scheduler.timers.length, 1, "ordinary invalidations do not postpone the existing refresh");
 	refresher.schedule(true);
 	assert.equal(scheduler.timers.length, 2, "reschedule creates replacement timer");
 	assert.equal(scheduler.timers[0]!.delay, 1500, "first timer uses debounce delay");

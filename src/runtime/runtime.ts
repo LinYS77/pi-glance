@@ -1,3 +1,4 @@
+import { PromptStash } from "../input/stash.js";
 import { performance } from "node:perf_hooks";
 import { getCapabilities } from "@earendil-works/pi-tui";
 import type {
@@ -37,6 +38,7 @@ export interface RuntimeGitRefresher {
 }
 
 export interface CreateGitRefresherOptions {
+	canFetch(): boolean;
 	getConfig(): GlanceConfig["git"];
 	getCwd(): string | undefined;
 	onSnapshot(cwd: string, snapshot: GitSnapshot): void;
@@ -47,6 +49,8 @@ export interface RuntimeShowPaneOptions {
 }
 
 export interface GlanceRuntimeAdapters {
+	loadDraft?(sessionId: string): string | null;
+	saveDraft?(sessionId: string, text: string | null): void;
 	workingSweepNowMs?: () => number;
 	scheduleSweepFrame?: ScheduleSweepFrame;
 	getThinkingLevel(): string;
@@ -88,7 +92,7 @@ export interface GlanceRuntime {
 }
 
 function createDefaultGitRefresher(options: CreateGitRefresherOptions): RuntimeGitRefresher {
-	return new GitRefresher(options.getConfig, options.getCwd, options.onSnapshot);
+	return new GitRefresher(options.getConfig, options.getCwd, options.onSnapshot, { canFetch: options.canFetch });
 }
 
 function isTuiMode(ctx: ExtensionContext): boolean {
@@ -115,6 +119,8 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 	let requestRender: (() => void) | undefined;
 	let workingSweep: WorkingSweep | undefined;
 	let waitingForUi = false;
+	let stash: PromptStash | undefined;
+	let canFetch = () => false;
 	let uiGeneration = 0;
 	const nowMs = adapters.nowMs ?? (() => performance.now());
 	const getTrueColor = adapters.getTrueColor ?? (() => getCapabilities().trueColor);
@@ -176,6 +182,7 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 	function ensureGitRefresher(): RuntimeGitRefresher {
 		gitRefresher ??= (adapters.createGitRefresher ?? createDefaultGitRefresher)({
 			getConfig: () => getConfig().git,
+			canFetch: () => canFetch(),
 			getCwd: () => refreshSession.getState()?.workspace.path,
 			onSnapshot: (cwd, snapshot) => {
 				refreshSession.applyGitSnapshot(cwd, snapshot);
@@ -283,7 +290,10 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 				() => {
 					void refreshSession.editorThinkingCycle(ctx);
 				},
-				{ renderStyleContext, getWorkingElapsedMs: () => sweep.elapsedMs() },
+				{
+					renderStyleContext, getWorkingElapsedMs: () => sweep.elapsedMs(), stash,
+					onStashError: message => ctx.ui.notify(message, "warning"),
+				},
 			);
 		};
 		ownedEditorFactory = nextEditorFactory;
@@ -340,7 +350,20 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 		},
 		events: {
 			sessionStart: (_event, ctx) => {
+				canFetch = () => configWritable && ctx.isProjectTrusted() && process.env.PI_OFFLINE !== "1";
 				waitingForUi = false;
+				stash = undefined;
+				if (isTuiMode(ctx) && adapters.loadDraft && adapters.saveDraft) {
+					const sessionId = ctx.sessionManager.getSessionId();
+					const persistent = ctx.sessionManager.getSessionFile() !== undefined;
+					try {
+						stash = new PromptStash(persistent ? adapters.loadDraft(sessionId) : null, text => {
+							if (persistent) adapters.saveDraft!(sessionId, text);
+						});
+					} catch {
+						ctx.ui.notify("Could not read the saved draft. Stash is unavailable until /reload; the file was kept.", "warning");
+					}
+				}
 				acceptConfigLoad(adapters.loadConfigSync());
 				notifyConfigDiagnostic(ctx);
 				refreshSession.sessionStart(ctx);
