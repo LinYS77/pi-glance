@@ -1,5 +1,5 @@
 import { strict as assert } from "node:assert";
-import type { ExtensionCommandContext, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { ExtensionCommandContext, ExtensionContext, ReadonlyFooterDataProvider } from "@earendil-works/pi-coding-agent";
 import { defaultConfig } from "../../src/config/model.js";
 import type { ConfigLoadResult } from "../../src/config/store.js";
 import { createGlanceRuntime, type CreateGitRefresherOptions, type GlancePaneResult, type GlanceRuntimeAdapters, type RuntimeGitRefresher, type RuntimeShowPaneOptions } from "../../src/runtime/runtime.js";
@@ -13,7 +13,7 @@ export interface RuntimeNotification {
 	type: "info" | "warning" | "error" | undefined;
 }
 
-export type RuntimeCapturedFooterFactory = (tui: { requestRender(): void }, theme: unknown) => unknown;
+export type RuntimeCapturedFooterFactory = (tui: { requestRender(): void }, theme: unknown, footerData: ReadonlyFooterDataProvider) => unknown;
 export type RuntimeCapturedEditorFactory = (tui: { terminal: { rows: number }; requestRender(): void }, theme: unknown, keybindings: unknown) => unknown;
 
 export interface RuntimeMutableModelInfo {
@@ -30,6 +30,7 @@ export interface RuntimeMutableContextUsage {
 }
 
 export interface RuntimeTestContextOptions {
+	extensionStatuses?: Map<string, string>;
 	sessionId?: string;
 	persistent?: boolean;
 	trusted?: boolean;
@@ -49,6 +50,7 @@ export interface RuntimeTestContextOptions {
 }
 
 export interface RuntimeTestContext {
+	footerData: ReadonlyFooterDataProvider;
 	ctx: ExtensionCommandContext;
 	surfaceCalls: string[];
 	notifications: RuntimeNotification[];
@@ -256,6 +258,13 @@ export function createRuntimeTestContext(options: RuntimeTestContextOptions = {}
 	const invokeFooterFactory = options.invokeFooterFactory ?? true;
 	const fakeTui = { requestRender: () => renderRequests++ };
 	const fakeTheme = {};
+	const statuses = options.extensionStatuses ?? new Map<string, string>();
+	const footerData: ReadonlyFooterDataProvider = {
+		getExtensionStatuses: () => statuses,
+		getGitBranch: () => { throw new Error("Glance owns its Git source"); },
+		getAvailableProviderCount: () => { throw new Error("Glance owns its provider source"); },
+		onBranchChange: () => { throw new Error("Status rendering must not subscribe to Git changes"); },
+	};
 
 	const ctx = {
 		mode,
@@ -298,7 +307,7 @@ export function createRuntimeTestContext(options: RuntimeTestContextOptions = {}
 				surfaceCalls.push(factory ? "setFooter:install" : "setFooter:clear");
 				if (factory) {
 					footerFactories.push(factory as RuntimeCapturedFooterFactory);
-					if (invokeFooterFactory) (factory as RuntimeCapturedFooterFactory)(fakeTui, fakeTheme);
+					if (invokeFooterFactory) (factory as RuntimeCapturedFooterFactory)(fakeTui, fakeTheme, footerData);
 				}
 			},
 			setEditorComponent: (factory: unknown) => {
@@ -312,6 +321,7 @@ export function createRuntimeTestContext(options: RuntimeTestContextOptions = {}
 	} as unknown as ExtensionCommandContext;
 
 	return {
+		footerData,
 		ctx,
 		surfaceCalls,
 		notifications,
@@ -354,7 +364,7 @@ export function createRuntimeTestContext(options: RuntimeTestContextOptions = {}
 export function invokeFooterFactory(test: RuntimeTestContext, index: number, requestRender: () => void): unknown {
 	const factory = test.footerFactories[index];
 	assert.ok(factory, `expected footer factory ${index}`);
-	return factory({ requestRender }, {});
+	return factory({ requestRender }, {}, test.footerData);
 }
 
 export function invokeEditorFactory(test: RuntimeTestContext, index: number, requestRender: () => void, keybindings: { matches(data: string, action: string): boolean } = { matches: () => false }): unknown {

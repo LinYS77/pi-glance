@@ -4,7 +4,7 @@ import { performance } from "node:perf_hooks";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import { getCapabilities, matchesKey, ProcessTerminal, truncateToWidth, TuiAltScreen } from "@earendil-works/pi-tui";
 import { createConfigStore } from "../src/config/store.js";
-import { WORKING_SWEEP_MODE_VALUES, nextOption } from "../src/config/options.js";
+import { WORKING_SWEEP_COLOR_VALUES, WORKING_SWEEP_MODE_VALUES, nextOption } from "../src/config/options.js";
 import { WorkingSweep } from "../src/runtime/working-sweep.js";
 import { renderInputSurfaceFrame } from "../src/surface/frame.js";
 import { GlanceLineRenderer } from "../src/surface/status-line.js";
@@ -96,6 +96,8 @@ tui.addChild({
 			const current = previewTheme ?? selectGlanceTheme(config.theme, tone);
 			const direction = matchesKey(data, "left") ? -1 : 1;
 			previewTheme = GLANCE_THEME_IDS[(GLANCE_THEME_IDS.indexOf(current) + direction + GLANCE_THEME_IDS.length) % GLANCE_THEME_IDS.length];
+		} else if (matchesKey(data, "a")) {
+			config.editor.workingSweepColor = nextOption(config.editor.workingSweepColor, WORKING_SWEEP_COLOR_VALUES);
 		} else if (matchesKey(data, "c")) {
 			trueColor = !trueColor;
 		} else if (matchesKey(data, "e")) {
@@ -111,17 +113,17 @@ tui.addChild({
 	render(width) {
 		return [
 			"Glance Working 扫光 · 演示数据",
-			`${running ? "运行中" : "空闲"} · ${config.editor.workingSweep} · ${previewTheme ?? selectGlanceTheme(config.theme, tone)} · ${trueColor ? "RGB" : "ANSI 256"}`,
+			`${running ? "运行中" : "空闲"} · ${config.editor.workingSweep} · ${config.editor.workingSweepColor} · ${previewTheme ?? selectGlanceTheme(config.theme, tone)} · ${trueColor ? "RGB" : "ANSI 256"}`,
 			"",
 			...renderInputSurfaceFrame({
 				state, config, width,
-				styles: resolveBuiltInGlanceStyles(previewTheme ?? selectGlanceTheme(config.theme, tone), trueColor ? "truecolor" : "ansi256"),
+				styles: resolveBuiltInGlanceStyles(previewTheme ?? selectGlanceTheme(config.theme, tone), trueColor ? "truecolor" : "ansi256", config.editor.workingSweepColor),
 				body: { kind: "preview" },
 				chrome: { workingElapsedMs: sweep.elapsedMs() },
 				status: { render: renderStatus },
 			}),
 			"",
-			"Space 工作/空闲 · M 扫光模式 · ←/→ 配色 · T 亮暗 · C 色深",
+			"Space 工作/空闲 · M 扫光模式 · A 扫光颜色 · ←/→ 配色 · T 亮暗 · C 色深",
 			"S 长短路径 · E 告警 · Q 退出；可直接调整终端宽度。",
 		].map((line) => truncateToWidth(line, width));
 	},

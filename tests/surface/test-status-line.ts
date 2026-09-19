@@ -7,7 +7,7 @@ import { PALETTES, fg, fg256 } from "../../src/theme/palette.js";
 import { resolveBuiltInGlanceStyles } from "../../src/theme/adapter.js";
 import { GLANCE_THEME_IDS } from "../../src/theme/themes.js";
 import { testState } from "../support/helpers.js";
-import type { GlanceConfig, GlanceState, GlanceThemeName, SegmentId } from "../../src/types.js";
+import type { BuiltinSegmentId, GlanceConfig, GlanceState, GlanceThemeName, SegmentId } from "../../src/types.js";
 
 import { renderGlanceLine } from "../../src/surface/status-line.js";
 
@@ -77,7 +77,7 @@ function lastColorBefore(text: string, index: number): string | undefined {
 	return last;
 }
 
-const singleSegmentParityCases: Array<{ id: SegmentId; state: GlanceState; text: string }> = [
+const singleSegmentParityCases: Array<{ id: BuiltinSegmentId; state: GlanceState; text: string }> = [
 	{ id: "git", state: richState(), text: "git main *" },
 	{ id: "cost", state: richState(), text: "$0.042" },
 	{ id: "throughput", state: testState(), text: "spd ? tok/s" },

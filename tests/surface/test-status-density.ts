@@ -42,7 +42,7 @@ test("every segment crosses the same actual status-width boundaries", () => {
 	const config = defaultConfig();
 	config.icons = "plain";
 	for (const [width, mode] of [[96, "full"], [95, "compact"], [64, "compact"], [63, "minimal"]] as const) {
-		for (const [index, segment] of config.segments.entries()) {
+		for (const [index, segment] of config.segments.filter(s => s.id !== "extensions").entries()) {
 			const single = { ...config, segments: [segment] };
 			assert.equal(stripControls(renderGlanceLine(densityState(), single, width)), expected[mode][index], `${segment.id} at ${width} columns`);
 		}

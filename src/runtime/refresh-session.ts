@@ -138,12 +138,6 @@ const THINKING_LEVEL_SELECT: RefreshPlan = {
 	render: "changed",
 };
 
-const EDITOR_THINKING_CYCLE: RefreshPlan = {
-	...THINKING_LEVEL_SELECT,
-	ensureConfig: false,
-	ensureState: false,
-};
-
 const CONFIG_SAVED: RefreshPlan = {
 	...LIFECYCLE_MODEL_IMMEDIATE,
 	ensureConfig: false,
@@ -310,10 +304,6 @@ export class RuntimeRefreshSession {
 
 	async configSaved(ctx: ExtensionContext, beforeRender?: () => void): Promise<void> {
 		await this.refresh(ctx, CONFIG_SAVED, { beforeRender });
-	}
-
-	async editorThinkingCycle(ctx: ExtensionContext): Promise<void> {
-		await this.refresh(ctx, EDITOR_THINKING_CYCLE);
 	}
 
 	messageUpdate(event: RuntimeMessageUpdateInput): void {

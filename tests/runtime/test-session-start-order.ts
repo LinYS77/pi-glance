@@ -1,3 +1,4 @@
+import { createRuntimeTestContext } from "../support/runtime-harness.js";
 import piGlance from "../../index.js";
 import { strict as assert } from "node:assert";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
@@ -34,38 +35,6 @@ function getHandler(pi: CapturedPi, event: string): CapturedHandler {
 	return handler;
 }
 
-function createContext(calls: string[], mode: "tui" | "rpc" | "json" | "print" = "tui"): ExtensionContext {
-	let currentEditorFactory: unknown;
-	return {
-		mode,
-		isIdle: () => true,
-		isProjectTrusted: () => false,
-		hasUI: mode === "tui" || mode === "rpc",
-		cwd: process.cwd(),
-		model: { id: "test-model", provider: "test-provider", contextWindow: 200_000 },
-		modelRegistry: {
-			getAvailable: () => [{ provider: "test-provider", id: "test-model" }],
-		},
-		sessionManager: {
-			getSessionId: () => "session-test",
-			getSessionFile: () => undefined,
-			getCwd: () => process.cwd(),
-			getEntries: () => [],
-			getBranch: () => [],
-		},
-		ui: {
-			setWorkingVisible: (_visible: boolean) => {},
-			setFooter: (factory: unknown) => calls.push(factory ? "setFooter:install" : "setFooter:clear"),
-			setEditorComponent: (factory: unknown) => {
-				currentEditorFactory = factory;
-				calls.push(factory ? "setEditorComponent:install" : "setEditorComponent:clear");
-			},
-			getEditorComponent: () => currentEditorFactory,
-		},
-		getContextUsage: () => ({ tokens: 0, contextWindow: 200_000, percent: 0 }),
-	} as unknown as ExtensionContext;
-}
-
 async function main(): Promise<void> {
 	const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
 	const agentDir = await mkdtemp(join(tmpdir(), "pi-glance-session-start-"));
@@ -76,10 +45,9 @@ async function main(): Promise<void> {
 		const enabledPi = createPi();
 		piGlance(enabledPi.api);
 		assert.ok(enabledPi.handlers.has("thinking_level_select"), "entry point should register Pi /thinking selection notifications");
-		assert.ok(enabledPi.handlers.has("ui_prompt_start"), "entry point should register Pi 0.84.4 ui_prompt_start notifications");
-		assert.ok(enabledPi.handlers.has("ui_prompt_end"), "entry point should register Pi 0.84.4 ui_prompt_end notifications");
-		const enabledCalls: string[] = [];
-		const enabledContext = createContext(enabledCalls);
+		assert.ok(enabledPi.handlers.has("ui_prompt_start"), "entry point should register Pi ui_prompt_start notifications");
+		assert.ok(enabledPi.handlers.has("ui_prompt_end"), "entry point should register Pi ui_prompt_end notifications");
+		const { ctx: enabledContext, surfaceCalls: enabledCalls } = createRuntimeTestContext({ cwd: process.cwd(), trusted: false, persistent: false });
 		const enabledResult = getHandler(enabledPi, "session_start")({ type: "session_start" }, enabledContext);
 
 		assert.equal(isPromiseLike(enabledResult), false, "session_start should be synchronous for default enabled config");
@@ -91,8 +59,8 @@ async function main(): Promise<void> {
 		for (const mode of ["rpc", "json", "print"] as const) {
 			const nonTuiPi = createPi();
 			piGlance(nonTuiPi.api);
-			const nonTuiCalls: string[] = [];
-			const nonTuiResult = getHandler(nonTuiPi, "session_start")({ type: "session_start" }, createContext(nonTuiCalls, mode));
+			const { ctx, surfaceCalls: nonTuiCalls } = createRuntimeTestContext({ mode, trusted: false, persistent: false });
+			const nonTuiResult = getHandler(nonTuiPi, "session_start")({ type: "session_start" }, ctx);
 			assert.equal(isPromiseLike(nonTuiResult), false, `${mode} session_start should stay synchronous for default enabled config`);
 			assert.deepEqual(nonTuiCalls, [], `${mode} session_start should not install or clear TUI footer/editor`);
 		}
@@ -102,13 +70,11 @@ async function main(): Promise<void> {
 
 		const disabledPi = createPi();
 		piGlance(disabledPi.api);
-		const disabledCalls: string[] = [];
-		const disabledResult = getHandler(disabledPi, "session_start")({ type: "session_start" }, createContext(disabledCalls));
+		const { ctx: disabledContext, surfaceCalls: disabledCalls } = createRuntimeTestContext({ trusted: false, persistent: false });
+		const disabledResult = getHandler(disabledPi, "session_start")({ type: "session_start" }, disabledContext);
 
 		assert.equal(isPromiseLike(disabledResult), false, "session_start should also be synchronous for disabled config");
-		assert.deepEqual(disabledCalls.filter((call) => call.endsWith(":install")), [], "disabled config should not claim custom footer/editor");
-		assert.equal(disabledCalls.includes("setEditorComponent:clear"), false, "disabled config should leave an editor it never owned untouched");
-		assert.ok(disabledCalls.includes("setFooter:clear"), "disabled config should synchronously restore the built-in footer");
+		assert.deepEqual(disabledCalls, [], "disabled startup leaves both editor and footer slots untouched");
 	} finally {
 		if (previousAgentDir === undefined) delete process.env.PI_CODING_AGENT_DIR;
 		else process.env.PI_CODING_AGENT_DIR = previousAgentDir;

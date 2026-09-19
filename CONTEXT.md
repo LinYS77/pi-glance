@@ -27,7 +27,7 @@ pi-glance handles:
 - always-on adaptive segment fitting;
 - the `/glance` settings pane, bounded theme browser, and transient density preview;
 - Pi selection keybindings, four settings sections and direct row editing;
-- six display features: Git, Cost, Model speed, Context, Tokens, and Model;
+- six built-in facts (Git, Cost, Model speed, Context, Tokens, Model) and one external Extensions group;
 - its 22 palettes;
 - asynchronous cached Git summaries and noninteractive upstream fetch;
 - a single session-local prompt stash with configurable shortcut;
@@ -106,7 +106,7 @@ Configuration rules, setting descriptors, settings state and catalog, Git status
 
 `RuntimeRefreshSession` exposes lifecycle methods such as `modelSelect`, `sessionTree`, `messageEnd`, and `agentSettled`. It handles snapshot selection and update ordering internally.
 
-Each segment returns display content, a color level, and any custom icon spacing. The renderer applies palette colors without parsing display text. Context uses Pi's unrounded percentage for warning (`>=75`) and error (`>=90`) colors in every display mode. An unknown percentage keeps the normal color, even when token counts are available.
+Each built-in segment returns display content, a color level, and any custom icon spacing. Extensions is an ordered status item, not a synthetic built-in fact: it has no collector, palette entry or Glance icon. The renderer applies palette colors without parsing display text. Context uses Pi's unrounded percentage for warning (`>=75`) and error (`>=90`) colors in every display mode. An unknown percentage keeps the normal color, even when token counts are available.
 
 ## Refresh and render rules
 
@@ -126,8 +126,8 @@ Each segment returns display content, a color level, and any custom icon spacing
 - The pane has four sections: **Appearance**, **Status line**, **Working**, and **Input**. Tab/Shift+Tab cycles sections while in a list. Sections remember their last list/detail page, and each segment remembers its selected detail row. There is no separate value-focus column.
 - Up/Down selects a row; lists and paged moves stop at their ends. Left/Right means previous/next for choices and palettes, slower/faster for speed, and Off/On for booleans and status items. Directional adjustments do not wrap or toggle repeatedly. Enter toggles a boolean or opens its editor/details; Space toggles boolean/status rows. Pi selection bindings are used for input and displayed in the hints.
 - Appearance owns the Glance toggle, light/dark palettes, icons and workspace label. Input owns editor height, top spacing, Prompt stash and its shortcut. Palette labels explicitly describe Glance colors, not Pi theme switching.
-- The Status line overview owns visibility and ordering. Space toggles a segment, Left/Right sets Off/On, J/K reorders it, and Enter opens its detail settings. Detail pages do not duplicate the visibility toggle or show read-only facts as editable rows. Disabled segments remain configurable and are marked Off in the detail title.
-- Working owns animation mode and sweep speed. The speed accepts whole numbers from 10 to 120 columns/second, defaults to 47, and adjusts by one with Left/Right. Enter opens Pi's `Input` for direct entry. The first printable key replaces the original number, including Kitty input; editing keys allow normal cursor editing. Valid input previews immediately. Incomplete/invalid text retains the last valid preview and shows an error only on confirmation. Paste payloads and letter shortcuts remain text while editing.
+- The Status line overview owns visibility and ordering. Space toggles a segment, Left/Right sets Off/On, J/K reorders it, and Enter opens details. Extensions uses the same overview interaction, with a read-only live status list rather than editable settings. Detail pages do not duplicate the visibility toggle or show read-only facts as editable rows. Disabled segments remain configurable and are marked Off in the detail title.
+- Working owns animation mode, sweep speed and sweep color. Sweep color offers Theme default, Amber, Rose, Violet, Blue, Teal, Mint, Coral and Copper, with live preview and the usual Enter Confirm / Esc Cancel flow. It stays configurable while animation is off. The speed accepts whole numbers from 10 to 120 columns/second, defaults to 47, and adjusts by one with Left/Right. Enter opens Pi's `Input` for direct entry. The first printable key replaces the original number, including Kitty input; editing keys allow normal cursor editing. Valid input previews immediately. Incomplete/invalid text retains the last valid preview and shows an error only on confirmation. Paste payloads and letter shortcuts remain text while editing.
 - Every field editor uses **Enter Confirm / Esc Cancel**: confirm keeps the value in the draft and returns to the same row; cancel restores the pre-edit value without losing earlier draft changes. Choices/palettes preview with arrow keys and keep their original option list stable. A saved custom value remains explicitly selectable rather than being replaced on open.
 - Only lists expose S to save and close, R to reset, and Tab to change sections. Field editors must be confirmed or cancelled first, so browsing a palette cannot accidentally save the entire draft. The view model supplies both navigation hints and actions; the TUI adapter resolves Pi's actual keybindings and does not invent page-specific actions. No file is written by the pane itself.
 - Reset and leaving the root with unsaved changes require confirmation, initially selecting **Keep editing**. Ctrl-C remains an unconditional cancel. Reset changes the draft only until saved and retains the current section/selected setting.
@@ -169,9 +169,19 @@ Pi exposes one custom-editor factory slot.
 
 When pi-glance installs its editor it records the previous factory. On disable or shutdown it restores that factory only if Pi still reports pi-glance's own factory as current. If another extension has taken ownership, pi-glance leaves it untouched.
 
-An enabled-to-enabled config save does not reinstall the editor or footer, preserving the live editor instance and Pi-owned editing state.
+An enabled-to-enabled config save does not reinstall the editor or footer, preserving the live editor instance and Pi-owned editing state. Pi disposes the Glance footer when another extension replaces it; that notification detaches the status source and releases ownership. Disable and shutdown only restore the built-in footer while Glance still owns the slot. Disabled startup leaves both editor and footer slots untouched.
 
 Pi has no public footer getter or zero-height hidden footer. An empty footer row therefore remains in fullscreen mode.
+
+## Extension statuses
+
+`Extensions` is enabled by default in Status line, between Tokens and Model. It can be toggled and reordered like other status items. Enter opens a read-only detail view of publisher keys and current text, even while the group is Off or too narrow to appear in the preview. An empty view distinguishes an unattached footer data source from an attached source with no visible statuses. Up/Down and page keys scroll; switching sections remembers the position. Live text is never presented as an editable setting or saved to config. Empty and ANSI-only values leave no text, icon, separator or additional footer row. Old configs gain the item immediately before Model, preserving the existing items' order and enabled flags; changes are only written on Save.
+
+The runtime captures only the public `getExtensionStatuses` capability from the existing `setFooter` factory and passes a lazy source to the editor and settings preview. The footer still returns `[]`; it does not transport values through its render method. Disposing that footer, disabling Glance, shutdown and generation changes detach the source. Pi owns the Map and triggers TUI rendering on `ctx.ui.setStatus()`. Glance neither polls nor intercepts publishers, and does not add an event bus protocol or put external UI text in `GlanceState` or the session ledger.
+
+Rendering copies entries, sorts by key, normalizes CR/LF/Tab to spaces, trims with Pi's column-aware tools and displays values only. Glance supplies the base text and separator colors; publisher SGR styling and OSC 8 links remain intact, while cursor, screen and clipboard commands are stripped. Each value resets SGR and closes OSC 8 before the next item. Both preview and editor read the live source on render. The line cache compares copied normalized string values, including ANSI: same-Map, same-key, same-size changes do not require a state revision. Each line render normalizes once and uses that snapshot for both cache comparison and fitting. Whole-entry overflow fitting measures entries once rather than repeatedly joining every shorter prefix. The settings pane reads one provider Map per render for its preview and detail view.
+
+External text receives only columns left after fitting the built-in facts, capped at one third of the status budget when built-ins are present. Four columns are the minimum useful external budget. Without built-ins it may use the whole budget. Overflow first preserves complete leading entries plus `…`; if the first alone is too long it is column-truncated. With no useful room the entire group disappears. Extension text never makes an otherwise-visible built-in label shorter or disappear. Widgets, dialogs, and arbitrary custom editors/footers are not converted into statuses; Pi's single-slot ownership limits still apply.
 
 ## Prompt stash
 
@@ -205,13 +215,15 @@ Both modes use `editor.workingSweepSpeed`, defaulting to **47 horizontal columns
 
 Top-edge mode crosses the title and its connector; corners, right-hand status, scroll labels and other edges remain unchanged. Perimeter mode follows one clockwise closed path through the title, visible top border, corners, sides and bottom. It uses circular distance for a seamless wrap, including the feathered tail. One vertical row counts as two horizontal cells to approximate terminal-cell proportions. The loop uses the actual rendered body height, excluding top spacing and autocomplete. Status text and the draft hint, including their surrounding spaces, do not consume path distance: the beam bridges those gaps instead of disappearing behind metadata. Status bytes, draft labels and scroll labels remain unchanged in both modes.
 
-`src/theme/working-colors.ts` assigns one chromatic accent per palette; title and border share that peak and intensity. Tests check Oklab color separation from both original foregrounds and at least 4.5:1 peak contrast on reference backgrounds in RGB and ANSI256. Reference backgrounds include black/white and `#282828`/`#f5f5f5`; no terminal-background query is made, so arbitrary terminal backgrounds are not guaranteed. The radius is bounded to 9–28 columns, reduced further on tiny loops, with a broad bold core and smooth edges. Unlit text retains its original color. Both modes preserve input bytes, cursor markers, Pi's Bash border callback and unfocused dimming; one-column frames remain static in perimeter mode.
+`src/theme/working-colors.ts` keeps the original recommended accent for each palette and eight curated alternatives selected by `editor.workingSweepColor`: `theme` (default), `amber`, `rose`, `violet`, `blue`, `teal`, `mint`, `coral`, and `copper`. `/glance` → Working → Sweep color uses the shared choice picker. Colors follow the selected Glance palette, not a global RGB swatch: light palettes use deeper accents and dark palettes brighter ones. The same choice applies to both theme slots and both sweep modes. It changes only the beam, never idle colors, status facts, warnings, input or Pi's Bash border callback. Saving replaces config in place without reinstalling the editor or changing sweep speed; cancelling or failed/read-only saves retain the active color.
+
+Title and border share one peak and intensity. Tests check chromaticity, Oklab separation from the original title/border, and at least 4.5:1 peak contrast on reference backgrounds in RGB and ANSI256 for all 22 palettes and nine choices. Theme default retains its original, stronger separation threshold and exact output. Reference backgrounds include black/white and `#282828`/`#f5f5f5`; no terminal-background query is made, so arbitrary terminal backgrounds are not guaranteed. The radius is bounded to 9–28 columns, reduced further on tiny loops, with a broad bold core and smooth edges. Unlit text retains its original color. Both modes preserve input bytes, cursor markers, Pi's Bash border callback and unfocused dimming; one-column frames remain static in perimeter mode.
 
 `src/runtime/working-sweep.ts` owns the 30 FPS display clock and ordinary Working-row visibility. It runs only while Glance owns the editor, pauses for blocking UI, and stops at `agent_settled` when Pi is idle. Disabling the effect or Glance restores the native Working row. Re-enabling during a prompt waits for `ui_prompt_end` before animating. Retry and compaction notices remain Pi-owned. Pi has no getter for Working-row visibility, so Glance cannot restore a different extension's prior hidden-row preference.
 
-The live editor, settings preview and Working demo share `GlanceLineRenderer` in `src/surface/status-line.ts`. Each surface keeps one cached status string, invalidated by state identity/revision, config replacement, available width, provider count, palette/color mode or explicit density. Config changes replace the config object; session facts increment `state.version`. Prompt content, cursor markers, frame layout and animation are never cached with the status line. Settings view models are rebuilt on input rather than every animation frame, and a hidden preview pauses its clock.
+The live editor, settings preview and Working demo share `GlanceLineRenderer` in `src/surface/status-line.ts`. Each surface keeps one cached status string, invalidated by state identity/revision, config replacement, available width, provider count, palette/color mode, explicit density or external status contents. Config changes replace the config object; session facts increment `state.version`. Prompt content, cursor markers, frame layout and animation are never cached with the status line. Settings view models are rebuilt on input rather than every animation frame, and a hidden preview pauses its clock.
 
-`src/surface/text.ts` owns plain and styled clipping. Plain text is measured once per grapheme; styled text that already fits bypasses truncation, preserving its bytes. Overflow still uses Pi's ANSI-aware truncation. Palette and gradient styles precompute their escape prefixes, including ANSI256 conversion.
+`src/surface/text.ts` owns plain and styled clipping. Plain text is measured once per grapheme; styled text that already fits bypasses truncation, preserving its bytes. Overflow still uses Pi's ANSI-aware truncation. Palette and gradient styles precompute their escape prefixes, including ANSI256 conversion. The style cache is bounded to 22 palettes × 2 color modes × 9 sweep colors.
 
 Animation does not recolor or collect status facts. `src/surface/sweep.ts` shades only glyphs near the beam and emits unlit text in bulk. Unicode measurements have a bounded cache (32 strings, at most 1,024 UTF-16 units each); palette/gradient resources are reused by theme and color mode. `top-edge-sweep.ts` supplies the open-path profile; `perimeter-sweep.ts` maps frame coordinates to the closed path. Animation does not share the Model speed clock, invalidate its data, or replay missed frames after a blocked event loop.
 
@@ -245,7 +257,7 @@ gpt-6-astra
 
 The shared densities start at alternatives 1, 3 and 4 respectively. Alternative 2 is an intermediate overflow fallback within full density, not the default compact label. If the label still does not fit, try the remaining shorter alternatives in order. The final tier removes exactly one leading `<provider>-` prefix, matched case-insensitively against the current provider. Other prefixes, occurrences inside the name, an empty remainder, and configured custom aliases are left intact. Explicit `always` labels remain attached at every tier. There are no fixed per-density name-length caps.
 
-`src/segments/model.ts` supplies these alternatives as data; `src/segments/render.ts` measures columns and truncates at grapheme boundaries. The status-line fitter tries them before removing the segment. It keeps configured priority: earlier facts are not shortened or dropped to preserve later ones. Only after the shortest applicable tier fails to fit does the renderer use grapheme-safe middle ellipsis. An ellipsized name needs at least seven available columns; otherwise the trailing segment is removed. The last remaining segment retains the emergency width-safe clipping behavior at tiny widths. Growing the terminal re-renders from the full state, not the previously shortened string. The live status cache keeps this work off animation frames.
+`src/segments/model.ts` supplies these alternatives as data; `src/segments/render.ts` measures columns and truncates at grapheme boundaries. Display order and removal priority are separate: **Model is always the last built-in item removed**, wherever the user places it. Other built-ins retain their relative configured priority. Git detail yields first, and the trailing fact's shorter labels are tried before removing the lowest-priority non-Model fact. Only after the shortest applicable model tier fails to fit does the renderer use grapheme-safe middle ellipsis. An ellipsized name needs at least seven available columns. The last remaining Model retains emergency width-safe clipping at tiny widths. Explicitly disabled Model stays disabled. Growing the terminal re-renders from full state, not shortened strings.
 
 ## Theme selection
 
@@ -267,13 +279,14 @@ Both slots can select any of the 22 palettes. `/glance` does not change Pi theme
 
 For Bash input (`getText().trimStart().startsWith("!")`), the live frame uses the editor's public `borderColor` callback. Pi updates this callback when input mode or theme changes. Normal input, title, and status keep Glance colors; unfocused borders remain dimmed. Changing only the border does not invalidate the status cache.
 
-At extremely narrow widths, the inherited editor is given enough room for a two-column character plus padding and cursor space. Glance then clips the result to the frame width. This avoids Pi 0.84's one-column wrapping recursion without changing the text.
+At extremely narrow widths, the inherited editor is given enough room for a two-column character plus padding and cursor space, then clipped through the frame. Pi 0.85.0 still reproduces the one-column wide-grapheme recursion, so this guard and recognition of truncated scroll borders remain necessary. Thinking shortcuts now rely solely on Pi's `thinking_level_select` event; the old editor key callback and duplicate refresh plan have been removed.
 
 ## Configuration
 
-- Current on-disk schema version: `12`.
-- New-install and settings-reset defaults use Nerd Font icons, smart workspace paths, one top-margin row, and all six segments enabled. Other defaults include a three-row editor, full-border Working animation, light/dark palette slots, input/output Tokens with cache rate, and automatic provider/thinking labels. Defaults fill missing or invalid values; saved choices are preserved except for the deliberate pre-v12 Git Summary migration. Changing defaults does not change the schema version.
+- Current on-disk schema version: `14`.
+- New-install and settings-reset defaults use Nerd Font icons, smart workspace paths, one top-margin row, and all seven status items enabled. Other defaults include a three-row editor, full-border Working animation, light/dark palette slots, input/output Tokens with cache rate, and automatic provider/thinking labels. Defaults fill missing or invalid values; saved choices are preserved except for the deliberate pre-v12 Git Summary migration. Changing defaults does not change the schema version.
 - Missing or invalid `editor.workingSweep` defaults to `perimeter`; legacy `true` remains `top` and `false` remains `off`. Explicit saved modes are preserved. Migration is in memory and writes only on an explicit save.
+- Missing or invalid `editor.workingSweepColor` defaults to `theme`, preserving the previous beam. Pre-v14 configs gain it in memory only; Save persists the chosen value. Git's pre-v12 migration threshold and saved extension ordering/visibility remain unchanged.
 - Missing or invalid `editor.workingSweepSpeed` defaults to 47. Finite numbers are rounded and clamped to 10–120. Older config files gain the field in memory; loading does not rewrite them.
 - Git timeout, debounce and polling delays are capped at Node's timer limit (2,147,483,647 ms), preventing large saved values from turning into one-millisecond timers.
 - Legacy theme strings migrate to the same palette in both slots.
@@ -287,12 +300,13 @@ At extremely narrow widths, the inherited editor is given enough room for a two-
 
 ## Compatibility and packaging
 
-- Development baseline: Pi `0.84.4`.
+- Minimum supported Pi: `0.85.0`. Development dependencies pin `0.85.1`, which fixes 0.85.0's npm SDK import failure; baseline host checks use 0.85.0's bundled CLI.
 - Node floor: `>=22.19.0`.
-- Pi packages are wildcard peer dependencies supplied by Pi and are not bundled.
+- Pi packages are `>=0.85.0` peer dependencies supplied by Pi and are not bundled.
 - Production source is shipped directly as TypeScript: root `index.ts` plus `src/**/*.ts`. Tests and fixtures are not shipped.
 - CI and GitHub Release share the Node 22.19/24 test workflow. Branch CI does not run on tags.
 - Tests import the project interfaces directly. Import-graph checks detect cycles and forbidden dependencies; separate fixtures verify palette data.
+- Display tests separate config upgrades, the shared save transaction, footer lifecycle, fitting and settings interactions. Live/preview parity compares the real entry points, not a copy of the renderer inside test helpers. Color-data checks cover all palette/color/depth combinations; UI tests use representative choices and scroll boundaries instead of repeating the same save matrix for every preference.
 - The package test compares `npm pack --dry-run` output with the full production file list.
 
 ## Repository files
@@ -305,7 +319,8 @@ At extremely narrow widths, the inherited editor is given enough room for a two-
 
 Developer utilities:
 - `npm run bench:render` measures live editor and settings render time in RGB/ANSI256, both sweep modes, and 80/160-column terminals. It uses a fixed clock and example data, with no terminal or config writes. Compare runs on the same Node version and machine; timings are not CI pass/fail thresholds.
+- `scripts/demo-extension-statuses.ts` is an opt-in test publisher, not a shipped extension. It emits clearly labelled DEMO quotas through `setStatus()`; `/glance-demo normal|low|long|clear` changes or clears only its own keys. It does not read credentials, make network calls, run timers or alter subscriptions. Try it with `pi -e ./scripts/demo-extension-statuses.ts`; it is not auto-loaded by the project.
 - `npm run debug:git -- /path/to/repo` prints a Git snapshot.
 - `npm run preview:input` exercises the real editor, Stash and settings with sample Git facts. F2 opens settings, Enter clears the prompt and Ctrl+C closes. No model, network, config or draft-file writes occur.
 - `npm run preview:settings` opens the new settings pane with example data. Save/close exits the preview without writing configuration. Use `-- --light` or `-- --256` to check color modes.
-- `npm run preview:working` previews Working animation and status density without model calls or configuration writes. Use `M` for sweep modes, Left/Right for palettes, `C` for color depth, and resize the terminal to check fitting.
+- `npm run preview:working` previews Working animation and status density without model calls or configuration writes. Use `M` for sweep modes, `A` for sweep colors, Left/Right for palettes, `C` for color depth, and resize the terminal to check fitting.

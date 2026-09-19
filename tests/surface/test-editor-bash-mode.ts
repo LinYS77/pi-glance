@@ -22,7 +22,7 @@ function createEditor(trueColor = true) {
 	const styles = resolveBuiltInGlanceStyles("light", trueColor ? "truecolor" : "ansi256");
 	const editor = new GlanceEditor(
 		{ terminal: { rows: 12 }, requestRender: () => undefined } as unknown as TUI,
-		theme, keybindings, () => testState(), () => config, undefined,
+		theme, keybindings, () => testState(), () => config,
 		{ renderStyleContext: { styles } },
 	);
 	editor.focused = true;

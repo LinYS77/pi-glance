@@ -109,7 +109,6 @@ function createSessionHarness(initialConfig: GlanceConfig = cloneConfig()): Sess
 	await harness.session.turnEnd({}, ctx.ctx);
 	await harness.session.agentEnd({}, ctx.ctx);
 	await harness.session.thinkingLevelSelect(ctx.ctx);
-	await harness.session.editorThinkingCycle(ctx.ctx);
 	assert.equal(harness.getRenderCount(), renderBaseline, "stable lifecycle and thinking refreshes should not request redundant renders");
 	assert.deepEqual(harness.schedules, [], "stable on-workspace-change refreshes should not schedule Git");
 
@@ -178,7 +177,7 @@ function createSessionHarness(initialConfig: GlanceConfig = cloneConfig()): Sess
 	});
 	const harness = createSessionHarness();
 	const state = harness.session.ensureState(ctx.ctx);
-	assert.deepEqual(state.usage, { input: 13, output: 16, cacheRead: 0, cacheWrite: 0, cost: 1 }, "initial reliable state should include every Pi 0.84 billed usage source");
+	assert.deepEqual(state.usage, { input: 13, output: 16, cacheRead: 0, cacheWrite: 0, cost: 1 }, "initial reliable state should include every Pi billed usage source");
 	const branchBaseline = ctx.getBranchReads();
 
 	ctx.setEntries([

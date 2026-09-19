@@ -19,6 +19,7 @@ const RENDER_MODULES = new Set([
 	"src/surface/text.ts",
 	"src/surface/layout.ts",
 	"src/surface/frame.ts",
+	"src/surface/extension-statuses.ts",
 	"src/surface/footer.ts",
 	"src/surface/status-line.ts",
 	"src/settings/catalog.ts",
@@ -37,20 +38,21 @@ function assertCompatibilityBaseline(packageText: string, lockText: string): voi
 	const lock = JSON.parse(lockText) as {
 		packages?: Record<string, { engines?: Record<string, string>; devDependencies?: Record<string, string>; peerDependencies?: Record<string, string> }>;
 	};
+	// 0.85.0 is the API floor; 0.85.1 fixes the published SDK's missing imports.
 	const expectedDevDependencies = {
-		"@earendil-works/pi-ai": "0.84.4",
-		"@earendil-works/pi-coding-agent": "0.84.4",
-		"@earendil-works/pi-tui": "0.84.4",
+		"@earendil-works/pi-ai": "0.85.1",
+		"@earendil-works/pi-coding-agent": "0.85.1",
+		"@earendil-works/pi-tui": "0.85.1",
 		"@types/node": "24.12.4",
 		typescript: "5.9.3",
 	};
-	assert.deepEqual(manifest.devDependencies, expectedDevDependencies, "package.json should pin the Pi 0.84.4 development baseline");
+	assert.deepEqual(manifest.devDependencies, expectedDevDependencies, "package.json should pin the fixed Pi 0.85 SDK");
 	assert.deepEqual(lock.packages?.[""]?.devDependencies, expectedDevDependencies, "package-lock should match the development baseline");
 	assert.equal(manifest.engines?.node, ">=22.19.0", "package.json should preserve Pi's Node floor");
 	assert.equal(lock.packages?.[""]?.engines?.node, ">=22.19.0", "package-lock should preserve Pi's Node floor");
 	for (const packageName of ALLOWED_PI_IMPORTS) {
-		assert.equal(manifest.peerDependencies?.[packageName], "*", `${packageName} should remain a Pi-supplied wildcard peer`);
-		assert.equal(lock.packages?.[""]?.peerDependencies?.[packageName], "*", `package-lock should preserve wildcard peer ${packageName}`);
+		assert.equal(manifest.peerDependencies?.[packageName], ">=0.85.0", `${packageName} should declare the Pi API floor`);
+		assert.equal(lock.packages?.[""]?.peerDependencies?.[packageName], ">=0.85.0", `package-lock should preserve the Pi API floor for ${packageName}`);
 	}
 }
 
@@ -168,6 +170,15 @@ test("runtime and state responsibilities", () => assertHighValueImportRules(file
 test("native test runner", () => assertNativeTestRunner(packageText));
 
 console.log("✓ public dependency and product guardrails passed");
+
+test("external statuses remain an IO-free render input, without polling or a second protocol", () => {
+	for (const path of ["src/surface/extension-statuses.ts", "src/surface/status-line.ts", "src/surface/footer.ts"]) {
+		const text = files.find(file => file.path === path)!.text;
+		assert.equal(/setInterval|setTimeout|setStatus\s*\(|onStatusChange|onBranchChange|requestRender\s*\(/.test(text), false, path);
+	}
+	const state = files.find(file => file.path === "src/runtime/state.ts")!.text;
+	assert.equal(/getExtensionStatuses|extensionStatuses/.test(state), false, "publisher UI is not session accounting");
+});
 
 test("runtime local imports form an acyclic graph", () => {
 	assert.deepEqual(runtimeCycles(files), []);

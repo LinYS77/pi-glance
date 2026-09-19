@@ -2,6 +2,7 @@ import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import { visibleWidth, type EditorTheme, type TUI } from "@earendil-works/pi-tui";
 import type { KeybindingsManager } from "@earendil-works/pi-coding-agent";
+import { WORKING_SWEEP_COLOR_VALUES } from "../../src/config/options.js";
 import { defaultConfig } from "../../src/config/model.js";
 import { GlanceEditor } from "../../src/surface/editor.js";
 import { renderInputSurfaceFrame } from "../../src/surface/frame.js";
@@ -73,6 +74,37 @@ test("each theme has one chromatic Working accent distinct from both title and c
 		const background = palette.tone === "dark" ? { r: 40, g: 40, b: 40 } : { r: 245, g: 245, b: 245 };
 		assert.ok(contrast(titlePeak, background) >= 4.5, `${palette.id}/${mode}: readable on the reference background`);
 	}
+});
+
+test("all sweep color choices are readable, theme-specific and isolated from static colors", () => {
+	const failures: string[] = [];
+	for (const palette of GLANCE_THEMES) for (const mode of ["truecolor", "ansi256"] as const) {
+		const original = resolveBuiltInGlanceStyles(palette.id, mode);
+		const background = palette.tone === "dark" ? { r: 40, g: 40, b: 40 } : { r: 245, g: 245, b: 245 };
+		for (const color of WORKING_SWEEP_COLOR_VALUES) {
+			const label = `${palette.id}/${mode}/${color}`;
+			const styles = resolveBuiltInGlanceStyles(palette.id, mode, color);
+			const peak = foreground(styles.highlight!(styles.title, 1)("x"));
+			assert.deepEqual(peak, foreground(styles.highlight!(styles.border, 1)("x")), label);
+			const lab = oklab(peak);
+			if (contrast(peak, background) < 4.5) failures.push(`${label}: contrast ${contrast(peak, background).toFixed(2)}`);
+			if (Math.hypot(lab[1], lab[2]) < 0.045) failures.push(`${label}: chroma too low`);
+			for (const key of ["border", "title"] as const) {
+				const base = oklab(foreground(styles[key]("x")));
+				const difference = Math.hypot(...lab.map((value, i) => value - base[i]!));
+				if (difference < 0.06) failures.push(`${label}/${key}: separation ${difference.toFixed(3)}`);
+				assert.equal(styles[key]("x"), original[key]("x"));
+			}
+			for (const key of ["text", "dim", "error", "warn", "separator"] as const) {
+				assert.equal(styles[key]("x"), original[key]("x"));
+				assert.equal(styles.highlight!(styles[key], 1), styles[key]);
+			}
+			for (const key of Object.keys(styles.segments) as Array<keyof typeof styles.segments>) {
+				assert.equal(styles.segments[key].fg("x"), original.segments[key].fg("x"));
+			}
+		}
+	}
+	assert.deepEqual(failures, []);
 });
 
 test("wide unlit text bypasses per-character highlighting", () => {
@@ -222,7 +254,7 @@ test("live sweep retains the original status cache, Bash border and scroll label
 	let reads = 0;
 	const state = { ...sample, get usage() { reads++; return sample.usage; } };
 	let elapsed: number | undefined;
-	const editor = new GlanceEditor(tui, theme, keys, () => state, () => config, undefined, { getWorkingElapsedMs: () => elapsed });
+	const editor = new GlanceEditor(tui, theme, keys, () => state, () => config, { getWorkingElapsedMs: () => elapsed });
 	editor.focused = true; editor.setText("!pwd");
 	const bash = (text: string) => `\x1b[38;5;208m${text}\x1b[39m`;
 	editor.borderColor = bash;

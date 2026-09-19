@@ -34,7 +34,7 @@ const state = createInitialState({
 }, config);
 state.git = { ...state.git, repo: true, branch: "feature/stash", status: "dirty", dirty: true, ahead: 2, summary: { files: 3, additions: 42, deletions: 8 } };
 const notice = new Text("alt+s stash / restore · f2 settings · enter clears input · ctrl+c close\nExample Git data. No model calls, network or file writes.", 0, 1, identity);
-const editor = new GlanceEditor(tui, theme, keybindings, () => state, () => config, undefined, {
+const editor = new GlanceEditor(tui, theme, keybindings, () => state, () => config, {
 	stash: new PromptStash(null, () => {}),
 	renderStyleContext: { ambientTone: tone, trueColor },
 	onStashError: text => { notice.setText(text); tui.requestRender(); },

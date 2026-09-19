@@ -10,10 +10,12 @@ import type {
 	ThroughputPrecision,
 	TokensCacheMode,
 	TokensDisplayMode,
+	WorkingSweepColor,
 	WorkingSweepMode,
 	WorkspaceLabelMode,
 } from "../types.js";
 
+export const WORKING_SWEEP_COLOR_VALUES = ["theme", "amber", "rose", "violet", "blue", "teal", "mint", "coral", "copper"] as const satisfies readonly WorkingSweepColor[];
 export const WORKING_SWEEP_MODE_VALUES: ReadonlyArray<WorkingSweepMode> = ["top", "perimeter", "off"];
 export const ICON_MODE_VALUES: ReadonlyArray<IconMode> = ["plain", "nerd"];
 export const PROVIDER_DISPLAY_MODE_VALUES: ReadonlyArray<GlanceConfig["display"]["showProvider"]> = ["auto", "always", "never"];

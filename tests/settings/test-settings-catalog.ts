@@ -14,7 +14,7 @@ test("four sections have stable, user-facing labels and one home for each settin
 	assert.deepEqual(getSettingsRows(config, "input").map(row => [row.label, row.value]), [
 		["Editor height", "3 rows"], ["Space above editor", "1 row"], ["Prompt stash", "On"], ["Stash shortcut", "alt+s"],
 	]);
-	assert.deepEqual(getSettingsRows(config, "working").map(row => [row.label, row.value]), [["Animation", "Full border"], ["Sweep speed", "47 cols/s"]]);
+	assert.deepEqual(getSettingsRows(config, "working").map(row => [row.label, row.value]), [["Animation", "Full border"], ["Sweep speed", "47 cols/s"], ["Sweep color", "Theme default"]]);
 	const rows = [...SETTINGS_SECTIONS.flatMap(s => getSettingsRows(config, s.id)), ...SEGMENT_IDS.flatMap(id => getSettingsRows(config, "status", id))];
 	assert.equal(new Set(rows.map(r => r.id)).size, rows.length);
 	for (const row of rows) {
@@ -45,7 +45,7 @@ test("status order, disabled entries, custom refresh values and all 22 palettes 
 	const config = defaultConfig();
 	config.segments.reverse(); config.segments[0]!.enabled = false;
 	config.git.pollIntervalMs = 7500;
-	assert.deepEqual(getSettingsRows(config, "status").map(r => r.value), ["Off", "On", "On", "On", "On", "On"]);
+	assert.deepEqual(getSettingsRows(config, "status").map(r => r.value), ["Off", "On", "On", "On", "On", "On", "On"]);
 	assert.equal(getSettingsRows(config, "status")[0]!.label, "Model");
 	assert.equal(getSettingsRows(config, "status", "git").find(r => r.id === "git.polling")!.value, "7.5 seconds");
 	for (const slot of ["light", "dark"] as const) {

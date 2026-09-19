@@ -7,7 +7,9 @@ export interface GlanceThemePair {
 	dark: GlanceThemeName;
 }
 
-export type SegmentId = "git" | "model" | "context" | "tokens" | "cost" | "throughput";
+export type BuiltinSegmentId = "git" | "model" | "context" | "tokens" | "cost" | "throughput";
+export type SegmentId = BuiltinSegmentId | "extensions";
+export type ExtensionStatusSource = () => ReadonlyMap<string, string> | undefined;
 export type IconMode = "nerd" | "plain";
 export type WidthMode = "full" | "compact" | "minimal";
 export type GitStatus = "clean" | "dirty" | "conflict" | "unknown";
@@ -19,6 +21,7 @@ export type TokensDisplayMode = "input-output" | "total";
 export type TokensCacheMode = "rate" | "read-write" | "hide";
 export type ModelThinkingMode = "auto" | "always" | "never";
 export type WorkspaceLabelMode = "name" | "smart" | "path";
+export type WorkingSweepColor = "theme" | "amber" | "rose" | "violet" | "blue" | "teal" | "mint" | "coral" | "copper";
 export type WorkingSweepMode = "top" | "perimeter" | "off";
 export type EditorTopMarginRows = 0 | 1 | 2;
 export type ThroughputPrecision = "auto" | 0 | 1;
@@ -37,6 +40,7 @@ interface EditorConfig {
 	stashEnabled: boolean;
 	stashShortcut: string;
 	workingSweep: WorkingSweepMode;
+	workingSweepColor: WorkingSweepColor;
 	workingSweepSpeed: number;
 	minContentRows: number;
 	topMarginRows: EditorTopMarginRows;
@@ -71,7 +75,7 @@ interface ThroughputConfig {
 }
 
 export interface GlanceConfig {
-	version: 12;
+	version: 14;
 	enabled: boolean;
 	theme: GlanceThemePair;
 	icons: IconMode;
@@ -195,10 +199,10 @@ export interface GlancePalette {
 	separator: Rgb;
 	border: Rgb;
 	title: Rgb;
-	segments: Record<SegmentId, SegmentPalette>;
+	segments: Record<BuiltinSegmentId, SegmentPalette>;
 }
 
-export interface IconSet extends Record<SegmentId, string> {}
+export interface IconSet extends Record<BuiltinSegmentId, string> {}
 
 interface SegmentDisplay {
 	full?: string;
@@ -241,7 +245,7 @@ export interface SegmentRenderResult {
 }
 
 export interface SegmentDefinition {
-	id: SegmentId;
+	id: BuiltinSegmentId;
 	label: string;
 	iconSpacing?: Partial<Record<IconMode, number>>;
 	collect(ctx: SegmentRenderContext): SegmentData | undefined;

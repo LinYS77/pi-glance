@@ -2,7 +2,7 @@ import { strict as assert } from "node:assert";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { defaultConfig } from "../../src/config/model.js";
 import { lifecycleInputsFromContext, stateInputsFromContext, thinkingInputsFromContext, usageTotalsFromEntries, usageTotalsFromMessage, type StateSessionEntry } from "../../src/runtime/snapshot.js";
-import { createInitialState } from "../../src/runtime/state.js";
+import { createInitialState, setProviderCount } from "../../src/runtime/state.js";
 
 function message(role: string, options: { usage?: Record<string, unknown>; stopReason?: string } = {}): StateSessionEntry {
 	return {
@@ -92,6 +92,18 @@ assert.equal(
 	2,
 	"empty ctx.scopedModels should fall back to every available registry model",
 );
+
+{
+	const state = createInitialState(stateInputsFromContext(fakeContext({ availableProviders: ["a", "b"] }), "off"), defaultConfig());
+	const version = state.version;
+	assert.equal(setProviderCount(state, 2), false);
+	assert.equal(state.version, version, "an unchanged provider count cannot invalidate the display");
+	assert.equal(setProviderCount(state, 3), true);
+	assert.equal(state.providers.availableCount, 3);
+	assert.equal(state.version, version + 1);
+	assert.equal(setProviderCount(state, 3), false);
+	assert.equal(state.version, version + 1);
+}
 
 const friendlyModelState = createInitialState(modelInputs, defaultConfig());
 assert.equal(friendlyModelState.model.displayName, "Claude Test Friendly", "state should prefer Pi's public model.name over id shortening");
@@ -205,7 +217,7 @@ assert.deepEqual(
 		{ type: "branch_summary", usage: { input: 1000, output: 2000, cacheRead: 3000, cacheWrite: 4000, cost: { total: 100 } } },
 	]),
 	{ input: 1111, output: 2222, cacheRead: 3333, cacheWrite: 4444, cost: 111.1 },
-	"usage totals should match Pi 0.84 billed-session semantics across assistant, toolResult, compaction, and branch-summary usage",
+	"usage totals should match Pi billed-session semantics across assistant, toolResult, compaction, and branch-summary usage",
 );
 
 const publicContextTruthInputs = stateInputsFromContext(

@@ -4,7 +4,9 @@ import { strict as assert } from "node:assert";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { createRuntimeTestContext } from "../support/runtime-harness.js";
+import type { Component, TUI } from "@earendil-works/pi-tui";
+import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext, KeybindingsManager, Theme } from "@earendil-works/pi-coding-agent";
 import type { GlanceConfig } from "../../src/types.js";
 
 type PaneResult = { action: "save"; config: GlanceConfig } | { action: "cancel" };
@@ -58,52 +60,17 @@ function getCommand(pi: CapturedPi, name: string): CommandHandler {
 }
 
 function createContext(customResults: PaneResult[]): TestContext {
-	const notifications: Notification[] = [];
-	const surfaceCalls: string[] = [];
+	const { ctx, notifications, surfaceCalls } = createRuntimeTestContext({ cwd: process.cwd(), trusted: false, persistent: false });
 	const renderedPanes: string[][] = [];
-	let currentEditorFactory: unknown;
-	const fakeTui = { requestRender: () => undefined };
-	const fakeTheme = { fg: (_tone: string, text: string) => text };
-
-	const ctx = {
-		mode: "tui",
-		hasUI: true,
-		isIdle: () => true,
-		isProjectTrusted: () => false,
-		cwd: process.cwd(),
-		model: { id: "test-model", provider: "test-provider", contextWindow: 200_000 },
-		modelRegistry: {
-			getAvailable: () => [{ provider: "test-provider", id: "test-model" }],
-		},
-		sessionManager: {
-			getSessionId: () => "session-test",
-			getSessionFile: () => undefined,
-			getCwd: () => process.cwd(),
-			getEntries: () => [],
-			getBranch: () => [],
-		},
-		ui: {
-			setWorkingVisible: (_visible: boolean) => {},
-			notify: (message: string, type?: "info" | "warning" | "error") => {
-				notifications.push({ message, type });
-			},
-			custom: async <T>(factory: (tui: unknown, theme: unknown, keybindings: unknown, done: (result: T) => void) => { render?: (width: number) => string[] }) => {
-				const component = factory(fakeTui, fakeTheme, {}, () => undefined);
-				if (typeof component.render === "function") renderedPanes.push(component.render(100));
-				const result = customResults.shift();
-				assert.ok(result, "expected queued custom pane result");
-				return result as T;
-			},
-			setFooter: (factory: unknown) => surfaceCalls.push(factory ? "setFooter:install" : "setFooter:clear"),
-			setEditorComponent: (factory: unknown) => {
-				currentEditorFactory = factory;
-				surfaceCalls.push(factory ? "setEditorComponent:install" : "setEditorComponent:clear");
-			},
-			getEditorComponent: () => currentEditorFactory,
-		},
-		getContextUsage: () => ({ tokens: 0, contextWindow: 200_000, percent: 0 }),
-	} as unknown as ExtensionCommandContext;
-
+	const fakeTui = { requestRender() {} } as unknown as TUI;
+	const fakeTheme = { fg: (_tone: string, text: string) => text } as unknown as Theme;
+	ctx.ui.custom = async <T>(factory: (tui: TUI, theme: Theme, keys: KeybindingsManager, done: (result: T) => void) => Component | Promise<Component>) => {
+		const component = await factory(fakeTui, fakeTheme, {} as KeybindingsManager, () => {});
+		renderedPanes.push(component.render(100));
+		const result = customResults.shift();
+		assert.ok(result, "expected queued custom pane result");
+		return result as T;
+	};
 	return { ctx, notifications, surfaceCalls, customResults, renderedPanes };
 }
 

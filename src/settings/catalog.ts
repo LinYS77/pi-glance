@@ -161,13 +161,33 @@ const animation = choiceSetting(
 	},
 );
 
+const sweepColor = choiceSetting(
+	"working.color",
+	"Sweep color",
+	"Choose an accent matched to the active Glance palette. Theme default keeps its original sweep color.",
+	[
+		{ value: "theme", label: "Theme default" },
+		{ value: "amber", label: "Amber" },
+		{ value: "rose", label: "Rose" },
+		{ value: "violet", label: "Violet" },
+		{ value: "blue", label: "Blue" },
+		{ value: "teal", label: "Teal" },
+		{ value: "mint", label: "Mint" },
+		{ value: "coral", label: "Coral" },
+		{ value: "copper", label: "Copper" },
+	],
+	c => c.editor.workingSweepColor,
+	(c, value) => { c.editor.workingSweepColor = value; },
+);
+
 const segmentHints: Record<SegmentId, string> = {
 	git: "Branch, uncommitted changes and upstream commits.",
 	cost: "Session cost in USD, shown as a compact amount.",
 	throughput: "Model output speed in tokens per second.",
 	context: "Current context usage and available capacity.",
 	tokens: "Session token counts and prompt-cache usage.",
-	model: "Model name, provider and thinking level.",
+	extensions: "Statuses published by other Pi extensions. Hidden when empty; yields to built-in facts.",
+	model: "Model name, provider and thinking level. Always the last status item removed.",
 };
 
 export function getSettingsRows(config: GlanceConfig, section: SettingsSectionId, segment?: SegmentId): SettingsRow[] {
@@ -211,6 +231,12 @@ export function getSettingsRows(config: GlanceConfig, section: SettingsSectionId
 					next.editor.workingSweepSpeed = WORKING_SPEED.normalize(value);
 					return next;
 				},
+			},
+			{
+				...descriptorRow(config, sweepColor),
+				hint: config.editor.workingSweep === "off"
+					? "Turn animation on to preview colors. Your choice is kept while off."
+					: sweepColor.hint,
 			},
 		];
 	const rows = appearance.map((descriptor) => descriptorRow(config, descriptor));

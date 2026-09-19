@@ -211,7 +211,7 @@ test("live loop preserves cached status, Bash cues, cursor and scrolling after r
 	const sample = richInputSurfaceState();
 	let reads = 0, elapsed: number | undefined;
 	const state = { ...sample, get usage() { reads++; return sample.usage; } };
-	const editor = new GlanceEditor({ terminal: { rows: 16 }, requestRender() {} } as unknown as TUI, theme, keys, () => state, () => config, undefined, { getWorkingElapsedMs: () => elapsed });
+	const editor = new GlanceEditor({ terminal: { rows: 16 }, requestRender() {} } as unknown as TUI, theme, keys, () => state, () => config, { getWorkingElapsedMs: () => elapsed });
 	editor.focused = true;
 	for (const text of ["中文 draft", "!pwd", Array.from({ length: 30 }, (_, i) => `line ${i}`).join("\n")]) {
 		editor.setText(text);

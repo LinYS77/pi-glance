@@ -77,9 +77,10 @@ await test("default status line should show finalized Model speed between Cost a
 			{ id: "throughput", enabled: true },
 			{ id: "context", enabled: true },
 			{ id: "tokens", enabled: true },
+			{ id: "extensions", enabled: true },
 			{ id: "model", enabled: true },
 		],
-		"default segments should use the curated order Git, Cost, Model speed, Context, Tokens, Model",
+		"default segments should put Extensions before Model",
 	);
 });
 

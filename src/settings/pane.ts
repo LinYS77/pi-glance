@@ -27,13 +27,15 @@ import { shortcutConflict } from "../input/keybinding.js";
 import { normalizeStashShortcut, shortcutLabel } from "../input/shortcut.js";
 import { SETTINGS_SECTIONS } from "./catalog.js";
 import { WorkingSweep, type ScheduleSweepFrame } from "../runtime/working-sweep.js";
+import { extensionStatusEntries, EXTENSION_STATUS_RESET } from "../surface/extension-statuses.js";
 import { truncateStyledText } from "../surface/text.js";
 import { createInputSurfaceRenderer } from "../surface/renderer.js";
 import type { GlanceRenderStyleContext } from "../theme/adapter.js";
-import type { GlanceConfig, GlanceState } from "../types.js";
+import type { ExtensionStatusSource, GlanceConfig, GlanceState } from "../types.js";
 
 type PaneResult = { action: "save"; config: GlanceConfig } | { action: "cancel" };
 export interface GlancePaneOptions {
+	readonly getExtensionStatuses?: ExtensionStatusSource;
 	readonly previewNowMs?: () => number;
 	readonly schedulePreviewFrame?: ScheduleSweepFrame;
 	readonly renderStyleContext?: GlanceRenderStyleContext;
@@ -178,7 +180,9 @@ export class GlanceConfigPane implements Component, Focusable {
 	}
 	private dispatch(intent: PaneIntent): void {
 		const wasNumber = this.model.page.kind === "number";
-		const result = updatePaneModel(this.model, intent);
+		const statusCount = intent.type === "move" && this.view.extensionStatusIndex !== undefined
+			? extensionStatusEntries(this.options.getExtensionStatuses?.()).length : 0;
+		const result = updatePaneModel(this.model, intent, statusCount);
 		this.model = result.model;
 		this.view = createPaneViewModel(this.model);
 		if (result.completion) {
@@ -265,7 +269,7 @@ export class GlanceConfigPane implements Component, Focusable {
 	private fg(tone: "accent" | "muted" | "dim" | "warning" | "success", text: string): string {
 		return this.theme.fg(tone, text);
 	}
-	private renderPreview(view: GlancePaneViewModel, width: number): string[] {
+	private renderPreview(view: GlancePaneViewModel, width: number, extensionStatuses: ReadonlyMap<string, string> | undefined): string[] {
 		const config = view.preview.config;
 		if (!config.enabled)
 			return [this.fg("dim", "Preview · Glance is off"), this.fg("dim", "Turn Glance on to preview the editor.")];
@@ -273,6 +277,7 @@ export class GlanceConfigPane implements Component, Focusable {
 			...this.options.renderStyleContext,
 			...(view.preview.ambientTone ? { ambientTone: view.preview.ambientTone } : {}),
 			...(view.preview.density === "auto" ? {} : { previewDensity: view.preview.density }),
+			extensionStatuses,
 			workingElapsedMs: view.preview.working ? this.clock.elapsedMs() : undefined,
 			contentLines: ["Your next prompt…"],
 			focused: true,
@@ -332,21 +337,35 @@ export class GlanceConfigPane implements Component, Focusable {
 			this.fg(this.model.page.kind === "number" && this.model.page.error || this.model.page.kind === "shortcut" && this.model.page.error ? "warning" : "dim", view.hint),
 			Math.max(1, width),
 		).slice(0, 2);
-		let preview = this.renderPreview(view, width);
+		const statusSource = this.options.getExtensionStatuses?.();
+		let preview = this.renderPreview(view, width, statusSource);
 		const title = this.fg("muted", view.title);
 		const base = header.length + 1 + hint.length + footer.length + 2;
-		const minimumRows =
+		const details = view.extensionStatusIndex === undefined ? undefined : extensionStatusEntries(statusSource);
+		const minimumRows = details ? Math.min(4, Math.max(1, details.length)) :
 			view.page === "number" || view.page === "shortcut" ? 1 : Math.min(4, view.page === "list" ? view.rows.length : view.choices.length);
 		const showPreview = height - base - preview.length >= minimumRows;
 		if (showPreview !== this.previewVisible) {
 			this.previewVisible = showPreview;
 			this.clock.setWaiting(!showPreview);
-			if (showPreview) preview = this.renderPreview(view, width);
+			if (showPreview) preview = this.renderPreview(view, width, statusSource);
 		}
 		const prefix = [...header, ...(showPreview ? preview : []), title];
 		const budget = Math.max(1, height - prefix.length - hint.length - footer.length - 1);
 		const body: string[] = [];
-		if (view.page === "shortcut" && this.model.page.kind === "shortcut") {
+		if (details) {
+			if (details.length === 0) body.push(this.fg("dim", statusSource === undefined
+				? "Extension status source is not attached." : "No extension statuses published."));
+			const count = Math.max(1, Math.min(8, budget - (details.length > budget ? 1 : 0)));
+			this.pageSize = count;
+			const selected = Math.min(view.extensionStatusIndex!, Math.max(0, details.length - 1));
+			const { start, end } = viewport(details.length, selected, count);
+			for (const [index, entry] of details.slice(start, end).entries()) {
+				const label = `${start + index === selected ? "› " : "  "}${entry.key}: `;
+				body.push(this.fg("muted", label) + entry.text + EXTENSION_STATUS_RESET);
+			}
+			if (start > 0 || end < details.length) body.push(this.fg("dim", `${start + 1}–${end} of ${details.length}`));
+		} else if (view.page === "shortcut" && this.model.page.kind === "shortcut") {
 			body.push(this.fg("accent", shortcutLabel(this.model.page.key)));
 		} else if (view.page === "number") {
 			body.push(...this.input.render(Math.max(1, width)));

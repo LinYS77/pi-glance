@@ -7,9 +7,10 @@ import { measureInputSurfaceFrame, renderInputSurfaceFrame } from "./frame.js";
 import { GlanceLineRenderer } from "./status-line.js";
 import { formatSurfaceScrollIndicator } from "./layout.js";
 import { resolveGlanceRenderStyles, type GlanceRenderStyleContext, type ResolvedGlanceStyles } from "../theme/adapter.js";
-import type { GlanceConfig, GlanceState } from "../types.js";
+import type { ExtensionStatusSource, GlanceConfig, GlanceState } from "../types.js";
 
 export interface GlanceEditorOptions {
+	readonly getExtensionStatuses?: ExtensionStatusSource;
 	readonly stash?: PromptStash;
 	readonly onStashError?: (message: string) => void;
 	readonly getWorkingElapsedMs?: () => number | undefined;
@@ -37,7 +38,7 @@ function isHorizontalBorder(line: string, borderColor: (text: string) => string)
 		(char) => char === "─" || char === "↑" || char === "↓" || char === " " || char === "." || /[0-9a-z]/i.test(char),
 	);
 	if (!borderCharactersOnly) return false;
-	// Pi 0.84 truncates scroll borders with ASCII periods at very narrow widths,
+	// Pi truncates scroll borders with ASCII periods at very narrow widths,
 	// including pure "." / "..." lines where no horizontal glyph survives.
 	return plain.includes("─") || /^\.+$/.test(plain);
 }
@@ -64,7 +65,6 @@ export class GlanceEditor extends CustomEditor {
 		private readonly appKeybindings: KeybindingsManager,
 		private readonly getState: () => GlanceState,
 		private readonly getConfig: () => GlanceConfig,
-		private readonly onThinkingLevelMaybeChanged?: () => void,
 		private readonly glanceOptions?: GlanceEditorOptions,
 	) {
 		super(tui, theme, appKeybindings, glanceOptions?.editorOptions);
@@ -103,13 +103,11 @@ export class GlanceEditor extends CustomEditor {
 				return;
 			}
 		}
-		const isThinkingCycle = this.appKeybindings.matches(data, "app.thinking.cycle");
 		super.handleInput(data);
-		if (isThinkingCycle) this.onThinkingLevelMaybeChanged?.();
 	}
 
 	private currentStyles(config: GlanceConfig = this.getConfig()): ResolvedGlanceStyles {
-		const styles = resolveGlanceRenderStyles(config.theme, this.glanceOptions?.renderStyleContext);
+		const styles = resolveGlanceRenderStyles(config.theme, this.glanceOptions?.renderStyleContext, config.editor.workingSweepColor);
 		// Pi owns Bash detection/execution and updates this public callback on input
 		// and theme changes. Preserve its cue only on the live Bash frame; title and
 		// status remain Glance-owned, so their cache key must not change.
@@ -128,9 +126,8 @@ export class GlanceEditor extends CustomEditor {
 
 		const styles = this.currentStyles(config);
 		const metrics = measureInputSurfaceFrame(width);
-		// Pi 0.84's word wrapper recurses on a wide grapheme in a one-column
-		// layout. Give the inherited editor room for a two-column glyph (plus
-		// its public padding/cursor reserve), then clip through our frame as usual.
+		// Pi 0.85 still recurses on a wide grapheme in a one-column layout.
+		// Reserve two columns plus the native padding/cursor, then clip the frame.
 		const editorWidth = Math.max(metrics.editorContentWidth, 3, 2 + this.getPaddingX() * 2);
 		const lines = super.render(editorWidth);
 		if (lines.length < 2) return lines;
@@ -163,7 +160,7 @@ export class GlanceEditor extends CustomEditor {
 				hasDraft: this.glanceOptions?.stash?.hasDraft,
 			},
 			status: {
-				render: (budget, frameStyles) => this.statusLine.render(state, config, budget, state.providers.availableCount, { styles: frameStyles }),
+				render: (budget, frameStyles) => this.statusLine.render(state, config, budget, state.providers.availableCount, { styles: frameStyles, extensionStatuses: this.glanceOptions?.getExtensionStatuses?.() }),
 			},
 		});
 

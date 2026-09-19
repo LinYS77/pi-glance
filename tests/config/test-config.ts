@@ -34,9 +34,9 @@ for (const raw of [undefined, null, false, true, 0, 1, "", "{}", []]) {
 assert.equal(defaults.icons, "nerd", "new configs should use Nerd Font icons");
 assert.equal(defaults.editor.topMarginRows, 1, "new configs should leave one row above the editor");
 assert.equal(defaults.display.workspaceLabel, "smart", "new configs should show a smart workspace path");
-assert.equal(defaults.version, 12, "v0.7 uses config schema v12");
-assert.equal(normalizeConfig({ version: 0 }).version, 12, "old raw version should normalize to current schema version");
-assert.equal(normalizeConfig({ version: 999 }).version, 12, "future raw version should normalize to current schema version");
+assert.equal(defaults.version, 14, "Working colors use config schema v14");
+assert.equal(normalizeConfig({ version: 0 }).version, 14, "old raw version should normalize to current schema version");
+assert.equal(normalizeConfig({ version: 999 }).version, 14, "future raw version should normalize to current schema version");
 assert.deepEqual(defaults.theme, { light: "light", dark: "dark" }, "default theme pair should use light for light tone and dark for dark tone");
 assert.equal(defaults.tokens.cache, "rate", "new configs should default Tokens cache details to aggregate hit rate");
 assert.equal(defaults.throughput.precision, THROUGHPUT_PRECISION_DESCRIPTOR.defaultValue, "default config throughput precision should come from descriptor default");
@@ -179,7 +179,7 @@ const userConfig = normalizeConfig({
 assert.deepEqual(
 	userConfig,
 	{
-		version: 12,
+		version: 14,
 		enabled: false,
 		theme: { light: "tokyo-night", dark: "tokyo-night" },
 		icons: "nerd",
@@ -189,6 +189,7 @@ assert.deepEqual(
 			minContentRows: 4,
 			topMarginRows: 2,
 			workingSweep: "perimeter",
+			workingSweepColor: "theme",
 			workingSweepSpeed: 47,
 		},
 		display: {
@@ -196,6 +197,7 @@ assert.deepEqual(
 			workspaceLabel: "path",
 		},
 		segments: [
+			{ id: "extensions", enabled: true },
 			{ id: "model", enabled: false },
 			{ id: "tokens", enabled: true },
 			{ id: "git", enabled: false },
@@ -315,6 +317,7 @@ assertSegments(
 	[
 		{ id: "tokens", enabled: true },
 		{ id: "git", enabled: false },
+		{ id: "extensions", enabled: true },
 		{ id: "model", enabled: false },
 		{ id: "context", enabled: true },
 		{ id: "cost", enabled: false },
@@ -336,6 +339,7 @@ assertSegments(
 		{ id: "cost", enabled: true },
 		{ id: "throughput", enabled: true },
 		{ id: "context", enabled: true },
+		{ id: "extensions", enabled: true },
 		{ id: "model", enabled: true },
 	],
 	"segment migration should append missing default segments when current model anchor is present",
@@ -353,6 +357,7 @@ assertSegments(
 	}).segments,
 	[
 		{ id: "git", enabled: false },
+		{ id: "extensions", enabled: true },
 		{ id: "model", enabled: false },
 		{ id: "tokens", enabled: true },
 		{ id: "cost", enabled: true },

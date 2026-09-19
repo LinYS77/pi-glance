@@ -46,7 +46,6 @@ for (const trueColor of [true, false]) {
 				keybindings,
 				() => state,
 				() => config,
-				undefined,
 				{
 					getWorkingElapsedMs: () => now,
 					renderStyleContext: { trueColor },

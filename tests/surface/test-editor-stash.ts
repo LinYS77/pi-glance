@@ -15,7 +15,7 @@ test("Alt+S keeps expanded long pastes, swaps drafts, and shows a width-safe hin
 	const stash = new PromptStash(null, () => {});
 	const editor = new GlanceEditor({ terminal: { rows: 40 }, requestRender() {} } as unknown as TUI,
 		theme, { matches: () => false, getEffectiveConfig: () => ({}) } as unknown as KeybindingsManager,
-		() => testState(), () => config, undefined, { stash });
+		() => testState(), () => config, { stash });
 	editor.focused = true;
 	const original = "中文🐾\n".repeat(30);
 	editor.handleInput(`\x1b[200~${original}\x1b[201~`);

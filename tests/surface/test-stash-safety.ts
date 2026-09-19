@@ -19,7 +19,7 @@ function harness(bindings: Record<string, string> = {}) {
 		matches: (data: string, action: string) => bindings[action] ? matchesKey(data, bindings[action] as never) : false,
 	} as unknown as KeybindingsManager;
 	const editor = new GlanceEditor({ terminal: { rows: 40 }, requestRender() {} } as unknown as TUI, theme, keys,
-		() => testState(), () => config, undefined, { stash, onStashError: message => errors.push(message) });
+		() => testState(), () => config, { stash, onStashError: message => errors.push(message) });
 	editor.focused = true;
 	return { editor, config, stash, errors, persisted: () => persisted };
 }

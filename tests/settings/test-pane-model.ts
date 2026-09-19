@@ -29,9 +29,9 @@ test("four sections keep their selected row and expose only task-relevant contro
 	let model = down(createPaneModel(defaultConfig()), 3);
 	assert.equal(selected(model).label, "Icons");
 	model = section(model);
-	assert.deepEqual(createPaneViewModel(model).rows.map(row => row.label), ["Git", "Cost", "Model speed", "Context", "Tokens", "Model"]);
+	assert.deepEqual(createPaneViewModel(model).rows.map(row => row.label), ["Git", "Cost", "Model speed", "Context", "Tokens", "Extensions", "Model"]);
 	model = section(model);
-	assert.deepEqual(createPaneViewModel(model).rows.map(row => row.label), ["Animation", "Sweep speed"]);
+	assert.deepEqual(createPaneViewModel(model).rows.map(row => row.label), ["Animation", "Sweep speed", "Sweep color"]);
 	assert.equal(createPaneViewModel(model).preview.working, true);
 	model = section(model);
 	assert.equal(model.section, "input");

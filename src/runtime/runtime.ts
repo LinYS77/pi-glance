@@ -10,6 +10,7 @@ import type {
 	ExtensionEvent,
 	MessageEndEvent,
 	MessageUpdateEvent,
+	ReadonlyFooterDataProvider,
 	SessionCompactEvent,
 	SessionShutdownEvent,
 	SessionStartEvent,
@@ -28,7 +29,7 @@ import { WorkingSweep, type ScheduleSweepFrame } from "./working-sweep.js";
 import { RuntimeRefreshSession } from "./refresh-session.js";
 import type { GlanceRenderStyleContext } from "../theme/adapter.js";
 import { readPiAmbientTone } from "../theme/tone.js";
-import type { GitSnapshot, GlanceConfig, GlanceState } from "../types.js";
+import type { ExtensionStatusSource, GitSnapshot, GlanceConfig, GlanceState } from "../types.js";
 
 export type GlancePaneResult = { action: "save"; config: GlanceConfig } | { action: "cancel" };
 
@@ -45,6 +46,7 @@ export interface CreateGitRefresherOptions {
 }
 
 export interface RuntimeShowPaneOptions {
+	readonly getExtensionStatuses?: ExtensionStatusSource;
 	readonly renderStyleContext?: GlanceRenderStyleContext;
 }
 
@@ -112,6 +114,8 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 	let configDiagnostic: string | undefined;
 	let configDiagnosticStatus: ConfigLoadResult["status"] | undefined;
 	let configDiagnosticNotified = false;
+	let extensionStatusProvider: Pick<ReadonlyFooterDataProvider, "getExtensionStatuses"> | undefined;
+	const getExtensionStatuses = () => extensionStatusProvider?.getExtensionStatuses();
 	let footer: GlanceFooter | undefined;
 	let ownedEditorFactory: EditorFactory | undefined;
 	let previousEditorFactory: EditorFactory | undefined;
@@ -154,11 +158,6 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 		return activeConfig.enabled && activeConfig.segments.some((segment) => segment.id === "git" && segment.enabled);
 	}
 
-	function renderNow(): void {
-		footer?.invalidate();
-		requestRender?.();
-	}
-
 	function isCurrentUiGeneration(generation: number): boolean {
 		return generation === uiGeneration;
 	}
@@ -175,7 +174,7 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 		ensureConfig,
 		getThinkingLevel: () => adapters.getThinkingLevel(),
 		nowMs: () => nowMs(),
-		requestRender: renderNow,
+		requestRender: () => requestRender?.(),
 		scheduleGitRefresh,
 	});
 
@@ -206,6 +205,7 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 		workingSweep = undefined;
 		uiGeneration++;
 		requestRender = undefined;
+		extensionStatusProvider = undefined;
 		clearFooter();
 		return uiGeneration;
 	}
@@ -235,10 +235,11 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 
 	function clearUI(ctx: ExtensionContext): void {
 		if (!isTuiMode(ctx)) return;
+		const hadFooter = footer !== undefined;
 		invalidateUiOwnership();
 		clearGitRefresher();
 		restoreOwnedEditor(ctx);
-		ctx.ui.setFooter(undefined);
+		if (hadFooter) ctx.ui.setFooter(undefined);
 	}
 
 	function reconcileWorkingSweep(ctx: ExtensionContext): void {
@@ -261,9 +262,15 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 		const generation = invalidateUiOwnership();
 
 		reconcileGitRefresher(true);
-		ctx.ui.setFooter((tui) => {
-			const nextFooter = new GlanceFooter();
+		ctx.ui.setFooter((tui, _theme, footerData) => {
+			const nextFooter = new GlanceFooter(() => {
+				if (isCurrentUiGeneration(generation) && footer === nextFooter) {
+					extensionStatusProvider = undefined;
+					footer = undefined;
+				}
+			});
 			if (isCurrentUiGeneration(generation)) {
+				extensionStatusProvider = footerData;
 				setUiRequestRender(generation, () => tui.requestRender());
 				footer = nextFooter;
 			}
@@ -287,11 +294,8 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 				keybindings,
 				() => refreshSession.getState() ?? refreshSession.ensureState(ctx),
 				() => getConfig(),
-				() => {
-					void refreshSession.editorThinkingCycle(ctx);
-				},
 				{
-					renderStyleContext, getWorkingElapsedMs: () => sweep.elapsedMs(), stash,
+					renderStyleContext, getExtensionStatuses, getWorkingElapsedMs: () => sweep.elapsedMs(), stash,
 					onStashError: message => ctx.ui.notify(message, "warning"),
 				},
 			);
@@ -313,7 +317,7 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 				notifyConfigDiagnostic(ctx);
 				refreshSession.ensureState(ctx);
 				const renderStyleContext = runtimeRenderStyleContext(ctx, getTrueColor);
-				const result = await adapters.showPane(current, ctx, refreshSession.getState(), { renderStyleContext });
+				const result = await adapters.showPane(current, ctx, refreshSession.getState(), { renderStyleContext, getExtensionStatuses });
 				if (result.action === "cancel") {
 					ctx.ui.notify("pi-glance configuration cancelled", "info");
 					return;

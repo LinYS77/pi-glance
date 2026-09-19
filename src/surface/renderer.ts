@@ -4,6 +4,7 @@ import { resolveGlanceRenderStyles, type GlanceRenderStyleContext } from "../the
 import type { GlanceConfig, GlanceState, WidthMode } from "../types.js";
 
 interface InputSurfaceRenderOptions extends GlanceRenderStyleContext {
+	extensionStatuses?: ReadonlyMap<string, string>;
 	workingElapsedMs?: number;
 	contentLines?: string[];
 	focused?: boolean;
@@ -59,7 +60,7 @@ export function renderInputSurface(
 export function createInputSurfaceRenderer(state: GlanceState = PREVIEW_STATE) {
 	const statusLine = new GlanceLineRenderer();
 	return (config: GlanceConfig, width: number, options: InputSurfaceRenderOptions = {}): string[] => {
-		const styles = resolveGlanceRenderStyles(config.theme, options);
+		const styles = resolveGlanceRenderStyles(config.theme, options, config.editor.workingSweepColor);
 		return renderInputSurfaceFrame({
 			state,
 			config,
@@ -78,6 +79,7 @@ export function createInputSurfaceRenderer(state: GlanceState = PREVIEW_STATE) {
 				render: (budget) =>
 					statusLine.render(state, config, budget, state.providers.availableCount, {
 						styles,
+						extensionStatuses: options.extensionStatuses,
 						widthMode: options.previewDensity,
 					}),
 			},

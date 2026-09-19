@@ -32,9 +32,9 @@ Restart Pi or run `/reload`.
 ## Features
 
 - **Rounded editor** — Pi's editing, history, autocomplete, and keybindings stay the same.
-- **Adaptive status line** — Git · Cost · Model speed · Context · Tokens · Model. Folds as the terminal narrows.
+- **Adaptive status line** — Git · Cost · Model speed · Context · Tokens · Extensions · Model. Model is the last item hidden.
 - **Prompt stash** — `alt+s` puts a prompt aside. Press again to restore or swap with current input.
-- **Working animation** — a sweep around the editor or along its top edge, with adjustable speed.
+- **Working animation** — a sweep around the editor or along its top edge, with adjustable speed and theme-matched colors.
 - **22 palettes** — separate light and dark choices with live preview.
 
 No runtime dependencies. No telemetry.
@@ -56,8 +56,9 @@ Run `/glance` for **Appearance**, **Status line**, **Working**, and **Input** se
 - Nerd Font icons are enabled by default. For regular fonts, select `Plain` in `/glance` → **Appearance** → **Icons**.
 - Git defaults and upgrades use **Summary**: changed files and tracked `+ / −` lines. **Auto fetch** updates the upstream every 5 minutes; turn it off under **Status line → Git**.
 - Drafts are stored locally per session, survive reloads, and are deleted on restore. `--no-session` keeps them in memory only.
+- **Extensions** shows other plugins' `setStatus()` text inline; empty statuses stay hidden. Toggle or reorder it under **Status line**.
 - Pi has one custom-editor slot; the last editor extension loaded wins.
-- Tested with Pi 0.84.4 and 0.85.1. Requires Node.js 22.19.0 or newer.
+- Requires Pi 0.85.0+ and Node.js 22.19.0 or newer. Prefer Pi 0.85.1 for its SDK packaging fix.
 
 ## Update
 

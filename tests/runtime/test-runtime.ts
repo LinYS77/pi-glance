@@ -133,19 +133,6 @@ for (const matrixCase of [
 		invoke: (harness, test) => harness.runtime.events.thinkingLevelSelect({}, test.ctx as ExtensionContext),
 	},
 	{
-		name: "editor_thinking_cycle",
-		invoke: async (_harness, test) => {
-			const editor = invokeEditorFactory(
-				test,
-				0,
-				() => undefined,
-				{ matches: (data, action) => action === "app.thinking.cycle" && data === "t" },
-			) as { handleInput(data: string): void };
-			editor.handleInput("t");
-			await Promise.resolve();
-		},
-	},
-	{
 		name: "model_select",
 		invoke: (harness, test) => harness.runtime.events.modelSelect({}, test.ctx as ExtensionContext),
 	},
@@ -259,7 +246,7 @@ await test("sessionStart should stay synchronous for disabled config", async () 
 	const result = harness.runtime.events.sessionStart({}, test.ctx);
 
 	assert.equal(isPromiseLike(result), false, "sessionStart should stay synchronous for disabled config");
-	assert.deepEqual(test.surfaceCalls, ["setFooter:clear"], "disabled TUI sessionStart should leave an editor it never owned untouched");
+	assert.deepEqual(test.surfaceCalls, [], "disabled TUI sessionStart should leave editor and footer slots it never owned untouched");
 	assert.equal(test.getCurrentEditorFactory(), existingEditorFactory, "disabled TUI sessionStart should preserve an existing custom editor");
 	assert.equal(git.created, 0, "disabled sessionStart should not create a git refresher");
 	assert.equal(harness.getLoadConfigCalls(), 0, "disabled sessionStart should not call the async loadConfig adapter");
@@ -467,66 +454,6 @@ await test("thinking_level_select counter baseline should include the session_st
 	assert.equal(previewState.context.percent, 0.077, "thinking_level_select should not overwrite context percent when the plan does not refresh context usage");
 	assert.equal(test.getEntryReads(), entryBaseline, "opening /glance after thinking_level_select should not hide a session entries scan");
 	assert.equal(test.getBranchReads(), branchBaseline, "opening /glance after thinking_level_select should not hide a session branch scan");
-});
-
-await test("enabled sessionStart should register one editor factory for editor thinking-cycle coverage", async () => {
-	const config = defaultConfig();
-	config.model.customNames["gpt-5"] = "GPT Custom";
-	let thinkingLevel = "off";
-	const git = createGitHarness();
-	const test = createContext({
-		availableProviders: ["openai"],
-		model: { id: "initial-model", provider: "openai", contextWindow: 100_000 },
-		contextUsage: { tokens: 321, contextWindow: 100_000, percent: 0.321 },
-	});
-	const harness = createRuntimeHarness({
-		loadConfigSyncConfig: config,
-		showPaneResults: [{ action: "cancel" }],
-		getThinkingLevel: () => thinkingLevel,
-		git,
-	});
-
-	harness.runtime.events.sessionStart({}, test.ctx);
-	assert.equal(test.editorFactories.length, 1, "enabled sessionStart should register one editor factory for editor thinking-cycle coverage");
-	let editorRenderRequests = 0;
-	const editor = invokeEditorFactory(
-		test,
-		0,
-		() => editorRenderRequests++,
-		{ matches: (data, action) => action === "app.thinking.cycle" && data === "t" },
-	) as { handleInput(data: string): void; getText(): string };
-	const entryBaseline = test.getEntryReads();
-	const branchBaseline = test.getBranchReads();
-	assert.ok(entryBaseline > 0, "editor_thinking_cycle counter baseline should include the session_start entries read");
-	assert.equal(branchBaseline, 0, "editor_thinking_cycle baseline should confirm session_start does not directly scan branch");
-	const renderBaseline = editorRenderRequests;
-	const scheduleBaseline = git.schedules.length;
-	thinkingLevel = "medium";
-	test.setAvailableProviders(["openai", "anthropic", "anthropic"]);
-	test.setModel({ id: "gpt-5-large", provider: "openai", contextWindow: 1_000_000 });
-	test.setContextUsage({ tokens: 999, contextWindow: 1_000_000, percent: 0.999 });
-	editor.handleInput("t");
-	await Promise.resolve();
-
-	assert.equal(test.getEntryReads(), entryBaseline, "editor_thinking_cycle should not scan session entries after the session_start baseline");
-	assert.equal(test.getBranchReads(), branchBaseline, "editor_thinking_cycle should not scan session branch after the session_start baseline");
-	assert.deepEqual(git.schedules.slice(scheduleBaseline), [], "editor_thinking_cycle should not schedule git refreshes");
-	assert.ok(editorRenderRequests > renderBaseline, "editor_thinking_cycle should still request a render through the active editor surface");
-	assert.equal(editor.getText(), "t", "editor_thinking_cycle should preserve CustomEditor text handling after the app keybinding");
-	await harness.runtime.commands.openPane("", test.ctx);
-
-	const previewState = harness.showPanePreviewStates.at(-1);
-	assert.ok(previewState, "editor_thinking_cycle smoke test should open /glance with preview state");
-	assert.equal(previewState.providers.availableCount, 2, "editor_thinking_cycle should refresh unique provider count through the cheap path");
-	assert.equal(previewState.model.id, "gpt-5-large", "editor_thinking_cycle should refresh model id through the cheap path");
-	assert.equal(previewState.model.provider, "openai", "editor_thinking_cycle should refresh model provider through the cheap path");
-	assert.equal(previewState.model.displayName, "GPT Custom", "editor_thinking_cycle should honor configured model custom names");
-	assert.equal(previewState.model.thinking, "medium", "editor_thinking_cycle should refresh the visible thinking level");
-	assert.equal(previewState.context.tokens, 321, "editor_thinking_cycle should not overwrite context tokens when the plan does not refresh context usage");
-	assert.equal(previewState.context.window, 1_000_000, "editor_thinking_cycle should refresh context window from the current model");
-	assert.equal(previewState.context.percent, 0.321, "editor_thinking_cycle should not overwrite context percent when the plan does not refresh context usage");
-	assert.equal(test.getEntryReads(), entryBaseline, "opening /glance after editor_thinking_cycle should not hide a session entries scan");
-	assert.equal(test.getBranchReads(), branchBaseline, "opening /glance after editor_thinking_cycle should not hide a session branch scan");
 });
 
 await test("turn_start counter baseline should include the session_start entries read", async () => {

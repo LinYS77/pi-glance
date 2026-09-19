@@ -67,6 +67,7 @@ export interface GlancePaneViewModel {
 		selected: boolean;
 		changed: boolean;
 	}>;
+	extensionStatusIndex?: number;
 	choices: Array<{ label: string; selected: boolean; checked: boolean }>;
 	hint: string;
 	page: PanePage["kind"];
@@ -289,7 +290,7 @@ function adjustRow(config: GlanceConfig, row: SettingsRow, direction: -1 | 1): G
 	}
 }
 
-export function updatePaneModel(model: PaneModelState, intent: PaneIntent): PaneUpdateResult {
+export function updatePaneModel(model: PaneModelState, intent: PaneIntent, extensionStatusCount = 0): PaneUpdateResult {
 	const page = model.page;
 	if (intent.type === "cancel") return { model, completion: { action: "cancel" } };
 	if (intent.type === "back") return back(model);
@@ -315,7 +316,8 @@ export function updatePaneModel(model: PaneModelState, intent: PaneIntent): Pane
 			return { model: { ...model, page: { ...page, index: clampIndex(page.index + step, 2) } } };
 		if (page.kind === "theme" || page.kind === "choices")
 			return { model: selectChoice(model, page, clampIndex(page.index + step, pickerCount(model, page))) };
-		return { model: withList(model, { ...page, index: clampIndex(page.index + step, rowsFor(model).length) }) };
+		const count = page.segment === "extensions" ? extensionStatusCount : rowsFor(model).length;
+		return { model: withList(model, { ...page, index: clampIndex(clampIndex(page.index, count) + step, count) }) };
 	}
 	if (page.kind !== "list") return { model };
 	const row = selectedRow(model);
@@ -439,6 +441,10 @@ export function createPaneViewModel(model: PaneModelState): GlancePaneViewModel 
 			{ key: "Enter", label: "Confirm" },
 			{ key: "Esc", label: "Cancel" },
 		];
+	} else if (page.kind === "list" && page.segment === "extensions") {
+		hint = "Live, read-only setStatus() output. Published text may be hidden above when space is limited.";
+		help = [{ key: "Tab/Shift+Tab", label: "Section" }, { key: "↑↓", label: "Scroll" }, { key: "D", label: "Preview layout" }];
+		actions = [{ key: "S", label: "Save & close" }, { key: "Esc", label: "Back" }, { key: "R", label: "Reset" }];
 	} else {
 		help = [
 			{ key: "Tab/Shift+Tab", label: "Section" },
@@ -471,6 +477,7 @@ export function createPaneViewModel(model: PaneModelState): GlancePaneViewModel 
 		page: page.kind,
 		dirty: paneIsDirty(model),
 		hint,
+		extensionStatusIndex: page.kind === "list" && page.segment === "extensions" ? page.index : undefined,
 		choices,
 		help,
 		actions,

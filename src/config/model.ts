@@ -8,6 +8,7 @@ import {
 	PROVIDER_DISPLAY_MODE_VALUES,
 	TOKENS_CACHE_MODE_VALUES,
 	TOKENS_DISPLAY_MODE_VALUES,
+	WORKING_SWEEP_COLOR_VALUES,
 	WORKING_SWEEP_MODE_VALUES,
 	WORKSPACE_LABEL_MODE_VALUES,
 } from "./options.js";
@@ -31,7 +32,9 @@ import type {
 } from "../types.js";
 
 // CONFIG_VERSION is the on-disk config schema version, not the npm package version.
-export const CONFIG_VERSION = 12 as const;
+export const CONFIG_VERSION = 14 as const;
+
+const WORKING_SWEEP_COLORS = new Set(WORKING_SWEEP_COLOR_VALUES);
 
 const WORKING_SWEEP_MODES = new Set(WORKING_SWEEP_MODE_VALUES);
 const ICON_MODES = new Set<IconMode>(ICON_MODE_VALUES);
@@ -57,6 +60,7 @@ export function defaultConfig(): GlanceConfig {
 			minContentRows: 3,
 			topMarginRows: 1,
 			workingSweep: "perimeter",
+			workingSweepColor: "theme",
 			workingSweepSpeed: WORKING_SPEED.defaultValue,
 		},
 		display: {
@@ -187,7 +191,10 @@ function normalizeSegments(value: unknown): SegmentConfig[] {
 	}
 
 	for (const segment of defaults) {
-		if (!ordered.some((s) => s.id === segment.id)) ordered.push(byId.get(segment.id)!);
+		if (ordered.some((s) => s.id === segment.id)) continue;
+		const modelIndex = ordered.findIndex(s => s.id === "model");
+		if (segment.id === "extensions" && modelIndex >= 0) ordered.splice(modelIndex, 0, byId.get(segment.id)!);
+		else ordered.push(byId.get(segment.id)!);
 	}
 
 	return ordered;
@@ -217,6 +224,7 @@ export function normalizeConfig(raw: unknown): GlanceConfig {
 			stashEnabled: parseBool(editor.stashEnabled, defaults.editor.stashEnabled),
 			stashShortcut: normalizeStashShortcut(editor.stashShortcut) ?? defaults.editor.stashShortcut,
 			minContentRows: parseIntInRange(editor.minContentRows, defaults.editor.minContentRows, 2, 4),
+			workingSweepColor: parseStringEnum(editor.workingSweepColor, WORKING_SWEEP_COLORS, defaults.editor.workingSweepColor),
 			workingSweepSpeed: WORKING_SPEED.normalize(editor.workingSweepSpeed),
 			workingSweep: typeof editor.workingSweep === "boolean"
 				? (editor.workingSweep ? "top" : "off")

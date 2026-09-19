@@ -55,12 +55,17 @@ assert.match(chineseReadme, /普通字体.*Appearance.*Icons.*`Plain`/, "the Chi
 assert.equal(GLANCE_THEMES.length, 22, "the curated theme collection should remain complete");
 assertIncludes(readme, "22 palettes", "the English README should state the palette count");
 assertIncludes(chineseReadme, "22 套配色", "the Chinese README should state the palette count");
-assertIncludes(readme, "Git · Cost · Model speed · Context · Tokens · Model", "the English README should name the adaptive facts");
-assertIncludes(chineseReadme, "Git · 费用 · 模型速度 · 上下文 · Tokens · 模型", "the Chinese README should name the adaptive facts");
+assertIncludes(readme, "Git · Cost · Model speed · Context · Tokens · Extensions · Model", "the English README should name the adaptive facts");
+assertIncludes(chineseReadme, "Git · 费用 · 模型速度 · 上下文 · Tokens · 扩展状态 · 模型", "the Chinese README should name the adaptive facts");
 assert.match(readme, /no telemetry/i, "the English README should state the privacy boundary");
 assertIncludes(chineseReadme, "不收集遥测数据", "the Chinese README should state the privacy boundary");
-assertIncludes(readme, "Pi 0.84.4", "the English README should state the tested Pi baseline");
-assertIncludes(chineseReadme, "Pi 0.84.4", "the Chinese README should state the tested Pi baseline");
+assertIncludes(readme, "Pi 0.85.0+", "the English README should state the Pi floor");
+assertIncludes(chineseReadme, "Pi 0.85.0+", "the Chinese README should state the Pi floor");
+for (const document of [readme, chineseReadme]) {
+	assertIncludes(document, "`setStatus()`", "document the standard status channel, not universal plugin compatibility");
+	assertIncludes(document, "Extensions", "document the inline group setting");
+	assert.equal(document.includes("0.84"), false);
+}
 
 assertIncludes(readme, "Node.js 22.19.0 or newer", "the English README should state the Node floor");
 assertIncludes(chineseReadme, "Node.js 22.19.0 或更高版本", "the Chinese README should state the Node floor");

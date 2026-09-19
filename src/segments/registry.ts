@@ -10,14 +10,14 @@ import type { SegmentConfig, SegmentId } from "../types.js";
 
 export { type SegmentId } from "../types.js";
 
-export const SEGMENT_IDS = ["git", "cost", "throughput", "context", "tokens", "model"] as const satisfies readonly SegmentId[];
+export const SEGMENT_IDS = ["git", "cost", "throughput", "context", "tokens", "extensions", "model"] as const satisfies readonly SegmentId[];
 
-export type SegmentRegistryEntry = SegmentFeature;
-
-export interface SegmentCoverage {
-	missing: SegmentId[];
-	extra: string[];
-}
+export type SegmentRegistryEntry = SegmentFeature | {
+	id: "extensions";
+	label: string;
+	defaultEnabled: boolean;
+	settings: readonly SettingDescriptor[];
+};
 
 export const SEGMENT_REGISTRY = [
 	gitSegmentFeature,
@@ -25,6 +25,7 @@ export const SEGMENT_REGISTRY = [
 	throughputSegmentFeature,
 	contextSegmentFeature,
 	tokensSegmentFeature,
+	{ id: "extensions", label: "Extensions", defaultEnabled: true, settings: [] },
 	modelSegmentFeature,
 ] as const satisfies readonly SegmentRegistryEntry[];
 
@@ -44,15 +45,6 @@ export function isSegmentId(value: unknown): value is SegmentId {
 
 export function segmentLabel(id: SegmentId): string {
 	return SEGMENT_BY_ID.get(id)?.label ?? id;
-}
-
-export function segmentRecordCoverage(record: Record<string, unknown>): SegmentCoverage {
-	const keys = Object.keys(record);
-	const keySet = new Set(keys);
-	return {
-		missing: SEGMENT_IDS.filter((id) => !keySet.has(id)),
-		extra: keys.filter((key) => !isSegmentId(key)),
-	};
 }
 
 export function getSegmentSettings(id: SegmentId): readonly SettingDescriptor[] {

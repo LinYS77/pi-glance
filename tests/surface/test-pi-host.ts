@@ -67,8 +67,8 @@ assert.ok(editorFactory, "enabled session should expose the Glance custom-editor
 
 const terminal = createTerminal();
 const fullscreen = new TuiAltScreen(terminal, false, undefined, { mouse: false });
-assert.equal(fullscreen.mode, "fullscreen", "Pi 0.84.4 TuiAltScreen should expose fullscreen mode");
-assert.equal(isViewportTUI(fullscreen), true, "Pi 0.84.4 TuiAltScreen should satisfy the public viewport TUI guard");
+assert.equal(fullscreen.mode, "fullscreen", "Pi TuiAltScreen should expose fullscreen mode");
+assert.equal(isViewportTUI(fullscreen), true, "Pi TuiAltScreen should satisfy the public viewport TUI guard");
 
 let fullscreenRenderRequests = 0;
 fullscreen.requestRender = () => {
@@ -138,7 +138,7 @@ fullscreen.clear();
 for (const tui of [new TuiMainScreen(createTerminal()), new TuiAltScreen(createTerminal(), false, undefined, { mouse: false })]) {
 	const loopConfig = defaultConfig(); loopConfig.editor.workingSweep = "perimeter";
 	let elapsed: number | undefined;
-	const loopEditor = new GlanceEditor(tui, editorTheme, keybindings, richInputSurfaceState, () => loopConfig, undefined, { getWorkingElapsedMs: () => elapsed });
+	const loopEditor = new GlanceEditor(tui, editorTheme, keybindings, richInputSurfaceState, () => loopConfig, { getWorkingElapsedMs: () => elapsed });
 	tui.addChild(loopEditor); tui.setFocus(loopEditor);
 	loopEditor.setText("Working loop\n中文🙂 draft");
 	for (const width of [180, 80, 16, 4, 1, 120]) {
