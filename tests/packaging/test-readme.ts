@@ -62,7 +62,6 @@ assertIncludes(chineseReadme, "不收集遥测数据", "the Chinese README shoul
 assertIncludes(readme, "Pi 0.85.0+", "the English README should state the Pi floor");
 assertIncludes(chineseReadme, "Pi 0.85.0+", "the Chinese README should state the Pi floor");
 for (const document of [readme, chineseReadme]) {
-	assertIncludes(document, "`setStatus()`", "document the standard status channel, not universal plugin compatibility");
 	assertIncludes(document, "Extensions", "document the inline group setting");
 	assert.equal(document.includes("0.84"), false);
 }
@@ -70,11 +69,13 @@ for (const document of [readme, chineseReadme]) {
 assertIncludes(readme, "Node.js 22.19.0 or newer", "the English README should state the Node floor");
 assertIncludes(chineseReadme, "Node.js 22.19.0 或更高版本", "the Chinese README should state the Node floor");
 
-for (const implementationDetail of ["cacheRead /", "agent_settled", "sessionManager.getBranch", "theme: { light:", "editor.workingSweep", "npm run check", "npm run pack:dry"]) {
+for (const implementationDetail of ["setStatus()", "SDK packaging", "SDK 打包", "cacheRead /", "agent_settled", "sessionManager.getBranch", "theme: { light:", "editor.workingSweep", "npm run check", "npm run pack:dry"]) {
 	for (const document of [readme, chineseReadme]) {
 		assert.ok(!document.includes(implementationDetail), `the product README should leave ${implementationDetail} to development notes`);
 	}
 }
+assert.match(readme, /full-width preview/i, "describe the preview without claiming identical screen coordinates");
+assertIncludes(chineseReadme, "完整输入区宽度", "describe the full-width preview");
 assert.match(readme, /working animation/i, "the English README should introduce Working animation");
 assertIncludes(chineseReadme, "Working 扫光", "the Chinese README should introduce Working animation");
 

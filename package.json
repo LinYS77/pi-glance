@@ -1,6 +1,6 @@
 {
   "name": "pi-glance",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "A rounded editor and adaptive status line for Pi.",
   "keywords": [
     "pi-package",

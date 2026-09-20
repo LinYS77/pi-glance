@@ -1,4 +1,4 @@
-import { getCapabilities, KeybindingsManager as TuiKeys, matchesKey, ProcessTerminal, Text, TUI_KEYBINDINGS, TuiAltScreen, type EditorTheme } from "@earendil-works/pi-tui";
+import { getCapabilities, KeybindingsManager as TuiKeys, matchesKey, ProcessTerminal, Text, TUI_KEYBINDINGS, TuiAltScreen, type EditorTheme, type OverlayHandle } from "@earendil-works/pi-tui";
 import type { KeybindingsManager } from "@earendil-works/pi-coding-agent";
 import { defaultConfig } from "../src/config/model.js";
 import { PromptStash } from "../src/input/stash.js";
@@ -40,6 +40,7 @@ const editor = new GlanceEditor(tui, theme, keybindings, () => state, () => conf
 	onStashError: text => { notice.setText(text); tui.requestRender(); },
 });
 let pane: GlanceConfigPane | undefined;
+let overlay: OverlayHandle | undefined;
 let closed = false;
 editor.onSubmit = () => tui.requestRender();
 editor.onExtensionShortcut = data => {
@@ -48,11 +49,11 @@ editor.onExtensionShortcut = data => {
 		fg: (color, text) => (color === "accent" ? styles.title : color === "warning" ? styles.warn : styles.dim)(text),
 	}, result => {
 		if (result.action === "save") config = result.config;
-		if (pane) tui.removeChild(pane);
+		overlay?.hide();
+		overlay = undefined;
 		pane = undefined;
-		tui.addChild(editor); tui.setFocus(editor); tui.requestRender();
 	}, () => tui.requestRender(), keybindings, () => terminal.rows, state, { renderStyleContext: { ambientTone: tone, trueColor } });
-	tui.removeChild(editor); tui.addChild(pane); tui.setFocus(pane); tui.requestRender();
+	overlay = tui.showOverlay(pane, { width: "100%", anchor: "bottom-left" });
 	return true;
 };
 async function close() {

@@ -1,13 +1,63 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import { CURSOR_MARKER, visibleWidth, type Component, type TUI } from "@earendil-works/pi-tui";
-import type { KeybindingsManager, Theme } from "@earendil-works/pi-coding-agent";
+import type { ExtensionUIContext, KeybindingsManager, Theme } from "@earendil-works/pi-coding-agent";
 import { defaultConfig } from "../../src/config/model.js";
 import { showGlancePane } from "../../src/settings/pane.js";
 import { getThemeCatalogForSlot } from "../../src/settings/catalog.js";
 import { resolveBuiltInGlanceStyles } from "../../src/theme/adapter.js";
+import { renderInputSurface } from "../../src/surface/renderer.js";
 import { paneHarness, keys as k } from "../support/pane-harness.js";
-import { stripAnsi } from "../support/surface-test-harness.js";
+import { richInputSurfaceState, stripAnsi } from "../support/surface-test-harness.js";
+
+test("settings preview keeps the real input width and status fitting when the terminal resizes", () => {
+	const h = paneHarness();
+	try {
+		for (const width of [80, 100, 180, 240, 56, 220]) {
+			const lines = h.pane.render(width);
+			const top = lines.find(line => stripAnsi(line).trimStart().startsWith("╭"));
+			const liveFrame = renderInputSurface(richInputSurfaceState(), h.config, width);
+			assert.equal(top, liveFrame[h.config.editor.topMarginRows], `preview must fit the same facts as the live frame at ${width} columns`);
+			assert.equal(visibleWidth(top!), width);
+			const heading = lines.find(line => line.includes("◌ Glance"))!;
+			assert.ok(visibleWidth(heading.trimStart()) <= 100, "only the settings controls remain width-bounded");
+		}
+	} finally { h.pane.dispose(); }
+});
+
+test("preview position stays stable across sections and field editors without filling the terminal", () => {
+	const h = paneHarness();
+	try {
+		h.height(48);
+		const initial = h.pane.render(180).map(stripAnsi);
+		const previewRow = initial.findIndex(line => line.startsWith("╭"));
+		for (const path of [[], [k.down, k.enter], [k.esc, k.tab, k.enter], [k.esc, k.tab, k.enter], [k.esc, k.down, k.enter], [k.esc, k.tab]]) {
+			h.press(...path);
+			const lines = h.pane.render(180).map(stripAnsi);
+			const top = lines.findIndex(line => line.startsWith("╭"));
+			assert.equal(top, previewRow, "opening a taller picker or shorter detail page must not shift the preview");
+			assert.ok(lines.length < 46, "reserve a bounded settings area, not a fullscreen page");
+			assert.ok(lines.at(-1)!.startsWith("╰"), "no setting, help or action row may move the preview away from Pi's input-area bottom");
+			assert.equal(lines.length - top, h.config.editor.minContentRows + 2);
+			assert.ok(lines.findIndex(line => line.includes("[Esc]")) < top, "navigation remains above the preview");
+		}
+	} finally { h.pane.dispose(); }
+});
+
+test("Glance off and discard confirmation keep the same preview area", () => {
+	const h = paneHarness();
+	try {
+		const initial = h.pane.render(100);
+		h.press(k.space);
+		assert.match(h.text(), /Preview · Glance is off/);
+		assert.equal(h.pane.render(100).length, initial.length, "turning the frame off must not collapse its preview space");
+		h.press(k.esc);
+		assert.match(h.text(), /Discard unsaved changes/);
+		assert.equal(h.pane.render(100).length, initial.length);
+		h.press(k.esc, k.space);
+		assert.deepEqual(h.pane.render(100), initial);
+	} finally { h.pane.dispose(); }
+});
 
 test("new users see four sections, readable values and save/close without focus columns", () => {
 	const h = paneHarness();
@@ -157,11 +207,16 @@ test("palette preview uses the edited slot, injected styles and the reported col
 	h.pane.dispose();
 });
 
-test("custom UI rejection and external completion dispose the preview clock", async () => {
-	for (const fail of [false, true]) {
+test("the full-width bottom overlay keeps the editor mounted and disposes its preview on every exit", async () => {
+	for (const mode of ["regular", "fullscreen"] as const) for (const fail of [false, true]) {
 		let active = 0;
-		const promise = showGlancePane(defaultConfig(), { ui: { custom: async <T>(factory: (tui: TUI, theme: Theme, keys: KeybindingsManager, done: (result: T) => void) => Component) => {
-			const pane = factory({ terminal: { rows: 32 }, requestRender() {} } as unknown as TUI, { fg: (_tone: string, text: string) => text } as unknown as Theme, undefined as unknown as KeybindingsManager, () => {});
+		const promise = showGlancePane(defaultConfig(), { ui: { custom: async <T>(factory: (tui: TUI, theme: Theme, keys: KeybindingsManager, done: (result: T) => void) => Component, options?: Parameters<ExtensionUIContext["custom"]>[1]) => {
+			const pane = factory({ mode, terminal: { rows: 32 }, requestRender() {} } as unknown as TUI, { fg: (_tone: string, text: string) => text } as unknown as Theme, undefined as unknown as KeybindingsManager, () => {});
+			assert.equal(options?.overlay, true, "settings must not replace Pi's editor with a taller component");
+			const layout = typeof options?.overlayOptions === "function" ? options.overlayOptions() : options?.overlayOptions;
+			assert.equal(layout?.width, "100%");
+			assert.equal(layout?.anchor, "bottom-left");
+			assert.deepEqual(layout?.margin, { bottom: mode === "fullscreen" ? 1 : 0 }, "fullscreen reserves an empty footer row");
 			pane.handleInput?.(k.backTab);
 			pane.handleInput?.(k.backTab);
 			assert.equal(active, 1);

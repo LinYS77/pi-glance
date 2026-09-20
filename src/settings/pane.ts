@@ -13,7 +13,7 @@ import {
 	type KeyId,
 	type TUI,
 } from "@earendil-works/pi-tui";
-import type { KeybindingsManager, Theme } from "@earendil-works/pi-coding-agent";
+import type { ExtensionUIContext, KeybindingsManager, Theme } from "@earendil-works/pi-coding-agent";
 import {
 	createPaneModel,
 	createPaneViewModel,
@@ -39,6 +39,14 @@ export interface GlancePaneOptions {
 	readonly previewNowMs?: () => number;
 	readonly schedulePreviewFrame?: ScheduleSweepFrame;
 	readonly renderStyleContext?: GlanceRenderStyleContext;
+}
+
+/** Reserve bounded content slots so changing pages does not move the preview in regular mode. */
+const LIST_ROWS = 8;
+const HINT_ROWS = 2;
+const SHORTCUT_ROWS = 4;
+function fitRows(lines: string[], count: number): string[] {
+	return [...lines.slice(0, count), ...Array(Math.max(0, count - lines.length)).fill("")];
 }
 
 /** Keep settings reachable when preview, terminal height or palette names change. */
@@ -271,8 +279,6 @@ export class GlanceConfigPane implements Component, Focusable {
 	}
 	private renderPreview(view: GlancePaneViewModel, width: number, extensionStatuses: ReadonlyMap<string, string> | undefined): string[] {
 		const config = view.preview.config;
-		if (!config.enabled)
-			return [this.fg("dim", "Preview · Glance is off"), this.fg("dim", "Turn Glance on to preview the editor.")];
 		const options = {
 			...this.options.renderStyleContext,
 			...(view.preview.ambientTone ? { ambientTone: view.preview.ambientTone } : {}),
@@ -283,12 +289,15 @@ export class GlanceConfigPane implements Component, Focusable {
 			focused: true,
 		};
 		const preview = this.renderSurface(config, width, options);
+		if (!config.enabled)
+			return fitRows(["Preview · Glance is off", "Turn Glance on to preview the editor."]
+				.map(text => this.fg("dim", truncateStyledText(text, width))), preview.length + 1);
 		const densityLabel = view.preview.density[0]!.toUpperCase() + view.preview.density.slice(1);
 		const label =
 			view.section === "status"
 				? `Preview · ${densityLabel}`
 				: `Preview${view.preview.working ? ` · Working · ${config.editor.workingSweepSpeed} cols/s` : ""}`;
-		return [this.fg("dim", label), ...preview];
+		return [this.fg("dim", truncateStyledText(label, width)), ...preview];
 	}
 	private renderRow(row: GlancePaneViewModel["rows"][number], width: number): string {
 		const mark = row.selected ? "› " : "  ";
@@ -302,7 +311,10 @@ export class GlanceConfigPane implements Component, Focusable {
 		return row.selected ? (this.theme.bg?.("selectedBg", rendered) ?? rendered) : rendered;
 	}
 	render(availableWidth: number): string[] {
-		const width = Math.max(0, Math.min(100, Math.floor(availableWidth)));
+		const previewWidth = Math.max(0, Math.floor(availableWidth));
+		const width = Math.min(100, previewWidth);
+		const indent = " ".repeat(Math.floor((previewWidth - width) / 2));
+		const settingsLine = (line: string) => indent + truncateStyledText(line, width);
 		const terminalRows = this.getTerminalRows();
 		const height = Math.max(1, Number.isFinite(terminalRows) ? Math.floor(terminalRows!) - 2 : 30);
 		const view = this.view;
@@ -336,27 +348,26 @@ export class GlanceConfigPane implements Component, Focusable {
 		const hint = wrapTextWithAnsi(
 			this.fg(this.model.page.kind === "number" && this.model.page.error || this.model.page.kind === "shortcut" && this.model.page.error ? "warning" : "dim", view.hint),
 			Math.max(1, width),
-		).slice(0, 2);
+		).slice(0, HINT_ROWS);
 		const statusSource = this.options.getExtensionStatuses?.();
-		let preview = this.renderPreview(view, width, statusSource);
+		let preview = this.renderPreview(view, previewWidth, statusSource);
 		const title = this.fg("muted", view.title);
-		const base = header.length + 1 + hint.length + footer.length + 2;
+		const base = header.length + 1 + 1 + HINT_ROWS + SHORTCUT_ROWS;
 		const details = view.extensionStatusIndex === undefined ? undefined : extensionStatusEntries(statusSource);
-		const minimumRows = details ? Math.min(4, Math.max(1, details.length)) :
-			view.page === "number" || view.page === "shortcut" ? 1 : Math.min(4, view.page === "list" ? view.rows.length : view.choices.length);
-		const showPreview = height - base - preview.length >= minimumRows;
+		const showPreview = height - base - preview.length >= 4;
 		if (showPreview !== this.previewVisible) {
 			this.previewVisible = showPreview;
 			this.clock.setWaiting(!showPreview);
-			if (showPreview) preview = this.renderPreview(view, width, statusSource);
+			if (showPreview) preview = this.renderPreview(view, previewWidth, statusSource);
 		}
-		const prefix = [...header, ...(showPreview ? preview : []), title];
-		const budget = Math.max(1, height - prefix.length - hint.length - footer.length - 1);
+		const prefix = [...header, title];
+		if (!showPreview) preview = [];
+		const budget = Math.max(1, Math.min(LIST_ROWS + 1, height - base - preview.length));
 		const body: string[] = [];
 		if (details) {
 			if (details.length === 0) body.push(this.fg("dim", statusSource === undefined
 				? "Extension status source is not attached." : "No extension statuses published."));
-			const count = Math.max(1, Math.min(8, budget - (details.length > budget ? 1 : 0)));
+			const count = Math.max(1, Math.min(LIST_ROWS, budget - (details.length > budget ? 1 : 0)));
 			this.pageSize = count;
 			const selected = Math.min(view.extensionStatusIndex!, Math.max(0, details.length - 1));
 			const { start, end } = viewport(details.length, selected, count);
@@ -370,7 +381,7 @@ export class GlanceConfigPane implements Component, Focusable {
 		} else if (view.page === "number") {
 			body.push(...this.input.render(Math.max(1, width)));
 		} else if (view.page !== "list") {
-			this.pageSize = Math.max(1, Math.min(8, budget - 1));
+			this.pageSize = Math.max(1, Math.min(LIST_ROWS, budget - 1));
 			const list = new SelectList(
 				view.choices.map((choice, index) => ({
 					value: String(index),
@@ -393,7 +404,7 @@ export class GlanceConfigPane implements Component, Focusable {
 			);
 			body.push(...list.render(Math.max(1, width)));
 		} else {
-			const count = Math.max(1, Math.min(8, budget - (view.rows.length > budget ? 1 : 0)));
+			const count = Math.max(1, Math.min(LIST_ROWS, budget - (view.rows.length > budget ? 1 : 0)));
 			this.pageSize = count;
 			const selected = Math.max(
 				0,
@@ -409,9 +420,9 @@ export class GlanceConfigPane implements Component, Focusable {
 					),
 				);
 		}
-		let lines = [...prefix, ...body.slice(0, budget), "", ...hint, ...footer];
+		let lines = [...prefix, ...fitRows(body, budget), "", ...fitRows(hint, HINT_ROWS), ...fitRows(footer, SHORTCUT_ROWS)];
 		// At tiny heights keep the selected setting and an exit hint, not a clipped header.
-		if (lines.length > height) {
+		if (lines.length + preview.length > height) {
 			const selected = view.rows.find((row) => row.selected);
 			const confirm = view.help.find((item) => item.key === "Enter") ?? view.actions[0]!;
 			const cancel = view.actions.find((item) => item.key === "Esc")!;
@@ -420,14 +431,15 @@ export class GlanceConfigPane implements Component, Focusable {
 				this.fg("dim", `${this.shortcut(confirm)}  ${this.shortcut(cancel)}`),
 			].slice(0, height);
 		}
-		const indent = " ".repeat(Math.max(0, Math.floor((availableWidth - width) / 2)));
-		return lines.map((line) => indent + truncateStyledText(line, width));
+		// Only controls are width-bounded. The preview stays full-width at Pi's input-area bottom.
+		return [...lines.map(settingsLine), ...preview];
 	}
 }
 
 interface GlancePaneUI {
 	custom<T>(
 		factory: (tui: TUI, theme: Theme, keybindings: KeybindingsManager, done: (result: T) => void) => Component,
+		options?: Parameters<ExtensionUIContext["custom"]>[1],
 	): Promise<T>;
 }
 export async function showGlancePane(
@@ -437,8 +449,11 @@ export async function showGlancePane(
 	options: GlancePaneOptions = {},
 ): Promise<PaneResult> {
 	let pane: GlanceConfigPane | undefined;
+	let footerGap = 0;
 	try {
 		return await ctx.ui.custom<PaneResult>((tui, theme, keybindings, done) => {
+			// Pi reserves one row for the empty footer in fullscreen mode.
+			footerGap = tui.mode === "fullscreen" ? 1 : 0;
 			pane = new GlanceConfigPane(
 				initial,
 				theme,
@@ -450,6 +465,9 @@ export async function showGlancePane(
 				options,
 			);
 			return pane;
+		}, {
+			overlay: true,
+			overlayOptions: () => ({ width: "100%", anchor: "bottom-left", margin: { bottom: footerGap } }),
 		});
 	} finally {
 		pane?.dispose();

@@ -34,14 +34,16 @@ Restart Pi or run `/reload`.
 - **Rounded editor** — Pi's editing, history, autocomplete, and keybindings stay the same.
 - **Adaptive status line** — Git · Cost · Model speed · Context · Tokens · Extensions · Model. Model is the last item hidden.
 - **Prompt stash** — `alt+s` puts a prompt aside. Press again to restore or swap with current input.
-- **Working animation** — a sweep around the editor or along its top edge, with adjustable speed and theme-matched colors.
-- **22 palettes** — separate light and dark choices with live preview.
+- **Working animation** — a full-border or top-edge sweep, with adjustable speed and nine theme-matched color choices.
+- **22 palettes** — light and dark choices with live preview.
 
 No runtime dependencies. No telemetry.
 
 ## Configure
 
-Run `/glance` for **Appearance**, **Status line**, **Working**, and **Input** settings. `Tab` switches sections, arrows adjust, and `S` saves. Input includes the Stash shortcut.
+Run `/glance` for **Appearance**, **Status line**, **Working**, and **Input** settings. `Tab` switches sections, arrows adjust, and `S` saves.
+
+The full-width preview stays below the settings. Closing keeps your input and cursor position.
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/LinYS77/pi-glance/main/assets/settings.png" alt="pi-glance settings pane">
@@ -51,14 +53,16 @@ Run `/glance` for **Appearance**, **Status line**, **Working**, and **Input** se
   <img src="https://raw.githubusercontent.com/LinYS77/pi-glance/main/assets/themes.gif" alt="pi-glance theme preview">
 </p>
 
+Previews use example data.
+
 ## Notes
 
 - Nerd Font icons are enabled by default. For regular fonts, select `Plain` in `/glance` → **Appearance** → **Icons**.
 - Git defaults and upgrades use **Summary**: changed files and tracked `+ / −` lines. **Auto fetch** updates the upstream every 5 minutes; turn it off under **Status line → Git**.
 - Drafts are stored locally per session, survive reloads, and are deleted on restore. `--no-session` keeps them in memory only.
-- **Extensions** shows other plugins' `setStatus()` text inline; empty statuses stay hidden. Toggle or reorder it under **Status line**.
-- Pi has one custom-editor slot; the last editor extension loaded wins.
-- Requires Pi 0.85.0+ and Node.js 22.19.0 or newer. Prefer Pi 0.85.1 for its SDK packaging fix.
+- **Extensions** shows status text published by compatible plugins. Toggle, reorder or inspect it under **Status line**; empty groups stay hidden.
+- Other editor or footer extensions may override parts of Glance's display.
+- Requires Pi 0.85.0+ and Node.js 22.19.0 or newer. Pi 0.85.1 is recommended.
 
 ## Update
 
@@ -68,7 +72,7 @@ pi update npm:pi-glance
 
 ## Contributing
 
-Issues and pull requests are welcome. See [CONTEXT.md](./CONTEXT.md) for development notes.
+Issues and pull requests are welcome. Development notes: [CONTEXT.md](./CONTEXT.md).
 
 ## License
 
