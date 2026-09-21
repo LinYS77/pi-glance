@@ -13,12 +13,12 @@ function frame(lines: string[]): string[] {
 test("Working section previews mode and speed without touching the caller config", () => {
 	const h = paneHarness();
 	assert.equal(h.pending(), 0);
-	h.press(k.backTab, k.backTab);
+	h.press(k.backTab, k.backTab, k.right);
 	assert.equal(h.pending(), 1);
 	const first = frame(h.pane.render(100));
 	h.advance(900);
 	assert.notDeepEqual(frame(h.pane.render(100)), first);
-	h.press(k.down);
+	h.press(k.down, k.down);
 	const before = frame(h.pane.render(100));
 	h.press(k.right);
 	assert.match(h.text(), /48 cols\/s/);
@@ -37,13 +37,13 @@ test("Working section previews mode and speed without touching the caller config
 
 test("animation off keeps the speed, stops preview, and re-enables a single clock", () => {
 	const h = paneHarness();
-	h.press(k.backTab, k.backTab, k.right, k.right); // perimeter -> top -> off
+	h.press(k.backTab, k.backTab); // Text is the default
 	assert.equal(h.pending(), 0);
-	h.press(k.down, k.right);
+	h.press(k.down, k.down, k.right);
 	assert.match(h.text(), /48 cols\/s/);
-	assert.match(h.text(), /Turn animation on/);
+	assert.match(h.text(), /Used in Sweep mode/);
 	assert.equal(h.pending(), 0);
-	h.press(k.up, k.left);
+	h.press(k.up, k.up, k.right);
 	assert.equal(h.pending(), 1);
 	const stale = h.stale();
 	h.press(k.tab);
@@ -57,7 +57,7 @@ test("animation off keeps the speed, stops preview, and re-enables a single cloc
 test("hidden Working previews stop the clock and resume after resizing", () => {
 	const h = paneHarness();
 	h.height(10);
-	h.press(k.backTab, k.backTab);
+	h.press(k.backTab, k.backTab, k.right);
 	const stale = h.stale();
 	assert.doesNotMatch(h.text(), /Preview/);
 	assert.equal(h.pending(), 0);
@@ -74,7 +74,7 @@ test("hidden Working previews stop the clock and resume after resizing", () => {
 });
 
 test("closing a preview invalidates pending callbacks and further input", () => {
-	const h = paneHarness(); h.press(k.backTab, k.backTab);
+	const h = paneHarness(); h.press(k.backTab, k.backTab, k.right);
 	const stale = h.stale();
 	h.pane.dispose();
 	const renders = h.renders();

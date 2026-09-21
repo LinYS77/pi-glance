@@ -7,9 +7,9 @@ import { cloneConfig, configFromText, configToText, defaultConfig, normalizeConf
 import { createConfigStore } from "../../src/config/store.js";
 import { WORKING_SWEEP_MODE_VALUES } from "../../src/config/options.js";
 
-test("Working animation defaults to full border and round-trips all three modes", () => {
+test("effect area defaults to full border and round-trips both paths", () => {
 	assert.equal(defaultConfig().editor.workingSweep, "perimeter");
-	assert.deepEqual(WORKING_SWEEP_MODE_VALUES, ["top", "perimeter", "off"]);
+	assert.deepEqual(WORKING_SWEEP_MODE_VALUES, ["top", "perimeter"]);
 	for (const value of [undefined, null, 0, 1, "false", "true", "border", [], {}]) {
 		assert.equal(normalizeConfig({ editor: { workingSweep: value } }).editor.workingSweep, "perimeter");
 	}
@@ -18,7 +18,7 @@ test("Working animation defaults to full border and round-trips all three modes"
 		assert.equal(config.editor.workingSweep, workingSweep);
 		assert.equal(configFromText(configToText(config)).editor.workingSweep, workingSweep);
 		const cloned = cloneConfig(config);
-		cloned.editor.workingSweep = workingSweep === "off" ? "top" : "off";
+		cloned.editor.workingSweep = workingSweep === "top" ? "perimeter" : "top";
 		assert.equal(config.editor.workingSweep, workingSweep);
 	}
 });
@@ -34,7 +34,7 @@ test("v8 and v9 migration preserve choices without mutating the source", () => {
 	for (const workingSweep of [true, false]) {
 		const v9 = { ...config, version: 9, editor: { ...editor, workingSweep } };
 		const migrated = normalizeConfig(v9);
-		assert.equal(migrated.editor.workingSweep, workingSweep ? "top" : "off");
+		assert.equal(migrated.editor.workingSweep, workingSweep ? "top" : "perimeter");
 		assert.deepEqual({ ...migrated, editor: config.editor }, config);
 		assert.equal(v9.editor.workingSweep, workingSweep);
 	}
@@ -50,13 +50,15 @@ test("loading old configs never rewrites them; explicit save persists the select
 			const store = createConfigStore(path);
 			const sync = store.loadConfigSync();
 			assert.equal(sync.writable, true);
-			assert.equal(sync.config.editor.workingSweep, workingSweep ? "top" : "off");
+			assert.equal(sync.config.editor.workingSweep, workingSweep ? "top" : "perimeter");
+			assert.equal(sync.config.editor.activityMode, "text");
 			assert.deepEqual((await store.loadConfig()).config, sync.config);
 			assert.equal(await readFile(path, "utf8"), text);
 			sync.config.editor.workingSweep = "perimeter";
+			sync.config.editor.activityMode = "sweep";
 			await store.saveConfig(sync.config);
 			const saved = JSON.parse(await readFile(path, "utf8"));
-			assert.equal(saved.version, 14);
+			assert.equal(saved.version, 15);
 			assert.equal(saved.editor.workingSweep, "perimeter");
 			assert.equal(saved.icons, "nerd");
 			assert.equal(saved.display.workspaceLabel, "smart");

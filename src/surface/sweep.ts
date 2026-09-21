@@ -1,4 +1,4 @@
-import { WORKING_SPEED } from "../config/schema.js";
+import { SUMMARY_SPEED, WORKING_SPEED } from "../config/schema.js";
 import { visibleWidth } from "@earendil-works/pi-tui";
 import type { ResolvedGlanceStyles, TextStyler } from "../theme/adapter.js";
 
@@ -9,7 +9,9 @@ const MAX_CACHED_TEXT_LENGTH = 1024;
 
 /** Both paths use one travel speed; a longer route gets a longer cycle. */
 export function sweepMotion(length: number, elapsedMs: number, speed: number = WORKING_SPEED.defaultValue): { position: number; periodMs: number } {
-	const columnsPerSecond = WORKING_SPEED.normalize(speed);
+	const columnsPerSecond = Number.isFinite(speed)
+		? Math.max(WORKING_SPEED.min * SUMMARY_SPEED.min, Math.min(WORKING_SPEED.max * SUMMARY_SPEED.max, speed))
+		: WORKING_SPEED.defaultValue;
 	const distance = Number.isFinite(length) ? Math.max(0, length) : 0;
 	const periodMs = distance / columnsPerSecond * 1000;
 	const elapsed = Number.isFinite(elapsedMs) ? Math.max(0, elapsedMs) : 0;

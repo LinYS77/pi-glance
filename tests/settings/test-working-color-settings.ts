@@ -19,7 +19,7 @@ test("Working has a theme-aware color picker with live preview, confirm and canc
 		assert.ok(row && row.kind === "choice");
 		assert.equal(row.value, "Theme default");
 		assert.deepEqual(row.options.map(o => o.label), ["Theme default", "Amber", "Rose", "Violet", "Blue", "Teal", "Mint", "Coral", "Copper"]);
-		h.press(k.backTab, k.backTab, k.down, k.down);
+		h.press(k.backTab, k.backTab, k.right, k.down, k.down, k.down);
 		h.advance(1200);
 		const before = frame(h.pane.render(100));
 		h.press(k.enter, k.down);
@@ -40,13 +40,13 @@ test("Working has a theme-aware color picker with live preview, confirm and canc
 test("color can be configured while animation is off without starting a clock", () => {
 	const h = paneHarness();
 	try {
-		h.press(k.backTab, k.backTab, k.right, k.right, k.down, k.down);
+		h.press(k.backTab, k.backTab, k.down, k.down, k.down);
 		assert.equal(h.pending(), 0);
-		assert.match(h.text(), /Turn animation on to preview colors/);
+		assert.match(h.text(), /Used in Sweep mode/);
 		h.press(k.enter, k.down, k.down, k.down, k.down, k.enter, "s");
 		const saved = h.completion(); assert.ok(saved?.action === "save");
 		assert.equal(saved.config.editor.workingSweepColor, "blue");
-		assert.equal(saved.config.editor.workingSweep, "off");
+		assert.equal(saved.config.editor.activityMode, "text");
 		assert.equal(h.pending(), 0);
 	} finally { h.pane.dispose(); }
 });
@@ -55,7 +55,7 @@ test("the last color stays reachable and saves correctly when the picker must sc
 	const h = paneHarness();
 	try {
 		h.height(18);
-		h.press(k.backTab, k.backTab, k.down, k.down, k.enter);
+		h.press(k.backTab, k.backTab, k.down, k.down, k.down, k.enter);
 		h.text(64);
 		h.press(...Array(8).fill(k.down));
 		assert.match(h.text(64), /→\s+Copper/);

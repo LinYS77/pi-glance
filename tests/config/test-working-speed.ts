@@ -15,7 +15,7 @@ test("speed defaults to 47, normalizes to 10–120 and preserves all saved modes
 	for (const workingSweep of ["top", "perimeter", "off"] as const) for (const speed of [10, 47, 85, 120]) {
 		const config = normalizeConfig({ editor: { workingSweep, workingSweepSpeed: speed } });
 		assert.deepEqual(configFromText(configToText(config)), config);
-		assert.equal(config.editor.workingSweep, workingSweep);
+		assert.equal(config.editor.workingSweep, workingSweep === "off" ? "perimeter" : workingSweep);
 		assert.equal(config.editor.workingSweepSpeed, speed);
 	}
 });
@@ -36,14 +36,14 @@ test("schema v10 picks up speed in memory only and explicit save persists it ato
 		loaded.config.editor.workingSweepSpeed = 60;
 		await store.saveConfig(loaded.config);
 		const saved = JSON.parse(await readFile(path, "utf8"));
-		assert.equal(saved.version, 14);
+		assert.equal(saved.version, 15);
 		assert.equal(saved.editor.workingSweepSpeed, 60);
 		assert.equal(saved.editor.workingSweep, "top");
 	} finally { await rm(directory, { recursive: true, force: true }); }
 });
 
 test("configured speed reaches both sweep paths, including narrow frames and status gaps", () => {
-	for (const speed of [10, 47, 85, 120]) for (const width of [4, 40, 120, 220]) {
+	for (const speed of [2.5, 10, 23.5, 47, 70.5, 85, 120, 240]) for (const width of [4, 40, 120, 220]) {
 		const top = sweepProfile(width, 0, speed);
 		assert.ok(Math.abs((width + 2 * top.radius) / top.periodMs * 1000 - speed) < 1e-8);
 		for (const rows of [2, 4, 12]) {

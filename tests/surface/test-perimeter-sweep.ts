@@ -10,6 +10,7 @@ import { createPerimeterSweep, perimeterSweepProfile } from "../../src/surface/p
 import { renderGlanceLine } from "../../src/surface/status-line.js";
 import { resolveBuiltInGlanceStyles, type ResolvedGlanceStyles, type TextStyler } from "../../src/theme/adapter.js";
 import { GLANCE_THEMES } from "../../src/theme/themes.js";
+import { nativeActivity } from "../support/activity-harness.js";
 import { richInputSurfaceState, stripAnsi } from "../support/surface-test-harness.js";
 
 const identity = (text: string) => text;
@@ -19,6 +20,7 @@ const keys = { matches: () => false } as unknown as KeybindingsManager;
 
 function configForLoop() {
 	const config = defaultConfig();
+	config.editor.activityMode = "sweep";
 	config.editor.workingSweep = "perimeter";
 	return config;
 }
@@ -86,18 +88,18 @@ test("rendered full-border loop visits all four corners and both sides", () => {
 	const period = perimeterSweepProfile(input.width, rows, 0).periodMs;
 	const length = 2 * (99 + 2 * (rows + 1));
 	for (const [text, row, distance] of [["╭", 0, 0], ["╮", 0, 99], ["╯", lastRow, 99 + 2 * lastRow], ["╰", lastRow, 198 + 2 * lastRow], ["│", 1, 101], ["│", 1, length - 2]] as const) {
-		const frame = renderInputSurfaceFrame({ ...input, chrome: { workingElapsedMs: period * distance / length } });
+		const frame = renderInputSurfaceFrame({ ...input, chrome: { animation: { kind: "sweep", elapsedMs: period * distance / length, speed: 47 } } });
 		assert.ok(frame[row]!.includes(styles.highlight!(styles.border, 1)(text)), `lit ${text} at row ${row}`);
 	}
 	const idle = renderInputSurfaceFrame(input);
 	let bottomChanges = 0;
 	for (let elapsed = 0; elapsed < period; elapsed += 70) {
-		const frame = renderInputSurfaceFrame({ ...input, chrome: { workingElapsedMs: elapsed } });
+		const frame = renderInputSurfaceFrame({ ...input, chrome: { animation: { kind: "sweep", elapsedMs: elapsed, speed: 47 } } });
 		assert.deepEqual(frame.map(stripAnsi), idle.map(stripAnsi));
 		if (frame.at(-1) !== idle.at(-1)) bottomChanges++;
 	}
 	assert.ok(bottomChanges > 10, "the bottom is a moving beam, not just lit corners");
-	assert.deepEqual(renderInputSurfaceFrame({ ...input, chrome: { workingElapsedMs: 0 } }), renderInputSurfaceFrame({ ...input, chrome: { workingElapsedMs: period } }));
+	assert.deepEqual(renderInputSurfaceFrame({ ...input, chrome: { animation: { kind: "sweep", elapsedMs: 0, speed: 47 } } }), renderInputSurfaceFrame({ ...input, chrome: { animation: { kind: "sweep", elapsedMs: period, speed: 47 } } }));
 });
 
 test("wide status areas never hide the beam for a timed gap", () => {
@@ -113,7 +115,7 @@ test("wide status areas never hide the beam for a timed gap", () => {
 			status: { render: (budget: number) => status = renderGlanceLine(state, config, budget, 2, { styles }) } };
 		for (let elapsed = 0; elapsed < 8000; elapsed += 33) {
 			lit = false;
-			const frame = renderInputSurfaceFrame({ ...input, chrome: { workingElapsedMs: elapsed } });
+			const frame = renderInputSurfaceFrame({ ...input, chrome: { animation: { kind: "sweep", elapsedMs: elapsed, speed: 47 } } });
 			assert.ok(lit, `${width}/${elapsed}: at least one visible part of the beam survives`);
 			assert.ok(frame[0]!.includes(status), "metadata retains its exact bytes");
 		}
@@ -150,7 +152,7 @@ test("all palettes preserve dimensions and text across heights, widths and phase
 			const idle = renderInputSurfaceFrame(input);
 			const period = perimeterSweepProfile(width, rows, 0).periodMs;
 			for (const fraction of [0, 0.2, 0.45, 0.5, 0.75, 0.9999, 1]) {
-				const frame = renderInputSurfaceFrame({ ...input, chrome: { workingElapsedMs: period * fraction } });
+				const frame = renderInputSurfaceFrame({ ...input, chrome: { animation: { kind: "sweep", elapsedMs: period * fraction, speed: 47 } } });
 				assert.deepEqual(frame.map(stripAnsi), idle.map(stripAnsi), `${palette.id}/${mode}/${width}/${rows}/${fraction}`);
 				assert.equal(frame[0], idle[0], "top spacing stays outside the animation");
 				for (const line of frame) assert.ok(visibleWidth(line) <= width);
@@ -173,7 +175,7 @@ test("status, scroll labels and styled input remain byte-identical in loop mode"
 	assert.ok(status);
 	const period = perimeterSweepProfile(180, 3, 0).periodMs;
 	for (let elapsed = 0; elapsed < period; elapsed += 80) {
-		const frame = renderInputSurfaceFrame({ ...input, chrome: { ...chrome, workingElapsedMs: elapsed } });
+		const frame = renderInputSurfaceFrame({ ...input, chrome: { ...chrome, animation: { kind: "sweep", elapsedMs: elapsed, speed: 47 } } });
 		assert.ok(frame[0]!.includes(status));
 		assert.ok(frame[0]!.includes(styles.border(chrome.topScrollIndicator)));
 		assert.ok(frame.at(-1)!.includes(styles.border(chrome.bottomScrollIndicator)));
@@ -182,12 +184,12 @@ test("status, scroll labels and styled input remain byte-identical in loop mode"
 	}
 });
 
-test("off, disabled and unfocused frames never animate even with an elapsed time", () => {
-	for (const mode of ["top", "perimeter", "off"] as const) for (const disabled of [false, true]) for (const unfocused of [false, true]) {
-		if (mode !== "off" && !disabled && !unfocused) continue;
-		const config = defaultConfig(); config.enabled = !disabled; config.editor.workingSweep = mode;
+test("Text, disabled and unfocused frames never animate even with an elapsed time", () => {
+	for (const mode of ["text", "sweep"] as const) for (const disabled of [false, true]) for (const unfocused of [false, true]) {
+		if (mode === "sweep" && !disabled && !unfocused) continue;
+		const config = defaultConfig(); config.enabled = !disabled; config.editor.activityMode = mode;
 		const input = { config, state: richInputSurfaceState(), width: 120, styles, body: { kind: "editor" as const, lines: [""] }, chrome: { focus: unfocused ? "unfocused" as const : "focused" as const } };
-		assert.deepEqual(renderInputSurfaceFrame({ ...input, chrome: { ...input.chrome, workingElapsedMs: 900 } }), renderInputSurfaceFrame(input));
+		assert.deepEqual(renderInputSurfaceFrame({ ...input, chrome: { ...input.chrome, animation: { kind: "sweep", elapsedMs: 900, speed: 47 } } }), renderInputSurfaceFrame(input));
 	}
 });
 
@@ -209,9 +211,9 @@ test("animation work stays bounded to the beam on very wide top and bottom edges
 test("live loop preserves cached status, Bash cues, cursor and scrolling after resize", () => {
 	const config = configForLoop(); config.editor.topMarginRows = 0;
 	const sample = richInputSurfaceState();
-	let reads = 0, elapsed: number | undefined;
+	let reads = 0, elapsed = 0;
 	const state = { ...sample, get usage() { reads++; return sample.usage; } };
-	const editor = new GlanceEditor({ terminal: { rows: 16 }, requestRender() {} } as unknown as TUI, theme, keys, () => state, () => config, { getWorkingElapsedMs: () => elapsed });
+	const editor = new GlanceEditor({ terminal: { rows: 16 }, requestRender() {} } as unknown as TUI, theme, keys, () => state, () => config, { animationNowMs: () => elapsed, scheduleAnimationFrame: () => () => {} });
 	editor.focused = true;
 	for (const text of ["中文 draft", "!pwd", Array.from({ length: 30 }, (_, i) => `line ${i}`).join("\n")]) {
 		editor.setText(text);
@@ -219,8 +221,9 @@ test("live loop preserves cached status, Bash cues, cursor and scrolling after r
 		editor.borderColor = bash;
 		const cursor = editor.getCursor();
 		for (const width of [180, 80, 4, 1, 120]) {
-			elapsed = undefined;
+			elapsed = 0; editor.setWorkingStatusIndicator(undefined);
 			const idle = editor.render(width), before = reads;
+			editor.setWorkingStatusIndicator(nativeActivity("working")); editor.render(width);
 			for (const time of [0, 800, 2500, 4000, 7000]) {
 				elapsed = time;
 				const frame = editor.render(width);

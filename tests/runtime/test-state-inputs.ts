@@ -220,6 +220,20 @@ assert.deepEqual(
 	"usage totals should match Pi billed-session semantics across assistant, toolResult, compaction, and branch-summary usage",
 );
 
+const usageEntries = [
+	{ type: "usage", kind: "cache_warm", usage: { output: 1, cacheRead: 50_000, cost: { total: 0.015015 } } },
+	{ type: "usage", kind: "future-operation", usage: { input: 20, output: 2, cacheWrite: 30, cost: { total: 0.25 } } },
+	{ type: "message", message: { role: "system", usage: { input: 999, cost: { total: 999 } } } },
+];
+const persistedUsage = stateInputsFromContext(fakeContext({
+	entries: usageEntries,
+	contextUsage: { tokens: null, contextWindow: 200_000, percent: null },
+}), "off");
+assert.deepEqual(persistedUsage.usage, { input: 20, output: 3, cacheRead: 50_000, cacheWrite: 30, cost: 0.265015 },
+	"all standalone usage kinds must count as billed work, without treating system messages as usage");
+assert.deepEqual(persistedUsage.contextUsage, { tokens: null, contextWindow: 200_000, percent: null },
+	"cache warming must not make unknown Pi context usage appear known");
+
 const publicContextTruthInputs = stateInputsFromContext(
 	{
 		cwd: "/public-context-truth",

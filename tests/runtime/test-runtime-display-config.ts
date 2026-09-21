@@ -1,6 +1,7 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import { stripTerminalSequences, visibleWidth } from "@earendil-works/pi-tui";
+import { nativeActivity } from "../support/activity-harness.js";
 import { defaultConfig } from "../../src/config/model.js";
 import type { GlanceEditor } from "../../src/surface/editor.js";
 import { resolveBuiltInGlanceStyles } from "../../src/theme/adapter.js";
@@ -8,7 +9,8 @@ import { createGitHarness, createRuntimeHarness, createRuntimeTestContext, invok
 
 // Both preferences use the same save transaction. Exercise that boundary once.
 for (const outcome of ["save", "cancel", "failed", "readonly"] as const) test(`${outcome}: display preferences apply atomically to the existing input surface`, async () => {
-	const config = defaultConfig(), next = structuredClone(config);
+	const config = defaultConfig(); config.editor.activityMode = "sweep";
+	const next = structuredClone(config);
 	next.editor.workingSweepColor = "blue";
 	next.segments.find(s => s.id === "extensions")!.enabled = false;
 	const statuses = new Map([["worker", "\x1b[31mExternal ready\x1b[0m"]]);
@@ -23,6 +25,7 @@ for (const outcome of ["save", "cancel", "failed", "readonly"] as const) test(`$
 	harness.runtime.events.sessionStart({}, ctx.ctx);
 	const editor = invokeEditorFactory(ctx, 0, () => {}) as GlanceEditor;
 	editor.focused = true; editor.setText("keep 中文🙂 draft");
+	editor.setWorkingStatusIndicator(nativeActivity("working")); editor.render(220);
 	now = 1200;
 	const before = editor.render(220), installs = [...ctx.surfaceCalls];
 	assert.ok(before.join("").includes("\x1b[31mExternal ready"));

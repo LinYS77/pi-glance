@@ -1,11 +1,13 @@
 import { renderInputSurfaceFrame } from "./frame.js";
 import { GlanceLineRenderer } from "./status-line.js";
 import { resolveGlanceRenderStyles, type GlanceRenderStyleContext } from "../theme/adapter.js";
-import type { GlanceConfig, GlanceState, WidthMode } from "../types.js";
+import type { ActivityAnimation, ActivityStatus, GlanceConfig, GlanceState, WidthMode } from "../types.js";
 
 interface InputSurfaceRenderOptions extends GlanceRenderStyleContext {
+	activity?: ActivityStatus;
+	animation?: ActivityAnimation;
+	hasDraft?: boolean;
 	extensionStatuses?: ReadonlyMap<string, string>;
-	workingElapsedMs?: number;
 	contentLines?: string[];
 	focused?: boolean;
 	showTitle?: boolean;
@@ -57,9 +59,10 @@ export function renderInputSurface(
 }
 
 /** Own the preview's cache without caching prompt text, layout or animation. */
-export function createInputSurfaceRenderer(state: GlanceState = PREVIEW_STATE) {
+export function createInputSurfaceRenderer(source: GlanceState | (() => GlanceState) = PREVIEW_STATE) {
 	const statusLine = new GlanceLineRenderer();
 	return (config: GlanceConfig, width: number, options: InputSurfaceRenderOptions = {}): string[] => {
+		const state = typeof source === "function" ? source() : source;
 		const styles = resolveGlanceRenderStyles(config.theme, options, config.editor.workingSweepColor);
 		return renderInputSurfaceFrame({
 			state,
@@ -72,7 +75,9 @@ export function createInputSurfaceRenderer(state: GlanceState = PREVIEW_STATE) {
 				showPromptIndicator: Boolean(options.focused),
 			},
 			chrome: {
-				workingElapsedMs: options.workingElapsedMs,
+				activity: options.activity,
+				animation: options.animation,
+				hasDraft: options.hasDraft,
 				showTitle: options.showTitle,
 			},
 			status: {

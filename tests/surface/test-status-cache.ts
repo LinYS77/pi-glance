@@ -41,14 +41,14 @@ test("preview reuses status facts, not the animated frame or prompt contents", (
 	const sample = richInputSurfaceState();
 	const state = { ...sample, get usage() { reads++; return sample.usage; } };
 	const render = createInputSurfaceRenderer(state);
-	const config = defaultConfig();
-	const first = render(config, 100, { workingElapsedMs: 0 });
+	const config = defaultConfig(); config.editor.activityMode = "sweep";
+	const first = render(config, 100, { animation: { kind: "sweep", elapsedMs: 0, speed: 47 } });
 	const baseline = reads;
-	const next = render(config, 100, { workingElapsedMs: 900, contentLines: ["a different prompt"] });
+	const next = render(config, 100, { animation: { kind: "sweep", elapsedMs: 900, speed: 47 }, contentLines: ["a different prompt"] });
 	assert.equal(reads, baseline);
 	assert.notDeepEqual(next, first);
 	assert.ok(next.join("").includes("a different prompt"));
-	assert.deepEqual(next, renderInputSurface(state, config, 100, { workingElapsedMs: 900, contentLines: ["a different prompt"] }));
+	assert.deepEqual(next, renderInputSurface(state, config, 100, { animation: { kind: "sweep", elapsedMs: 900, speed: 47 }, contentLines: ["a different prompt"] }));
 	state.context.percent = 92; state.version++;
 	assert.deepEqual(render(config, 100, { previewDensity: "full", trueColor: false }), renderInputSurface(state, config, 100, { previewDensity: "full", trueColor: false }));
 });

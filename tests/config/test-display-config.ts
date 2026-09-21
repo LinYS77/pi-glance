@@ -15,7 +15,8 @@ test("color validation accepts all presets and falls back to the original theme 
 	for (const color of WORKING_SWEEP_COLOR_VALUES) {
 		const config = normalizeConfig({ editor: { workingSweepColor: color, workingSweep: "off", workingSweepSpeed: 82 } });
 		assert.equal(config.editor.workingSweepColor, color);
-		assert.equal(config.editor.workingSweep, "off");
+		assert.equal(config.editor.activityMode, "text");
+		assert.equal(config.editor.workingSweep, "perimeter");
 		assert.equal(config.editor.workingSweepSpeed, 82);
 	}
 });

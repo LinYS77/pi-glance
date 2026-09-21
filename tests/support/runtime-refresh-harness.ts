@@ -109,6 +109,11 @@ export function createRuntimeRefreshContext(options: RuntimeRefreshContextOption
 		getContextUsage: () => contextUsage,
 		sessionManager: {
 			getCwd: () => cwd,
+			getLeafId: () => {
+				const id = entries.at(-1)?.id;
+				return typeof id === "string" ? id : null;
+			},
+			getEntry: (id: string) => entries.find(entry => entry.id === id),
 			getEntries: () => {
 				entryReads++;
 				return entries;

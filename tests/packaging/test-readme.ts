@@ -59,8 +59,8 @@ assertIncludes(readme, "Git · Cost · Model speed · Context · Tokens · Exten
 assertIncludes(chineseReadme, "Git · 费用 · 模型速度 · 上下文 · Tokens · 扩展状态 · 模型", "the Chinese README should name the adaptive facts");
 assert.match(readme, /no telemetry/i, "the English README should state the privacy boundary");
 assertIncludes(chineseReadme, "不收集遥测数据", "the Chinese README should state the privacy boundary");
-assertIncludes(readme, "Pi 0.85.0+", "the English README should state the Pi floor");
-assertIncludes(chineseReadme, "Pi 0.85.0+", "the Chinese README should state the Pi floor");
+assertIncludes(readme, "Pi 0.86.1+", "the English README should state the Pi floor");
+assertIncludes(chineseReadme, "Pi 0.86.1+", "the Chinese README should state the Pi floor");
 for (const document of [readme, chineseReadme]) {
 	assertIncludes(document, "Extensions", "document the inline group setting");
 	assert.equal(document.includes("0.84"), false);
@@ -76,8 +76,10 @@ for (const implementationDetail of ["setStatus()", "SDK packaging", "SDK 打包"
 }
 assert.match(readme, /full-width preview/i, "describe the preview without claiming identical screen coordinates");
 assertIncludes(chineseReadme, "完整输入区宽度", "describe the full-width preview");
-assert.match(readme, /working animation/i, "the English README should introduce Working animation");
-assertIncludes(chineseReadme, "Working 扫光", "the Chinese README should introduce Working animation");
+assertIncludes(readme, "**Activity**", "the English README should introduce Activity");
+assertIncludes(chineseReadme, "Activity 状态", "the Chinese README should introduce Activity");
+assertIncludes(readme, "Upgrading switches activity to **Text**", "old users must know about the forced Text default");
+assertIncludes(chineseReadme, "升级统一切换为 **Text**", "old users must know about the forced Text default");
 
 assert.match(manifest.description ?? "", /editor.*status line.*Pi/, "package description should identify Pi and the editor/status line");
 assert.ok(manifest.files?.includes("README*.md"), "the npm package should include both language READMEs");

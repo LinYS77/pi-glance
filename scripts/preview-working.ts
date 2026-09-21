@@ -5,13 +5,13 @@ import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import { getCapabilities, matchesKey, ProcessTerminal, truncateToWidth, TuiAltScreen } from "@earendil-works/pi-tui";
 import { createConfigStore } from "../src/config/store.js";
 import { WORKING_SWEEP_COLOR_VALUES, WORKING_SWEEP_MODE_VALUES, nextOption } from "../src/config/options.js";
-import { WorkingSweep } from "../src/runtime/working-sweep.js";
+import { ActivityClock, activityMotion } from "../src/runtime/activity-animation.js";
 import { renderInputSurfaceFrame } from "../src/surface/frame.js";
 import { GlanceLineRenderer } from "../src/surface/status-line.js";
 import { resolveBuiltInGlanceStyles, type ResolvedGlanceStyles } from "../src/theme/adapter.js";
 import { GLANCE_THEME_IDS, isGlanceThemeName, type GlanceThemeName } from "../src/theme/themes.js";
 import { selectGlanceTheme, type GlanceAmbientTone } from "../src/theme/selection.js";
-import type { GlanceState } from "../src/types.js";
+import type { ActivityKind, GlanceState } from "../src/types.js";
 
 if (!process.stdin.isTTY || !process.stdout.isTTY) {
 	console.error("Run npm run preview:working in a terminal.");
@@ -21,6 +21,7 @@ if (!process.stdin.isTTY || !process.stdout.isTTY) {
 const agentDir = getAgentDir();
 const config = createConfigStore(join(agentDir, "pi-glance", "config.json")).loadConfigSync().config;
 config.enabled = true;
+config.editor.activityMode = process.argv.includes("--text") ? "text" : "sweep";
 const cwd = process.cwd();
 const state: GlanceState = {
 	workspace: { name: basename(cwd), path: cwd },
@@ -46,7 +47,8 @@ const requestedTheme = process.argv.find(arg => arg.startsWith("--theme="))?.sli
 let previewTheme: GlanceThemeName | undefined = isGlanceThemeName(requestedTheme) ? requestedTheme : undefined;
 let trueColor = process.argv.includes("--256") ? false : getCapabilities().trueColor;
 if (process.argv.includes("--perimeter")) config.editor.workingSweep = "perimeter";
-let running = config.editor.workingSweep !== "off";
+let running = true;
+let phase: ActivityKind = "working";
 let shortPath = false;
 let warnings = false;
 let closed = false;
@@ -56,13 +58,12 @@ function renderStatus(budget: number, styles: ResolvedGlanceStyles): string {
 }
 const terminal = new ProcessTerminal();
 const tui = new TuiAltScreen(terminal, false, undefined, { mouse: false });
-const sweep = new WorkingSweep({
+const sweep = new ActivityClock({
 	nowMs: () => performance.now(),
-	ownsEditor: () => !closed,
+	getMotion: () => activityMotion(config, running ? phase : undefined),
+	isPaused: () => closed,
 	requestRender: () => tui.requestRender(),
-	setWorkingVisible: () => {},
 });
-sweep.setSpeed(config.editor.workingSweepSpeed);
 
 async function close(): Promise<void> {
 	if (closed) return;
@@ -82,10 +83,12 @@ tui.addChild({
 		if (matchesKey(data, "q") || matchesKey(data, "escape") || matchesKey(data, "ctrl+c")) { void close(); return; }
 		if (matchesKey(data, "space")) {
 			running = !running;
-			if (running) sweep.start(); else sweep.settle();
 		} else if (matchesKey(data, "m")) {
 			config.editor.workingSweep = nextOption(config.editor.workingSweep, WORKING_SWEEP_MODE_VALUES);
-			if (config.editor.workingSweep === "off") sweep.dispose(); else sweep.attach(running);
+		} else if (matchesKey(data, "d")) {
+			config.editor.activityMode = config.editor.activityMode === "text" ? "sweep" : "text";
+		} else if (matchesKey(data, "p")) {
+			phase = nextOption(phase, ["working", "compaction", "branchSummary", "retry"] as const);
 		} else if (matchesKey(data, "s")) {
 			shortPath = !shortPath;
 			state.workspace = shortPath ? { name: "p", path: "/p" } : { name: basename(cwd), path: cwd };
@@ -108,26 +111,27 @@ tui.addChild({
 			state.git.conflicts = warnings ? 1 : 0;
 			state.version++;
 		}
+		sweep.sync();
 		tui.requestRender();
 	},
 	render(width) {
 		return [
-			"Glance Working 扫光 · 演示数据",
-			`${running ? "运行中" : "空闲"} · ${config.editor.workingSweep} · ${config.editor.workingSweepColor} · ${previewTheme ?? selectGlanceTheme(config.theme, tone)} · ${trueColor ? "RGB" : "ANSI 256"}`,
+			"Glance Activity · DEMO 演示数据",
+			`${running ? phase : "idle"} · ${config.editor.activityMode} · ${config.editor.workingSweep} · ${config.editor.workingSweepColor} · ${previewTheme ?? selectGlanceTheme(config.theme, tone)} · ${trueColor ? "RGB" : "ANSI 256"}`,
 			"",
 			...renderInputSurfaceFrame({
 				state, config, width,
 				styles: resolveBuiltInGlanceStyles(previewTheme ?? selectGlanceTheme(config.theme, tone), trueColor ? "truecolor" : "ansi256", config.editor.workingSweepColor),
 				body: { kind: "preview" },
-				chrome: { workingElapsedMs: sweep.elapsedMs() },
+				chrome: { animation: sweep.frame(), activity: running ? { kind: phase, render: () => `◌ DEMO ${phase}` } : undefined, hasDraft: true },
 				status: { render: renderStatus },
 			}),
 			"",
-			"Space 工作/空闲 · M 扫光模式 · A 扫光颜色 · ←/→ 配色 · T 亮暗 · C 色深",
+			"Space 工作/空闲 · D 文字/扫光 · P 状态 · M 区域 · A 动效颜色 · ←/→ 配色 · T 亮暗 · C 色深",
 			"S 长短路径 · E 告警 · Q 退出；可直接调整终端宽度。",
 		].map((line) => truncateToWidth(line, width));
 	},
 });
 tui.setFocus(tui.children[0]!);
 tui.start();
-if (config.editor.workingSweep !== "off") sweep.attach(running);
+sweep.sync();

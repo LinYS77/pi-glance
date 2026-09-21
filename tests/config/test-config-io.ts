@@ -66,12 +66,12 @@ test("config store diagnoses reads and atomically saves through an explicit path
 		const futureExpected = normalizeConfig(futureRaw);
 		assertLoadResult(
 			loadConfigSync(),
-			{ config: futureExpected, status: "future", writable: false, diagnostic: /version 99.*newer than supported version 14.*without overwriting/i },
+			{ config: futureExpected, status: "future", writable: false, diagnostic: /version 99.*newer than supported version 15.*without overwriting/i },
 			"future sync config should load known fields read-only",
 		);
 		assertLoadResult(
 			await loadConfig(),
-			{ config: futureExpected, status: "future", writable: false, diagnostic: /version 99.*newer than supported version 14.*without overwriting/i },
+			{ config: futureExpected, status: "future", writable: false, diagnostic: /version 99.*newer than supported version 15.*without overwriting/i },
 			"future async config should load known fields read-only",
 		);
 

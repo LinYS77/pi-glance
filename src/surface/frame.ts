@@ -1,4 +1,4 @@
-import { visibleWidth } from "@earendil-works/pi-tui";
+import { stripTerminalSequences, visibleWidth } from "@earendil-works/pi-tui";
 import { DRAFT_LABELS } from "../theme/palette.js";
 import { shortcutLabel } from "../input/shortcut.js";
 import { truncateStyledText } from "./text.js";
@@ -18,7 +18,7 @@ import {
 	SURFACE_CONTENT_PADDING_X,
 } from "./layout.js";
 import type { ResolvedGlanceStyles, TextStyler } from "../theme/adapter.js";
-import type { GlanceConfig, GlanceState } from "../types.js";
+import type { ActivityAnimation, ActivityStatus, GlanceConfig, GlanceState } from "../types.js";
 
 export type InputSurfaceChromeFocus = "focused" | "unfocused";
 
@@ -34,7 +34,8 @@ export type InputSurfaceFrameBody =
 	| { kind: "editor"; lines: readonly string[] };
 
 export interface InputSurfaceFrameChrome {
-	workingElapsedMs?: number;
+	activity?: ActivityStatus;
+	animation?: ActivityAnimation;
 	focus?: InputSurfaceChromeFocus;
 	showTitle?: boolean;
 	topScrollIndicator?: string;
@@ -75,6 +76,18 @@ function shouldDimChrome(input: InputSurfaceFrameInput): boolean {
 	return input.body.kind === "editor" && input.chrome?.focus === "unfocused";
 }
 
+function animation(input: InputSurfaceFrameInput): ActivityAnimation | undefined {
+	if (!input.config.enabled || input.config.editor.activityMode !== "sweep" || shouldDimChrome(input)) return undefined;
+	return input.chrome?.animation;
+}
+
+function blinkingBorder(input: InputSurfaceFrameInput, top: boolean): TextStyler {
+	const effect = animation(input);
+	const border = shouldDimChrome(input) ? input.styles.dim : input.styles.border;
+	return effect?.kind === "blink" && effect.bright && (top || input.config.editor.workingSweep === "perimeter")
+		? input.styles.highlight?.(border, 1) ?? border : border;
+}
+
 function resolveStatus(input: InputSurfaceFrameInput, budget: number): string {
 	const status = input.status?.render
 		? input.status.render(budget, input.styles)
@@ -110,9 +123,11 @@ function renderTopFrame(input: InputSurfaceFrameInput, plan: ReturnType<typeof p
 	const dimChrome = shouldDimChrome(input);
 	const border = dimChrome ? input.styles.dim : input.styles.border;
 	const title = dimChrome ? input.styles.dim : input.styles.title;
-	const elapsed = !input.config.enabled || dimChrome || input.config.editor.workingSweep !== "top" ? undefined : input.chrome?.workingElapsedMs;
+	const effect = animation(input);
 	const sweepWidth = plan.leftWidth + plan.fillerWidth;
-	const sweep = elapsed === undefined ? undefined : createTopEdgeSweep(sweepWidth, elapsed, input.styles, input.config.editor.workingSweepSpeed);
+	const sweep = effect?.kind === "sweep" && input.config.editor.workingSweep === "top"
+		? createTopEdgeSweep(sweepWidth, effect.elapsedMs, input.styles, effect.speed) : undefined;
+	const blink = blinkingBorder(input, true);
 	let column = 0;
 	const rendered = plan.chunks.map((chunk) => {
 		const start = column;
@@ -124,7 +139,7 @@ function renderTopFrame(input: InputSurfaceFrameInput, plan: ReturnType<typeof p
 			// Top-edge mode keeps the corners and status-side tail static.
 			return sweep && start >= 1 && start < 1 + sweepWidth && /^─+$/.test(chunk.text)
 				? sweep(chunk.text, border, start - 1)
-				: border(chunk.text);
+				: /^[╭╮─]+$/.test(chunk.text) ? blink(chunk.text) : border(chunk.text);
 		}
 		return chunk.text;
 	}).join("");
@@ -152,7 +167,7 @@ function renderPreviewRow(input: InputSurfaceFrameInput, text: string, index: nu
 			prefixRole: showPromptIndicator ? "dim" : "text",
 		}).chunks,
 		{
-			border: rowBorder(input.styles.border, width, index + 1, perimeter),
+			border: rowBorder(blinkingBorder(input, false), width, index + 1, perimeter),
 			content: input.styles.text,
 			dim: input.styles.dim,
 			text: identity,
@@ -161,7 +176,7 @@ function renderPreviewRow(input: InputSurfaceFrameInput, text: string, index: nu
 }
 
 function renderEditorRow(input: InputSurfaceFrameInput, text: string, index: number, width: number, perimeter?: PerimeterSweep): string {
-	const border = shouldDimChrome(input) ? input.styles.dim : input.styles.border;
+	const border = blinkingBorder(input, false);
 	return renderSurfaceChunks(
 		planSurfaceRow({
 			width,
@@ -192,9 +207,12 @@ function renderBodyRow(input: InputSurfaceFrameInput, text: string, index: numbe
 function planBottomFrame(input: InputSurfaceFrameInput, width: number) {
 	const label = DRAFT_LABELS[input.config.icons];
 	const key = input.config.editor.stashEnabled ? shortcutLabel(input.config.editor.stashShortcut) : "off";
+	const activity = input.config.editor.activityMode === "text" ? input.chrome?.activity : undefined;
+	const activityStyle = shouldDimChrome(input) ? input.styles.dim : activity?.kind === "retry" ? input.styles.warn : input.styles.title;
 	return planSurfaceBottomFrame({
 		width, scrollIndicator: input.chrome?.bottomScrollIndicator,
-		label: input.chrome?.hasDraft ? { full: `${label} · ${key}`, compact: label } : undefined,
+		label: activity ? budget => activityStyle(truncateStyledText(stripTerminalSequences(activity.render(budget)).replace(/[\r\n\t]/g, " "), budget, "…"))
+			: input.chrome?.hasDraft ? { full: `${label} · ${key}`, compact: label } : undefined,
 	});
 }
 
@@ -204,11 +222,13 @@ function renderBottomFrame(input: InputSurfaceFrameInput, plan: ReturnType<typeo
 	const title = dim ? input.styles.dim : input.styles.title;
 	let column = 0;
 	return renderSurfaceChunks(plan.chunks, {
+		status: text => { column += visibleWidth(text); return text; },
 		title: text => { column += visibleWidth(text); return title(text); },
 		border: (text) => {
 			const start = column;
 			column += visibleWidth(text);
-			return perimeter && /^[╰╯─]+$/.test(text) ? perimeter(text, border, start, row) : border(text);
+			return perimeter && /^[╰╯─]+$/.test(text) ? perimeter(text, border, start, row)
+				: /^[╰╯─]+$/.test(text) ? blinkingBorder(input, false)(text) : border(text);
 		},
 	});
 }
@@ -230,9 +250,9 @@ export function renderInputSurfaceFrame(input: InputSurfaceFrameInput): string[]
 	const top = planTopFrame(input, metrics);
 	const bottom = planBottomFrame(input, metrics.safeWidth);
 	const topGap = top.status.text ? { column: 1 + top.leftWidth + top.fillerWidth, width: top.status.width + 2 } : undefined;
-	const elapsed = input.chrome?.workingElapsedMs;
-	const perimeter = input.config.enabled && input.config.editor.workingSweep === "perimeter" && !shouldDimChrome(input) && elapsed !== undefined
-		? createPerimeterSweep(metrics.safeWidth, rows, elapsed, input.styles, topGap, input.config.editor.workingSweepSpeed, bottom.labelGap)
+	const effect = animation(input);
+	const perimeter = input.config.editor.workingSweep === "perimeter" && effect?.kind === "sweep"
+		? createPerimeterSweep(metrics.safeWidth, rows, effect.elapsedMs, input.styles, topGap, effect.speed, bottom.labelGap)
 		: undefined;
 	const lines = [
 		...renderSurfaceTopMargin(metrics.safeWidth, input.config.editor.topMarginRows),

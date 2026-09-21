@@ -22,7 +22,16 @@ export type TokensCacheMode = "rate" | "read-write" | "hide";
 export type ModelThinkingMode = "auto" | "always" | "never";
 export type WorkspaceLabelMode = "name" | "smart" | "path";
 export type WorkingSweepColor = "theme" | "amber" | "rose" | "violet" | "blue" | "teal" | "mint" | "coral" | "copper";
-export type WorkingSweepMode = "top" | "perimeter" | "off";
+export type ActivityMode = "text" | "sweep";
+export type ActivityKind = "working" | "compaction" | "branchSummary" | "retry";
+export type ActivityAnimation =
+	| { kind: "sweep"; elapsedMs: number; speed: number }
+	| { kind: "blink"; bright: boolean };
+export interface ActivityStatus {
+	readonly kind: ActivityKind;
+	render(width: number): string;
+}
+export type WorkingSweepMode = "top" | "perimeter";
 export type EditorTopMarginRows = 0 | 1 | 2;
 export type ThroughputPrecision = "auto" | 0 | 1;
 
@@ -37,6 +46,9 @@ interface DisplayConfig {
 }
 
 interface EditorConfig {
+	activityMode: ActivityMode;
+	summarySpeedMultiplier: number;
+	retryBlinkHz: number;
 	stashEnabled: boolean;
 	stashShortcut: string;
 	workingSweep: WorkingSweepMode;
@@ -75,7 +87,7 @@ interface ThroughputConfig {
 }
 
 export interface GlanceConfig {
-	version: 14;
+	version: 15;
 	enabled: boolean;
 	theme: GlanceThemePair;
 	icons: IconMode;
@@ -95,7 +107,7 @@ export interface GlanceConfig {
 
 /**
  * Billed usage accumulated across the whole persisted Pi session: assistant
- * responses, usage-bearing tool results, compactions, and branch summaries.
+ * responses, usage-bearing tool results, standalone usage, compactions, and branch summaries.
  * Token cache rate is derived from these same session totals.
  */
 export interface UsageTotals {

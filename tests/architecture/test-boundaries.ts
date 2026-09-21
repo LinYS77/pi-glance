@@ -38,21 +38,21 @@ function assertCompatibilityBaseline(packageText: string, lockText: string): voi
 	const lock = JSON.parse(lockText) as {
 		packages?: Record<string, { engines?: Record<string, string>; devDependencies?: Record<string, string>; peerDependencies?: Record<string, string> }>;
 	};
-	// 0.85.0 is the API floor; 0.85.1 fixes the published SDK's missing imports.
+	// Unified editor activity indicators require Pi 0.86.1.
 	const expectedDevDependencies = {
-		"@earendil-works/pi-ai": "0.85.1",
-		"@earendil-works/pi-coding-agent": "0.85.1",
-		"@earendil-works/pi-tui": "0.85.1",
+		"@earendil-works/pi-ai": "0.86.1",
+		"@earendil-works/pi-coding-agent": "0.86.1",
+		"@earendil-works/pi-tui": "0.86.1",
 		"@types/node": "24.12.4",
 		typescript: "5.9.3",
 	};
-	assert.deepEqual(manifest.devDependencies, expectedDevDependencies, "package.json should pin the fixed Pi 0.85 SDK");
+	assert.deepEqual(manifest.devDependencies, expectedDevDependencies, "package.json should pin the supported Pi SDK");
 	assert.deepEqual(lock.packages?.[""]?.devDependencies, expectedDevDependencies, "package-lock should match the development baseline");
 	assert.equal(manifest.engines?.node, ">=22.19.0", "package.json should preserve Pi's Node floor");
 	assert.equal(lock.packages?.[""]?.engines?.node, ">=22.19.0", "package-lock should preserve Pi's Node floor");
 	for (const packageName of ALLOWED_PI_IMPORTS) {
-		assert.equal(manifest.peerDependencies?.[packageName], ">=0.85.0", `${packageName} should declare the Pi API floor`);
-		assert.equal(lock.packages?.[""]?.peerDependencies?.[packageName], ">=0.85.0", `package-lock should preserve the Pi API floor for ${packageName}`);
+		assert.equal(manifest.peerDependencies?.[packageName], ">=0.86.1", `${packageName} should declare the Pi API floor`);
+		assert.equal(lock.packages?.[""]?.peerDependencies?.[packageName], ">=0.86.1", `package-lock should preserve the Pi API floor for ${packageName}`);
 	}
 }
 

@@ -9,8 +9,9 @@ import {
 	type GlanceThemeSlot,
 } from "./catalog.js";
 import { segmentLabel } from "../segments/registry.js";
-import type { GlanceConfig, SegmentId, WidthMode } from "../types.js";
+import type { ActivityKind, GlanceConfig, SegmentId, WidthMode } from "../types.js";
 
+export type ActivityPreview = ActivityKind | "idle";
 export type PanePreviewDensity = "auto" | WidthMode;
 interface ListPage {
 	kind: "list";
@@ -37,6 +38,7 @@ export interface PaneModelState {
 	detailRows: Partial<Record<SegmentId, number>>;
 	page: PanePage;
 	previewDensity: PanePreviewDensity;
+	previewActivity: ActivityPreview;
 }
 export type PaneCompletion = { action: "save"; config: GlanceConfig } | { action: "cancel" };
 export type PaneIntent =
@@ -46,7 +48,7 @@ export type PaneIntent =
 	| { type: "reorder"; direction: -1 | 1 }
 	| { type: "shortcut"; key?: string; error?: string }
 	| { type: "input"; text: string }
-	| { type: "activate" | "toggle" | "back" | "cancel" | "save" | "reset" | "density" };
+	| { type: "activate" | "toggle" | "back" | "cancel" | "save" | "reset" | "density" | "previewActivity" };
 export interface PaneUpdateResult {
 	model: PaneModelState;
 	completion?: PaneCompletion;
@@ -66,6 +68,7 @@ export interface GlancePaneViewModel {
 		kind: SettingsRow["kind"];
 		selected: boolean;
 		changed: boolean;
+		inactive?: boolean;
 	}>;
 	extensionStatusIndex?: number;
 	choices: Array<{ label: string; selected: boolean; checked: boolean }>;
@@ -73,7 +76,7 @@ export interface GlancePaneViewModel {
 	page: PanePage["kind"];
 	actions: HelpShortcut[];
 	help: HelpShortcut[];
-	preview: { config: GlanceConfig; working: boolean; density: PanePreviewDensity; ambientTone?: GlanceThemeSlot };
+	preview: { config: GlanceConfig; activity?: ActivityPreview; density: PanePreviewDensity; ambientTone?: GlanceThemeSlot };
 }
 
 export function createPaneModel(initial: GlanceConfig): PaneModelState {
@@ -90,6 +93,7 @@ export function createPaneModel(initial: GlanceConfig): PaneModelState {
 		detailRows: {},
 		page: { kind: "list", index: 0 },
 		previewDensity: "auto",
+		previewActivity: "working",
 	};
 }
 export function paneIsDirty(model: PaneModelState): boolean {
@@ -127,9 +131,13 @@ function clampIndex(index: number, count: number): number {
 	return Math.max(0, Math.min(count - 1, index));
 }
 function withList(model: PaneModelState, page: ListPage): PaneModelState {
+	const rowId = model.section === "working" ? getSettingsRows(model.draft, model.section)[page.index]?.id : undefined;
 	return {
 		...model,
 		page,
+		previewActivity: model.section === "working" && page.index !== listPage(model).index
+			? rowId === "activity.summarySpeed" ? "compaction" : rowId === "activity.retryBlink" ? "retry" : "working"
+			: model.previewActivity,
 		sectionPages: { ...model.sectionPages, [model.section]: page },
 		detailRows: page.segment ? { ...model.detailRows, [page.segment]: page.index } : model.detailRows,
 	};
@@ -170,7 +178,8 @@ function updateNumber(model: PaneModelState, text: string, confirm = false): Pan
 	const row = selectedRow(model);
 	if (row?.kind !== "number") return model;
 	const value = Number(text);
-	const valid = /^\d+$/.test(text) && Number.isInteger(value) && value >= row.min && value <= row.max;
+	const syntax = row.precision === 0 ? /^\d+$/ : new RegExp(`^(?:\\d+(?:\\.\\d{1,${row.precision}})?|\\.\\d{1,${row.precision}})$`);
+	const valid = syntax.test(text) && Number.isFinite(value) && value >= row.min && value <= row.max;
 	return {
 		...model,
 		draft: valid ? row.setValue(model.draft, value) : model.draft,
@@ -180,7 +189,7 @@ function updateNumber(model: PaneModelState, text: string, confirm = false): Pan
 			error: valid
 				? ""
 				: confirm
-					? `Enter a whole number from ${row.min} to ${row.max}.`
+					? `Invalid value. ${row.inputHint}`
 					: text === model.page.text
 						? model.page.error
 						: "",
@@ -274,7 +283,7 @@ function adjustRow(config: GlanceConfig, row: SettingsRow, direction: -1 | 1): G
 		case "toggle":
 			return row.select(config, direction === 1 ? 0 : 1);
 		case "number":
-			return row.setValue(config, row.number + direction);
+			return row.setValue(config, Number((row.number + direction * row.step).toFixed(row.precision)));
 		case "theme": {
 			const themes = getThemeCatalogForSlot(row.slot);
 			const current = themes.findIndex((theme) => theme.id === config.theme[row.slot]);
@@ -329,6 +338,11 @@ export function updatePaneModel(model: PaneModelState, intent: PaneIntent, exten
 		}
 		case "reset":
 			return { model: { ...model, page: { kind: "confirm", action: "reset", index: 0, previous: page } } };
+		case "previewActivity": {
+			const scenes: ActivityPreview[] = ["working", "compaction", "branchSummary", "retry", "idle"];
+			return { model: model.section === "working"
+				? { ...model, previewActivity: scenes[wrap(scenes.indexOf(model.previewActivity) + 1, scenes.length)]! } : model };
+		}
 		case "density": {
 			const values: PanePreviewDensity[] = ["auto", "full", "compact", "minimal"];
 			return {
@@ -399,7 +413,7 @@ export function createPaneViewModel(model: PaneModelState): GlancePaneViewModel 
 		actions = [{ key: "Enter", label: "Confirm" }, { key: "Esc", label: "Cancel" }];
 	} else if (page.kind === "number") {
 		title = row?.label ?? "Sweep speed";
-		hint = page.error || "Type to replace the speed (10–120 cols/s). Default: 47.";
+		hint = page.error || (row?.kind === "number" ? row.inputHint : "Enter a number.");
 		help = [];
 		actions = [
 			{ key: "Enter", label: "Confirm" },
@@ -464,6 +478,7 @@ export function createPaneViewModel(model: PaneModelState): GlancePaneViewModel 
 		if (row?.kind === "segment" || row?.kind === "toggle") help.push({ key: "Space", label: "Toggle" });
 		if (row?.kind === "segment") help.push({ key: "J/K", label: "Reorder" });
 		if (model.section === "status") help.push({ key: "D", label: "Preview layout" });
+		if (model.section === "working") help.push({ key: "P", label: "Preview state" });
 		actions = [
 			{ key: "S", label: "Save & close" },
 			{ key: "Esc", label: list.segment ? "Back" : "Close" },
@@ -476,7 +491,7 @@ export function createPaneViewModel(model: PaneModelState): GlancePaneViewModel 
 		title,
 		page: page.kind,
 		dirty: paneIsDirty(model),
-		hint,
+		hint: row?.inactive ? `Used in Sweep mode. ${hint}` : hint,
 		extensionStatusIndex: page.kind === "list" && page.segment === "extensions" ? page.index : undefined,
 		choices,
 		help,
@@ -485,6 +500,7 @@ export function createPaneViewModel(model: PaneModelState): GlancePaneViewModel 
 			id: row.id,
 			label: row.label,
 			value: row.value,
+			inactive: row.inactive,
 			kind: row.kind,
 			selected: index === list.index,
 			changed:
@@ -494,11 +510,7 @@ export function createPaneViewModel(model: PaneModelState): GlancePaneViewModel 
 		preview: {
 			config: model.draft,
 			density: model.previewDensity,
-			working:
-				model.draft.enabled &&
-				model.draft.editor.workingSweep !== "off" &&
-				model.section === "working" &&
-				page.kind !== "confirm",
+			activity: model.draft.enabled && model.section === "working" && page.kind !== "confirm" ? model.previewActivity : undefined,
 			ambientTone: content.kind === "theme" ? content.slot : row?.kind === "theme" ? row.slot : undefined,
 		},
 	};

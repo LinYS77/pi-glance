@@ -31,19 +31,19 @@ Restart Pi or run `/reload`.
 
 ## Features
 
-- **Rounded editor** — Pi's editing, history, autocomplete, and keybindings stay the same.
+- **Rounded editor** — Pi's editing, history, autocomplete and keybindings stay unchanged.
 - **Adaptive status line** — Git · Cost · Model speed · Context · Tokens · Extensions · Model. Model is the last item hidden.
-- **Prompt stash** — `alt+s` puts a prompt aside. Press again to restore or swap with current input.
-- **Working animation** — a full-border or top-edge sweep, with adjustable speed and nine theme-matched color choices.
+- **Prompt stash** — `alt+s` puts input aside; press again to restore or swap.
+- **Activity** — bottom-border text, or sweeps for work/summaries and blinking for retries. Adjust speed, color, summary multiplier and blink rate.
 - **22 palettes** — light and dark choices with live preview.
 
 No runtime dependencies. No telemetry.
 
 ## Configure
 
-Run `/glance` for **Appearance**, **Status line**, **Working**, and **Input** settings. `Tab` switches sections, arrows adjust, and `S` saves.
+Run `/glance` for **Appearance**, **Status line**, **Activity**, and **Input** settings. `Tab` switches sections, arrows adjust, and `S` saves.
 
-The full-width preview stays below the settings. Closing keeps your input and cursor position.
+The full-width preview sits below settings. Closing preserves input and cursor.
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/LinYS77/pi-glance/main/assets/settings.png" alt="pi-glance settings pane">
@@ -58,11 +58,12 @@ Previews use example data.
 ## Notes
 
 - Nerd Font icons are enabled by default. For regular fonts, select `Plain` in `/glance` → **Appearance** → **Icons**.
-- Git defaults and upgrades use **Summary**: changed files and tracked `+ / −` lines. **Auto fetch** updates the upstream every 5 minutes; turn it off under **Status line → Git**.
-- Drafts are stored locally per session, survive reloads, and are deleted on restore. `--no-session` keeps them in memory only.
-- **Extensions** shows status text published by compatible plugins. Toggle, reorder or inspect it under **Status line**; empty groups stay hidden.
+- Upgrading switches activity to **Text**. Choose **Sweep** under **Activity** to restore effects; previous speeds and colors are kept.
+- Git **Summary** shows changed files and tracked `+ / −` lines. **Auto fetch** checks upstream every 5 minutes; disable under **Status line → Git**.
+- Drafts persist per session until restored. `--no-session` keeps them in memory.
+- **Extensions** shows compatible plugins' status text. Toggle, reorder or inspect under **Status line**; empty groups stay hidden.
 - Other editor or footer extensions may override parts of Glance's display.
-- Requires Pi 0.85.0+ and Node.js 22.19.0 or newer. Pi 0.85.1 is recommended.
+- Requires Pi 0.86.1+ and Node.js 22.19.0 or newer.
 
 ## Update
 

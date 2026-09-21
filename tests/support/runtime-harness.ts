@@ -287,6 +287,11 @@ export function createRuntimeTestContext(options: RuntimeTestContextOptions = {}
 			getSessionId: () => options.sessionId ?? "test-session",
 			getSessionFile: () => options.persistent === false ? undefined : "/test/session.jsonl",
 			getCwd: () => cwd,
+			getLeafId: () => {
+				const id = entries.at(-1)?.id;
+				return typeof id === "string" ? id : null;
+			},
+			getEntry: (id: string) => entries.find(entry => entry.id === id),
 			getEntries: () => {
 				entryReads++;
 				return entries;

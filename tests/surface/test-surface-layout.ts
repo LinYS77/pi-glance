@@ -179,9 +179,9 @@ assert.ok(visibleWidth(tinyIndicator!) <= surfaceMetrics(12).innerWidth, "tiny s
 const tinyIndicatorBottom = planSurfaceBottomFrame({ width: 4, scrollIndicator: formatSurfaceScrollIndicator("↓ 999 more", 4) });
 assert.equal(plain(tinyIndicatorBottom.chunks), "╰──╯", "tiny bottom indicator truncates to available inner width");
 const indicatorBottom = planSurfaceBottomFrame({ width: 20, scrollIndicator: indicator });
-assert.equal(plain(indicatorBottom.chunks), "╰─── ↓ 45 more ────╯", "bottom frame embeds down scroll indicator and fills the rest");
+assert.equal(plain(indicatorBottom.chunks), "╰─────── ↓ 45 more ╯", "bottom frame places the scroll indicator on the right");
 const upIndicatorBottom = planSurfaceBottomFrame({ width: 20, scrollIndicator: upIndicator });
-assert.equal(plain(upIndicatorBottom.chunks), "╰─── ↑ 7 more ─────╯", "bottom frame embeds up scroll indicator and fills the rest");
+assert.equal(plain(upIndicatorBottom.chunks), "╰──────── ↑ 7 more ╯", "bottom frame places the scroll indicator on the right");
 
 const previewRow = planSurfaceRow({ width: 20, text: "abcdefghijklmnopq", prefix: "› " });
 assert.equal(previewRow.contentBudget, 16, "preview row planning reserves borders and prefix");

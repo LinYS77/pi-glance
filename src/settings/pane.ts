@@ -26,7 +26,7 @@ import {
 import { shortcutConflict } from "../input/keybinding.js";
 import { normalizeStashShortcut, shortcutLabel } from "../input/shortcut.js";
 import { SETTINGS_SECTIONS } from "./catalog.js";
-import { WorkingSweep, type ScheduleSweepFrame } from "../runtime/working-sweep.js";
+import { ActivityClock, activityMotion, type ScheduleActivityFrame } from "../runtime/activity-animation.js";
 import { extensionStatusEntries, EXTENSION_STATUS_RESET } from "../surface/extension-statuses.js";
 import { truncateStyledText } from "../surface/text.js";
 import { createInputSurfaceRenderer } from "../surface/renderer.js";
@@ -35,9 +35,10 @@ import type { ExtensionStatusSource, GlanceConfig, GlanceState } from "../types.
 
 type PaneResult = { action: "save"; config: GlanceConfig } | { action: "cancel" };
 export interface GlancePaneOptions {
+	readonly getPreviewState?: () => GlanceState;
 	readonly getExtensionStatuses?: ExtensionStatusSource;
 	readonly previewNowMs?: () => number;
-	readonly schedulePreviewFrame?: ScheduleSweepFrame;
+	readonly schedulePreviewFrame?: ScheduleActivityFrame;
 	readonly renderStyleContext?: GlanceRenderStyleContext;
 }
 
@@ -80,7 +81,7 @@ export class GlanceConfigPane implements Component, Focusable {
 	private view: GlancePaneViewModel;
 	private readonly renderSurface: ReturnType<typeof createInputSurfaceRenderer>;
 	private previewVisible = true;
-	private readonly clock: WorkingSweep;
+	private readonly clock: ActivityClock;
 	private input = new Input();
 	private replaceNumberOnType = false;
 	private numberPasting = false;
@@ -109,16 +110,14 @@ export class GlanceConfigPane implements Component, Focusable {
 	) {
 		this.model = createPaneModel(initial);
 		this.view = createPaneViewModel(this.model);
-		this.renderSurface = createInputSurfaceRenderer(previewState);
-		this.clock = new WorkingSweep({
-			nowMs: options.previewNowMs ?? (() => performance.now()),
-			ownsEditor: () => !this.disposed,
+		this.renderSurface = createInputSurfaceRenderer(options.getPreviewState ?? previewState);
+		this.clock = new ActivityClock({
+			nowMs: options.previewNowMs,
+			getMotion: () => activityMotion(this.model.draft, this.view.preview.activity === "idle" ? undefined : this.view.preview.activity),
+			isPaused: () => this.disposed || !this.previewVisible,
 			requestRender,
-			setWorkingVisible: () => {},
 			schedule: options.schedulePreviewFrame,
 		});
-		this.clock.setSpeed(initial.editor.workingSweepSpeed);
-		this.clock.attach();
 	}
 	invalidate(): void {
 		this.input.invalidate();
@@ -205,9 +204,7 @@ export class GlanceConfigPane implements Component, Focusable {
 			this.numberPasting = false;
 		}
 		this.input.focused = this.hasFocus && this.model.page.kind === "number";
-		this.clock.setSpeed(this.model.draft.editor.workingSweepSpeed);
-		if (this.view.preview.working) this.clock.start();
-		else this.clock.settle();
+		this.clock.sync();
 		this.requestRender();
 	}
 	handleInput(data: string): void {
@@ -269,6 +266,7 @@ export class GlanceConfigPane implements Component, Focusable {
 		else if (/^[sS]$/.test(data)) this.dispatch({ type: "save" });
 		else if (/^[rR]$/.test(data)) this.dispatch({ type: "reset" });
 		else if (/^[qQ]$/.test(data)) this.dispatch({ type: "back" });
+		else if (/^[pP]$/.test(data)) this.dispatch({ type: "previewActivity" });
 		else if (/^[dD]$/.test(data)) this.dispatch({ type: "density" });
 		else if (/^[jJ]$/.test(data)) this.dispatch({ type: "reorder", direction: 1 });
 		else if (/^[kK]$/.test(data)) this.dispatch({ type: "reorder", direction: -1 });
@@ -279,12 +277,22 @@ export class GlanceConfigPane implements Component, Focusable {
 	}
 	private renderPreview(view: GlancePaneViewModel, width: number, extensionStatuses: ReadonlyMap<string, string> | undefined): string[] {
 		const config = view.preview.config;
+		const scene = view.preview.activity;
+		const cancelKey = this.keybindings?.getKeys?.("app.interrupt")?.[0] ?? "escape";
+		const cancel = cancelKey === "escape" ? "esc" : cancelKey;
+		const labels = { working: "Working", compaction: "Compacting", branchSummary: "Summarizing", retry: "Retrying", idle: "Idle with draft" };
+		const messages = {
+			working: "◌ Working...", compaction: `◌ Compacting context... (${cancel} to cancel)`,
+			branchSummary: `◌ Summarizing branch... (${cancel} to cancel)`, retry: `◌ Retrying (2/3) in 8s... (${cancel} to cancel)`,
+		};
 		const options = {
 			...this.options.renderStyleContext,
 			...(view.preview.ambientTone ? { ambientTone: view.preview.ambientTone } : {}),
 			...(view.preview.density === "auto" ? {} : { previewDensity: view.preview.density }),
 			extensionStatuses,
-			workingElapsedMs: view.preview.working ? this.clock.elapsedMs() : undefined,
+			activity: scene && scene !== "idle" ? { kind: scene, render: () => messages[scene] } : undefined,
+			animation: this.clock.frame(),
+			hasDraft: scene !== undefined,
 			contentLines: ["Your next prompt…"],
 			focused: true,
 		};
@@ -293,10 +301,11 @@ export class GlanceConfigPane implements Component, Focusable {
 			return fitRows(["Preview · Glance is off", "Turn Glance on to preview the editor."]
 				.map(text => this.fg("dim", truncateStyledText(text, width))), preview.length + 1);
 		const densityLabel = view.preview.density[0]!.toUpperCase() + view.preview.density.slice(1);
-		const label =
-			view.section === "status"
-				? `Preview · ${densityLabel}`
-				: `Preview${view.preview.working ? ` · Working · ${config.editor.workingSweepSpeed} cols/s` : ""}`;
+		const motion = activityMotion(config, scene === "idle" ? undefined : scene);
+		const rate = motion ? motion.kind === "sweep" ? ` · ${Number(motion.rate.toFixed(2))} cols/s` : ` · ${motion.rate.toFixed(2)} Hz` : "";
+		const label = scene
+			? `Preview · Example · ${config.editor.activityMode === "text" ? "Text" : "Sweep"} · ${labels[scene]}${rate}`
+			: view.section === "status" ? `Preview · ${densityLabel}` : "Preview";
 		return [this.fg("dim", truncateStyledText(label, width)), ...preview];
 	}
 	private renderRow(row: GlancePaneViewModel["rows"][number], width: number): string {
@@ -306,7 +315,7 @@ export class GlanceConfigPane implements Component, Focusable {
 				? `‹ ${row.value} ›`
 				: row.value + (row.kind === "theme" || row.kind === "choice" || row.kind === "segment" || row.kind === "shortcut" ? "  ›" : "");
 		const left = mark + row.label + (row.changed ? " *" : "");
-		const tone = row.selected ? "accent" : row.value === "Off" ? "dim" : "muted";
+		const tone = row.selected ? "accent" : row.inactive || row.value === "Off" ? "dim" : "muted";
 		const rendered = this.fg(tone, spread(left, value, width));
 		return row.selected ? (this.theme.bg?.("selectedBg", rendered) ?? rendered) : rendered;
 	}
@@ -357,7 +366,7 @@ export class GlanceConfigPane implements Component, Focusable {
 		const showPreview = height - base - preview.length >= 4;
 		if (showPreview !== this.previewVisible) {
 			this.previewVisible = showPreview;
-			this.clock.setWaiting(!showPreview);
+			this.clock.sync();
 			if (showPreview) preview = this.renderPreview(view, previewWidth, statusSource);
 		}
 		const prefix = [...header, title];
@@ -449,11 +458,8 @@ export async function showGlancePane(
 	options: GlancePaneOptions = {},
 ): Promise<PaneResult> {
 	let pane: GlanceConfigPane | undefined;
-	let footerGap = 0;
 	try {
 		return await ctx.ui.custom<PaneResult>((tui, theme, keybindings, done) => {
-			// Pi reserves one row for the empty footer in fullscreen mode.
-			footerGap = tui.mode === "fullscreen" ? 1 : 0;
 			pane = new GlanceConfigPane(
 				initial,
 				theme,
@@ -467,7 +473,7 @@ export async function showGlancePane(
 			return pane;
 		}, {
 			overlay: true,
-			overlayOptions: () => ({ width: "100%", anchor: "bottom-left", margin: { bottom: footerGap } }),
+			overlayOptions: { width: "100%", anchor: "bottom-left", margin: { bottom: 0 } },
 		});
 	} finally {
 		pane?.dispose();

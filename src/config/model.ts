@@ -9,10 +9,9 @@ import {
 	TOKENS_CACHE_MODE_VALUES,
 	TOKENS_DISPLAY_MODE_VALUES,
 	WORKING_SWEEP_COLOR_VALUES,
-	WORKING_SWEEP_MODE_VALUES,
 	WORKSPACE_LABEL_MODE_VALUES,
 } from "./options.js";
-import { THROUGHPUT_PRECISION_DESCRIPTOR, WORKING_SPEED } from "./schema.js";
+import { RETRY_BLINK, SUMMARY_SPEED, THROUGHPUT_PRECISION_DESCRIPTOR, WORKING_SPEED } from "./schema.js";
 import { defaultSegmentConfigs, isSegmentId } from "../segments/registry.js";
 import { GLANCE_THEME_ID_SET } from "../theme/themes.js";
 import type {
@@ -32,11 +31,10 @@ import type {
 } from "../types.js";
 
 // CONFIG_VERSION is the on-disk config schema version, not the npm package version.
-export const CONFIG_VERSION = 14 as const;
+export const CONFIG_VERSION = 15 as const;
 
 const WORKING_SWEEP_COLORS = new Set(WORKING_SWEEP_COLOR_VALUES);
 
-const WORKING_SWEEP_MODES = new Set(WORKING_SWEEP_MODE_VALUES);
 const ICON_MODES = new Set<IconMode>(ICON_MODE_VALUES);
 const PROVIDER_MODES = new Set<GlanceConfig["display"]["showProvider"]>(PROVIDER_DISPLAY_MODE_VALUES);
 const WORKSPACE_LABEL_MODES = new Set<WorkspaceLabelMode>(WORKSPACE_LABEL_MODE_VALUES);
@@ -55,6 +53,9 @@ export function defaultConfig(): GlanceConfig {
 		theme: { light: "light", dark: "dark" },
 		icons: "nerd",
 		editor: {
+			activityMode: "text",
+			summarySpeedMultiplier: SUMMARY_SPEED.defaultValue,
+			retryBlinkHz: RETRY_BLINK.defaultValue,
 			stashEnabled: true,
 			stashShortcut: "alt+s",
 			minContentRows: 3,
@@ -221,14 +222,15 @@ export function normalizeConfig(raw: unknown): GlanceConfig {
 		theme: parseThemePair(record.theme, defaults.theme),
 		icons: parseStringEnum(record.icons, ICON_MODES, defaults.icons),
 		editor: {
+			activityMode: typeof record.version === "number" && record.version >= 15 && editor.activityMode === "sweep" ? "sweep" : "text",
+			summarySpeedMultiplier: SUMMARY_SPEED.normalize(editor.summarySpeedMultiplier),
+			retryBlinkHz: RETRY_BLINK.normalize(editor.retryBlinkHz),
 			stashEnabled: parseBool(editor.stashEnabled, defaults.editor.stashEnabled),
 			stashShortcut: normalizeStashShortcut(editor.stashShortcut) ?? defaults.editor.stashShortcut,
 			minContentRows: parseIntInRange(editor.minContentRows, defaults.editor.minContentRows, 2, 4),
 			workingSweepColor: parseStringEnum(editor.workingSweepColor, WORKING_SWEEP_COLORS, defaults.editor.workingSweepColor),
 			workingSweepSpeed: WORKING_SPEED.normalize(editor.workingSweepSpeed),
-			workingSweep: typeof editor.workingSweep === "boolean"
-				? (editor.workingSweep ? "top" : "off")
-				: parseStringEnum(editor.workingSweep, WORKING_SWEEP_MODES, defaults.editor.workingSweep),
+			workingSweep: editor.workingSweep === true || editor.workingSweep === "top" ? "top" : "perimeter",
 			topMarginRows: parseIntInRange(editor.topMarginRows, defaults.editor.topMarginRows, 0, 2) as EditorTopMarginRows,
 		},
 		display: {

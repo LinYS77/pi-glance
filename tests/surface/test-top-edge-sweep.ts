@@ -11,6 +11,7 @@ import { renderGlanceLine } from "../../src/surface/status-line.js";
 import { resolveBuiltInGlanceStyles } from "../../src/theme/adapter.js";
 import { GLANCE_THEMES } from "../../src/theme/themes.js";
 import type { Rgb } from "../../src/types.js";
+import { nativeActivity } from "../support/activity-harness.js";
 import { richInputSurfaceState, stripAnsi } from "../support/surface-test-harness.js";
 
 const identity = (text: string) => text;
@@ -20,6 +21,7 @@ const keys = { matches: () => false } as unknown as KeybindingsManager;
 
 function topEdgeConfig() {
 	const config = defaultConfig();
+	config.editor.activityMode = "sweep";
 	config.editor.topMarginRows = 0;
 	config.editor.workingSweep = "top";
 	return config;
@@ -198,7 +200,7 @@ test("every theme preserves all text, dimensions, body and bottom at every phase
 			const input = { config, state, width, styles, body: { kind: "editor" as const, lines: ["中文🙂"] } };
 			const idle = renderInputSurfaceFrame(input);
 			for (const elapsed of [0, 300, 800, 1200, 1800, 2500, 3400]) {
-				const frame = renderInputSurfaceFrame({ ...input, chrome: { workingElapsedMs: elapsed } });
+				const frame = renderInputSurfaceFrame({ ...input, chrome: { animation: { kind: "sweep", elapsedMs: elapsed, speed: 47 } } });
 				assert.deepEqual(frame.map(stripAnsi), idle.map(stripAnsi), `${palette.id}/${mode}/${width}/${elapsed}`);
 				assert.deepEqual(frame.slice(1), idle.slice(1));
 				for (const line of frame) assert.ok(visibleWidth(line) <= width);
@@ -222,7 +224,7 @@ test("right-hand status and its trailing border remain byte-identical throughout
 		const suffix = idle.slice(idle.indexOf(statusText));
 		let changes = 0;
 		for (let elapsed = 0; elapsed < 3600; elapsed += 80) {
-			const line = renderInputSurfaceFrame({ ...input, chrome: { workingElapsedMs: elapsed } })[0]!;
+			const line = renderInputSurfaceFrame({ ...input, chrome: { animation: { kind: "sweep", elapsedMs: elapsed, speed: 47 } } })[0]!;
 			assert.ok(line.endsWith(suffix), "status colors, emphasis and trailing border cannot animate");
 			assert.deepEqual(stripAnsi(line), stripAnsi(idle));
 			if (line !== idle) changes++;
@@ -240,12 +242,12 @@ test("short paths still animate their connector; unfocused frames remain static"
 		? (text: string) => { touched.push(text); return style(text); }
 		: style };
 	const input = { config, state, styles: observed, width: 180, body: { kind: "editor" as const, lines: [""] } };
-	for (let time = 0; time < 3600; time += 80) renderInputSurfaceFrame({ ...input, chrome: { workingElapsedMs: time } });
+	for (let time = 0; time < 3600; time += 80) renderInputSurfaceFrame({ ...input, chrome: { animation: { kind: "sweep", elapsedMs: time, speed: 47 } } });
 	assert.ok(touched.some(text => text.includes("p")));
 	assert.ok(touched.some(text => text.includes("─")));
 	assert.equal(touched.some(text => /main|GPT|tok|ctx/.test(text)), false);
 	const unfocused = { ...input, chrome: { focus: "unfocused" as const } };
-	assert.deepEqual(renderInputSurfaceFrame({ ...unfocused, chrome: { ...unfocused.chrome, workingElapsedMs: 1000 } }), renderInputSurfaceFrame(unfocused));
+	assert.deepEqual(renderInputSurfaceFrame({ ...unfocused, chrome: { ...unfocused.chrome, animation: { kind: "sweep", elapsedMs: 1000, speed: 47 } } }), renderInputSurfaceFrame(unfocused));
 });
 
 test("live sweep retains the original status cache, Bash border and scroll labels", () => {
@@ -253,13 +255,14 @@ test("live sweep retains the original status cache, Bash border and scroll label
 	const sample = richInputSurfaceState();
 	let reads = 0;
 	const state = { ...sample, get usage() { reads++; return sample.usage; } };
-	let elapsed: number | undefined;
-	const editor = new GlanceEditor(tui, theme, keys, () => state, () => config, { getWorkingElapsedMs: () => elapsed });
+	let elapsed = 0;
+	const editor = new GlanceEditor(tui, theme, keys, () => state, () => config, { animationNowMs: () => elapsed, scheduleAnimationFrame: () => () => {} });
 	editor.focused = true; editor.setText("!pwd");
 	const bash = (text: string) => `\x1b[38;5;208m${text}\x1b[39m`;
 	editor.borderColor = bash;
 	const idle = editor.render(180), before = reads;
 	assert.ok(before > 0);
+	editor.setWorkingStatusIndicator(nativeActivity("working")); editor.render(180);
 	for (const time of [300, 800, 1200, 2200]) {
 		elapsed = time;
 		const frame = editor.render(180);
@@ -267,11 +270,12 @@ test("live sweep retains the original status cache, Bash border and scroll label
 		assert.ok(frame[0]!.startsWith(bash("╭")));
 		assert.equal(reads, before);
 	}
-	elapsed = undefined;
+	editor.setWorkingStatusIndicator(undefined);
 	assert.deepEqual(editor.render(180), idle);
 	editor.setText(Array.from({ length: 40 }, (_, i) => `line ${i}`).join("\n"));
 	const scrolled = editor.render(180);
 	assert.ok(stripAnsi(scrolled[0]!).includes("more"));
 	elapsed = 1000;
+	editor.setWorkingStatusIndicator(nativeActivity("working"));
 	assert.deepEqual(editor.render(180).map(stripAnsi), scrolled.map(stripAnsi));
 });

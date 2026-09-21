@@ -1,6 +1,6 @@
 {
   "name": "pi-glance",
-  "version": "0.7.1",
+  "version": "0.7.2",
   "description": "A rounded editor and adaptive status line for Pi.",
   "keywords": [
     "pi-package",
@@ -39,14 +39,14 @@
     "image": "https://raw.githubusercontent.com/LinYS77/pi-glance/main/assets/themes.gif"
   },
   "peerDependencies": {
-    "@earendil-works/pi-ai": ">=0.85.0",
-    "@earendil-works/pi-coding-agent": ">=0.85.0",
-    "@earendil-works/pi-tui": ">=0.85.0"
+    "@earendil-works/pi-ai": ">=0.86.1",
+    "@earendil-works/pi-coding-agent": ">=0.86.1",
+    "@earendil-works/pi-tui": ">=0.86.1"
   },
   "devDependencies": {
-    "@earendil-works/pi-ai": "0.85.1",
-    "@earendil-works/pi-coding-agent": "0.85.1",
-    "@earendil-works/pi-tui": "0.85.1",
+    "@earendil-works/pi-ai": "0.86.1",
+    "@earendil-works/pi-coding-agent": "0.86.1",
+    "@earendil-works/pi-tui": "0.86.1",
     "@types/node": "24.12.4",
     "typescript": "5.9.3"
   },

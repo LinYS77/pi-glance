@@ -4,6 +4,7 @@ import { TuiMainScreen, TuiAltScreen, isViewportTUI, visibleWidth, type EditorTh
 import { defaultConfig } from "../../src/config/model.js";
 import { GlanceEditor } from "../../src/surface/editor.js";
 import { createGitHarness, createRuntimeHarness, createRuntimeTestContext } from "../support/runtime-harness.js";
+import { nativeActivity } from "../support/activity-harness.js";
 import { richInputSurfaceState, stripAnsi } from "../support/surface-test-harness.js";
 
 interface TestTerminal extends Terminal {
@@ -136,14 +137,15 @@ fullscreen.setFocus(null);
 fullscreen.clear();
 
 for (const tui of [new TuiMainScreen(createTerminal()), new TuiAltScreen(createTerminal(), false, undefined, { mouse: false })]) {
-	const loopConfig = defaultConfig(); loopConfig.editor.workingSweep = "perimeter";
-	let elapsed: number | undefined;
-	const loopEditor = new GlanceEditor(tui, editorTheme, keybindings, richInputSurfaceState, () => loopConfig, { getWorkingElapsedMs: () => elapsed });
+	const loopConfig = defaultConfig(); loopConfig.editor.activityMode = "sweep"; loopConfig.editor.workingSweep = "perimeter";
+	let elapsed = 0;
+	const loopEditor = new GlanceEditor(tui, editorTheme, keybindings, richInputSurfaceState, () => loopConfig, { animationNowMs: () => elapsed, scheduleAnimationFrame: () => () => {} });
 	tui.addChild(loopEditor); tui.setFocus(loopEditor);
 	loopEditor.setText("Working loop\n中文🙂 draft");
 	for (const width of [180, 80, 16, 4, 1, 120]) {
-		elapsed = undefined;
+		elapsed = 0; loopEditor.setWorkingStatusIndicator(undefined);
 		const idle = tui.render(width);
+		loopEditor.setWorkingStatusIndicator(nativeActivity("working")); loopEditor.render(width);
 		for (const time of [0, 600, 1800, 3600, 5000]) {
 			elapsed = time;
 			const direct = loopEditor.render(width), mounted = tui.render(width);

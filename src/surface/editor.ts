@@ -1,5 +1,6 @@
 import { CustomEditor, type KeybindingsManager } from "@earendil-works/pi-coding-agent";
 import { isKeyRepeat, truncateToWidth, visibleWidth, type EditorOptions, type EditorTheme, type TUI } from "@earendil-works/pi-tui";
+import { ActivityClock, activityMotion, type ScheduleActivityFrame } from "../runtime/activity-animation.js";
 import { matchesStashShortcut, shortcutConflict } from "../input/keybinding.js";
 import type { PromptStash } from "../input/stash.js";
 import { stripControls } from "./format.js";
@@ -10,10 +11,13 @@ import { resolveGlanceRenderStyles, type GlanceRenderStyleContext, type Resolved
 import type { ExtensionStatusSource, GlanceConfig, GlanceState } from "../types.js";
 
 export interface GlanceEditorOptions {
+	readonly animationNowMs?: () => number;
+	readonly scheduleAnimationFrame?: ScheduleActivityFrame;
+	readonly ownsEditor?: () => boolean;
+	readonly isActivityPaused?: () => boolean;
 	readonly getExtensionStatuses?: ExtensionStatusSource;
 	readonly stash?: PromptStash;
 	readonly onStashError?: (message: string) => void;
-	readonly getWorkingElapsedMs?: () => number | undefined;
 	readonly editorOptions?: EditorOptions;
 	readonly renderStyleContext?: GlanceRenderStyleContext;
 }
@@ -56,6 +60,9 @@ function indentAutocompleteLine(line: string, width: number, indentWidth: number
 }
 
 export class GlanceEditor extends CustomEditor {
+	private readonly activityClock: ActivityClock;
+	private disposed = false;
+	private activityIndicator: Parameters<CustomEditor["setWorkingStatusIndicator"]>[0];
 	private readonly statusLine = new GlanceLineRenderer();
 	private pasting = false;
 
@@ -67,7 +74,22 @@ export class GlanceEditor extends CustomEditor {
 		private readonly getConfig: () => GlanceConfig,
 		private readonly glanceOptions?: GlanceEditorOptions,
 	) {
-		super(tui, theme, appKeybindings, glanceOptions?.editorOptions);
+		super(tui, theme, appKeybindings, { ...glanceOptions?.editorOptions, embedWorkingStatus: true });
+		this.activityClock = new ActivityClock({
+			getMotion: () => activityMotion(this.getConfig(), this.activityIndicator?.kind),
+			isPaused: () => !this.focused || this.glanceOptions?.ownsEditor?.() === false || this.glanceOptions?.isActivityPaused?.() === true,
+			requestRender: () => tui.requestRender(),
+			nowMs: glanceOptions?.animationNowMs,
+			schedule: glanceOptions?.scheduleAnimationFrame,
+		});
+	}
+
+	refreshActivity(): void { this.activityClock.sync(); }
+	dispose(): void { this.disposed = true; this.activityClock.dispose(); this.activityIndicator = undefined; }
+
+	override setWorkingStatusIndicator(indicator: Parameters<CustomEditor["setWorkingStatusIndicator"]>[0]): void {
+		// Pi owns the indicator and its clock. Glance renders it only in its own frame.
+		if (!this.disposed) this.activityIndicator = indicator;
 	}
 
 	handleInput(data: string): void {
@@ -126,7 +148,7 @@ export class GlanceEditor extends CustomEditor {
 
 		const styles = this.currentStyles(config);
 		const metrics = measureInputSurfaceFrame(width);
-		// Pi 0.85 still recurses on a wide grapheme in a one-column layout.
+		// Pi 0.86 still recurses on a wide grapheme in a one-column layout.
 		// Reserve two columns plus the native padding/cursor, then clip the frame.
 		const editorWidth = Math.max(metrics.editorContentWidth, 3, 2 + this.getPaddingX() * 2);
 		const lines = super.render(editorWidth);
@@ -146,6 +168,7 @@ export class GlanceEditor extends CustomEditor {
 		const autocomplete = lines.slice(bottomIndex + 1);
 		const contentLines = body.length > 0 ? body : [""];
 		const state = this.getState();
+		const activity = this.activityIndicator;
 		const frame = renderInputSurfaceFrame({
 			state,
 			config,
@@ -153,7 +176,8 @@ export class GlanceEditor extends CustomEditor {
 			styles,
 			body: { kind: "editor", lines: contentLines },
 			chrome: {
-				workingElapsedMs: this.glanceOptions?.getWorkingElapsedMs?.(),
+				activity: activity ? { kind: activity.kind, render: width => activity.renderInBorder(width) } : undefined,
+				animation: this.activityClock.frame(),
 				focus: isFocused ? "focused" : "unfocused",
 				topScrollIndicator: this.extractScrollIndicator(topOriginal, metrics.safeWidth),
 				bottomScrollIndicator: this.extractScrollIndicator(bottomOriginal, metrics.safeWidth),

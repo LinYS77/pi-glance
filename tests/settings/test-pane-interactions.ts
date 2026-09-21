@@ -38,15 +38,15 @@ test("palettes adjust inline like other choices; arrows stop at either end", () 
 	assert.equal(palette.draft.theme.light, "catppuccin-latte");
 	let mode = section(section(createPaneModel(defaultConfig())));
 	mode = step(mode, { type: "adjust", direction: -1 });
-	assert.equal(mode.draft.editor.workingSweep, "perimeter");
+	assert.equal(mode.draft.editor.activityMode, "text");
 	for (let i = 0; i < 5; i++) mode = step(mode, { type: "adjust", direction: 1 });
-	assert.equal(mode.draft.editor.workingSweep, "off");
+	assert.equal(mode.draft.editor.activityMode, "sweep");
 });
 
 test("every field editor confirms or cancels locally; only a list can save", () => {
 	const root = createPaneModel(defaultConfig());
 	const working = section(section(root));
-	for (const row of [down(root), working, down(working)]) {
+	for (const row of [down(root), working, down(working, 2)]) {
 		let model = step(row, { type: "activate" });
 		model = model.page.kind === "number" ? step(model, { type: "input", text: "74" }) : down(model);
 		assert.equal(updatePaneModel(model, { type: "save" }).completion, undefined);
@@ -59,7 +59,7 @@ test("every field editor confirms or cancels locally; only a list can save", () 
 });
 
 test("incomplete numbers do not show an error until confirmation", () => {
-	let model = step(down(section(section(createPaneModel(defaultConfig())))), { type: "activate" });
+	let model = step(down(section(section(createPaneModel(defaultConfig()))), 2), { type: "activate" });
 	model = step(model, { type: "input", text: "7" });
 	if (model.page.kind !== "number") throw new Error("not editing number");
 	assert.equal(model.page.error, "");
@@ -122,7 +122,7 @@ test("reset affects settings, not navigation, including reordered status items",
 });
 
 test("field editors do not advertise Save or section switching", () => {
-	for (const enter of [[k.down, k.enter], [k.backTab, k.backTab, k.enter], [k.backTab, k.backTab, k.down, k.enter]]) {
+	for (const enter of [[k.down, k.enter], [k.backTab, k.backTab, k.enter], [k.backTab, k.backTab, k.down, k.down, k.enter]]) {
 		const pane = paneHarness();
 		pane.press(...enter);
 		assert.ok(!pane.text(40).includes("Save & close"));
@@ -135,14 +135,14 @@ test("field editors do not advertise Save or section switching", () => {
 
 test("number replacement works for Kitty key events and fragmented paste stays text", () => {
 	const kitty = paneHarness();
-	kitty.press(k.backTab, k.backTab, k.down, k.enter, "\x1b[55u", "\x1b[52u", k.enter, "s");
+	kitty.press(k.backTab, k.backTab, k.down, k.down, k.enter, "\x1b[55u", "\x1b[52u", k.enter, "s");
 	const saved = kitty.completion();
 	if (saved?.action !== "save") throw new Error("not saved");
 	assert.equal(saved.config.editor.workingSweepSpeed, 74);
 	kitty.pane.dispose();
 
 	const paste = paneHarness();
-	paste.press(k.backTab, k.backTab, k.down, k.enter, "\x1b[200~", "80", "\r", "s", "r", "q", "\x1b[201~");
+	paste.press(k.backTab, k.backTab, k.down, k.down, k.enter, "\x1b[200~", "80", "\r", "s", "r", "q", "\x1b[201~");
 	assert.equal(paste.completion(), undefined);
 	assert.match(paste.text(), /Sweep speed/);
 	assert.doesNotMatch(paste.text(), /Reset all settings\?/);
@@ -150,7 +150,7 @@ test("number replacement works for Kitty key events and fragmented paste stays t
 	assert.match(paste.text(), /47 cols\/s/);
 	paste.pane.dispose();
 	const trailingEnter = paneHarness();
-	trailingEnter.press(k.backTab, k.backTab, k.down, k.enter, "\x1b[200~74\x1b[201~\r", "s");
+	trailingEnter.press(k.backTab, k.backTab, k.down, k.down, k.enter, "\x1b[200~74\x1b[201~\r", "s");
 	const done = trailingEnter.completion();
 	if (done?.action !== "save") throw new Error("confirmation following paste was lost");
 	assert.equal(done.config.editor.workingSweepSpeed, 74);
@@ -162,7 +162,7 @@ test("help reflects injected Pi selection keys and disabled bindings", () => {
 	const h = paneHarness(defaultConfig(), {}, bindings);
 	const text = h.text();
 	for (const key of ["Ctrl+K", "Ctrl+J", "Ctrl+G", "Ctrl+X", "Ctrl+N"]) assert.ok(text.includes(key), key);
-	h.press("\x0e", "\x0e", "\x0a", "\x07"); // Working -> speed -> edit
+	h.press("\x0e", "\x0e", "\x0a", "\x0a", "\x07"); // Activity -> speed -> edit
 	assert.match(h.text(), /Sweep speed/);
 	assert.match(h.text(), /\[Ctrl\+G\] Confirm/);
 	assert.match(h.text(), /\[Ctrl\+X\] Cancel/);

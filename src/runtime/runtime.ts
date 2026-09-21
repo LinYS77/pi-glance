@@ -25,7 +25,7 @@ import type { ConfigLoadResult } from "../config/store.js";
 import { GlanceEditor } from "../surface/editor.js";
 import { GlanceFooter } from "../surface/footer.js";
 import { GitRefresher } from "./git.js";
-import { WorkingSweep, type ScheduleSweepFrame } from "./working-sweep.js";
+import type { ScheduleActivityFrame } from "./activity-animation.js";
 import { RuntimeRefreshSession } from "./refresh-session.js";
 import type { GlanceRenderStyleContext } from "../theme/adapter.js";
 import { readPiAmbientTone } from "../theme/tone.js";
@@ -46,6 +46,7 @@ export interface CreateGitRefresherOptions {
 }
 
 export interface RuntimeShowPaneOptions {
+	readonly getPreviewState?: () => GlanceState;
 	readonly getExtensionStatuses?: ExtensionStatusSource;
 	readonly renderStyleContext?: GlanceRenderStyleContext;
 }
@@ -54,7 +55,7 @@ export interface GlanceRuntimeAdapters {
 	loadDraft?(sessionId: string): string | null;
 	saveDraft?(sessionId: string, text: string | null): void;
 	workingSweepNowMs?: () => number;
-	scheduleSweepFrame?: ScheduleSweepFrame;
+	scheduleSweepFrame?: ScheduleActivityFrame;
 	getThinkingLevel(): string;
 	loadConfigSync(): ConfigLoadResult;
 	loadConfig(): Promise<ConfigLoadResult>;
@@ -121,7 +122,7 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 	let previousEditorFactory: EditorFactory | undefined;
 	let gitRefresher: RuntimeGitRefresher | undefined;
 	let requestRender: (() => void) | undefined;
-	let workingSweep: WorkingSweep | undefined;
+	let activeEditor: GlanceEditor | undefined;
 	let waitingForUi = false;
 	let stash: PromptStash | undefined;
 	let canFetch = () => false;
@@ -201,8 +202,8 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 	}
 
 	function invalidateUiOwnership(): number {
-		workingSweep?.dispose();
-		workingSweep = undefined;
+		activeEditor?.dispose();
+		activeEditor = undefined;
 		uiGeneration++;
 		requestRender = undefined;
 		extensionStatusProvider = undefined;
@@ -242,16 +243,9 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 		if (hadFooter) ctx.ui.setFooter(undefined);
 	}
 
-	function reconcileWorkingSweep(ctx: ExtensionContext): void {
-		if (!isTuiMode(ctx)) return;
-		workingSweep?.setSpeed(getConfig().editor.workingSweepSpeed);
-		if (getConfig().enabled && getConfig().editor.workingSweep !== "off") workingSweep?.attach(!ctx.isIdle(), waitingForUi);
-		else workingSweep?.dispose();
-	}
-
 	function installInputSurface(ctx: ExtensionContext): void {
 		if (!isTuiMode(ctx)) return;
-		refreshSession.ensureState(ctx);
+		const initialState = refreshSession.ensureState(ctx);
 		const activeConfig = getConfig();
 		if (!activeConfig.enabled) {
 			clearUI(ctx);
@@ -279,31 +273,29 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 
 		const currentEditorFactory = ctx.ui.getEditorComponent();
 		if (currentEditorFactory !== ownedEditorFactory) previousEditorFactory = currentEditorFactory;
-		const sweep = new WorkingSweep({
-			nowMs: adapters.workingSweepNowMs ?? (() => performance.now()),
-			ownsEditor: () => isCurrentUiGeneration(generation) && getConfig().enabled && ctx.ui.getEditorComponent() === nextEditorFactory,
-			requestRender: () => requestRender?.(),
-			setWorkingVisible: (visible) => ctx.ui.setWorkingVisible(visible),
-			schedule: adapters.scheduleSweepFrame,
-		});
 		const nextEditorFactory: EditorFactory = (tui, theme, keybindings) => {
+			if (isCurrentUiGeneration(generation)) activeEditor?.dispose();
 			setUiRequestRender(generation, () => tui.requestRender());
-			return new GlanceEditor(
+			const editor: GlanceEditor = new GlanceEditor(
 				tui,
 				theme,
 				keybindings,
-				() => refreshSession.getState() ?? refreshSession.ensureState(ctx),
+				() => isCurrentUiGeneration(generation) ? refreshSession.ensureState(ctx) : initialState,
 				() => getConfig(),
 				{
-					renderStyleContext, getExtensionStatuses, getWorkingElapsedMs: () => sweep.elapsedMs(), stash,
+					renderStyleContext, getExtensionStatuses, stash,
+					animationNowMs: adapters.workingSweepNowMs,
+					scheduleAnimationFrame: adapters.scheduleSweepFrame,
+					ownsEditor: () => isCurrentUiGeneration(generation) && activeEditor === editor && ctx.ui.getEditorComponent() === nextEditorFactory,
+					isActivityPaused: () => waitingForUi,
 					onStashError: message => ctx.ui.notify(message, "warning"),
 				},
 			);
+			if (isCurrentUiGeneration(generation)) activeEditor = editor;
+			return editor;
 		};
 		ownedEditorFactory = nextEditorFactory;
 		ctx.ui.setEditorComponent(nextEditorFactory);
-		workingSweep = sweep;
-		reconcileWorkingSweep(ctx);
 	}
 
 	return {
@@ -315,9 +307,13 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 				}
 				const current = await ensureConfig();
 				notifyConfigDiagnostic(ctx);
-				refreshSession.ensureState(ctx);
+				const previewState = refreshSession.ensureState(ctx);
+				const generation = uiGeneration;
 				const renderStyleContext = runtimeRenderStyleContext(ctx, getTrueColor);
-				const result = await adapters.showPane(current, ctx, refreshSession.getState(), { renderStyleContext, getExtensionStatuses });
+				const result = await adapters.showPane(current, ctx, previewState, {
+					renderStyleContext, getExtensionStatuses,
+					getPreviewState: () => isCurrentUiGeneration(generation) ? refreshSession.ensureState(ctx) : previewState,
+				});
 				if (result.action === "cancel") {
 					ctx.ui.notify("pi-glance configuration cancelled", "info");
 					return;
@@ -343,7 +339,7 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 				configDiagnosticNotified = false;
 				if (previousConfig.enabled && nextConfig.enabled) {
 					reconcileGitRefresher();
-					reconcileWorkingSweep(ctx);
+					activeEditor?.refreshActivity();
 				}
 				await refreshSession.configSaved(
 					ctx,
@@ -402,12 +398,12 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 			uiPromptStart: (_event, _ctx) => {
 				waitingForUi = true;
 				refreshSession.uiPromptStart();
-				workingSweep?.setWaiting(true);
+				activeEditor?.refreshActivity();
 			},
 			uiPromptEnd: (_event, _ctx) => {
 				waitingForUi = false;
 				refreshSession.uiPromptEnd();
-				workingSweep?.setWaiting(false);
+				activeEditor?.refreshActivity();
 			},
 			messageEnd: async (event, ctx) => {
 				await refreshSession.messageEnd(event, ctx);
@@ -417,14 +413,12 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 			},
 			agentStart: (_event, _ctx) => {
 				refreshSession.agentStart();
-				workingSweep?.start();
 			},
 			agentEnd: async (event, ctx) => {
 				await refreshSession.agentEnd(event, ctx);
 			},
-			agentSettled: (_event, ctx) => {
+			agentSettled: (_event, _ctx) => {
 				refreshSession.agentSettled();
-				if (workingSweep && ctx.isIdle()) workingSweep.settle();
 			},
 		},
 	};

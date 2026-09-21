@@ -6,7 +6,7 @@ import type { GlanceEditor } from "../../src/surface/editor.js";
 import { createGitHarness, createRuntimeHarness, createRuntimeTestContext, invokeEditorFactory, invokeFooterFactory } from "../support/runtime-harness.js";
 
 test("runtime bridges public footer data into the editor and settings, not a second footer line", async () => {
-	const config = defaultConfig(); config.editor.workingSweep = "off";
+	const config = defaultConfig(); config.editor.activityMode = "text";
 	const extensionStatuses = new Map([["mcp", "MCP: 3/3"]]);
 	const ctx = createRuntimeTestContext({ extensionStatuses });
 	const harness = createRuntimeHarness({ loadConfigSyncConfig: config, git: createGitHarness(), showPaneResults: [{ action: "cancel" }] });

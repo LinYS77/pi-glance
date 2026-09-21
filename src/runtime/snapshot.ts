@@ -57,6 +57,7 @@ export interface StateMessageInputs {
 export interface StateSessionEntry {
 	type?: string;
 	id?: unknown;
+	parentId?: string | null;
 	message?: StateMessageInputs;
 	usage?: StateUsageInputs;
 }
@@ -89,7 +90,7 @@ export function usageTotalsFromMessage(message: StateMessageInputs): UsageTotals
 
 export function usageTotalsFromEntry(entry: StateSessionEntry): UsageTotals {
 	if (entry.type === "message" && entry.message) return usageTotalsFromMessage(entry.message);
-	if ((entry.type === "compaction" || entry.type === "branch_summary") && entry.usage) return usageTotalsFromUsage(entry.usage);
+	if ((entry.type === "usage" || entry.type === "compaction" || entry.type === "branch_summary") && entry.usage) return usageTotalsFromUsage(entry.usage);
 	return emptyUsageTotals();
 }
 

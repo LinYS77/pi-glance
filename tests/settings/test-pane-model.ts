@@ -31,14 +31,14 @@ test("four sections keep their selected row and expose only task-relevant contro
 	model = section(model);
 	assert.deepEqual(createPaneViewModel(model).rows.map(row => row.label), ["Git", "Cost", "Model speed", "Context", "Tokens", "Extensions", "Model"]);
 	model = section(model);
-	assert.deepEqual(createPaneViewModel(model).rows.map(row => row.label), ["Animation", "Sweep speed", "Sweep color"]);
-	assert.equal(createPaneViewModel(model).preview.working, true);
+	assert.deepEqual(createPaneViewModel(model).rows.map(row => row.label), ["Display mode", "Effect area", "Sweep speed", "Effect color", "Compaction / summary speed", "Retry blink rate"]);
+	assert.equal(createPaneViewModel(model).preview.activity, "working");
 	model = section(model);
 	assert.equal(model.section, "input");
-	assert.equal(createPaneViewModel(model).preview.working, false);
+	assert.equal(createPaneViewModel(model).preview.activity, undefined);
 	model = section(model);
 	assert.equal(selected(model).label, "Icons");
-	assert.equal(createPaneViewModel(model).preview.working, false);
+	assert.equal(createPaneViewModel(model).preview.activity, undefined);
 	assert.equal(selected(step(model, { type: "move", direction: "up", amount: 3 })).label, "Glance");
 });
 
@@ -64,12 +64,12 @@ test("status visibility, order and detail navigation are separate actions", () =
 
 test("choice list exposes every option, previews and restores only the edited value", () => {
 	let model = section(section(createPaneModel(defaultConfig())));
-	model = down(model);
+	model = down(model, 2);
 	model = step(model, { type: "adjust", direction: 1 }); // pre-existing dirty speed
 	model = step(model, { type: "move", direction: "up" });
 	const before = model.draft;
 	model = step(model, { type: "activate" });
-	assert.deepEqual(createPaneViewModel(model).choices.map(c => c.label), ["Full border", "Top edge", "Off"]);
+	assert.deepEqual(createPaneViewModel(model).choices.map(c => c.label), ["Full border", "Top edge"]);
 	model = down(model);
 	assert.equal(model.draft.editor.workingSweep, "top");
 	assert.deepEqual(step(model, { type: "back" }).draft, before);
@@ -100,7 +100,7 @@ for (const slot of ["light", "dark"] as const) test(`${slot} palette preview, ac
 });
 
 test("speed supports one-column steps, direct input, strict validation and restore", () => {
-	let model = down(section(section(createPaneModel(defaultConfig()))));
+	let model = down(section(section(createPaneModel(defaultConfig()))), 2);
 	assert.equal(selected(model).value, "47 cols/s");
 	model = step(model, { type: "adjust", direction: -1 });
 	assert.equal(model.draft.editor.workingSweepSpeed, 46);
@@ -153,11 +153,10 @@ test("preview layout is transient and controls never alter unrelated settings", 
 		assert.equal(paneIsDirty(model), false);
 	}
 	model = section(model);
-	model = step(step(model, { type: "adjust", direction: 1 }), { type: "adjust", direction: 1 }); // off
-	assert.equal(model.draft.editor.workingSweep, "off");
-	assert.equal(createPaneViewModel(model).preview.working, false);
-	model = down(model);
+	model = step(model, { type: "adjust", direction: -1 }); // Text
+	assert.equal(model.draft.editor.activityMode, "text");
+	model = down(model, 2);
 	model = step(model, { type: "adjust", direction: 1 });
 	assert.equal(model.draft.editor.workingSweepSpeed, 48);
-	assert.equal(createPaneViewModel(model).preview.working, false);
+	assert.equal(createPaneViewModel(model).preview.config.editor.activityMode, "text");
 });

@@ -97,7 +97,7 @@ interface SurfaceTopFrameOptions {
 interface SurfaceBottomFrameOptions {
 	width: number;
 	scrollIndicator?: string;
-	label?: { full: string; compact: string };
+	label?: { full: string; compact: string } | ((width: number) => string);
 }
 
 interface SurfaceRowOptions {
@@ -171,9 +171,9 @@ export function renderSurfaceChunks(chunks: readonly SurfaceChunk[], renderers: 
 	}).join("");
 }
 
-function insetLabel(label: string): SurfaceInlinePlan {
+function insetLabel(label: string, role: "title" | "status" = "title"): SurfaceInlinePlan {
 	const padding = " ".repeat(SURFACE_TITLE_PADDING_X);
-	const chunks = [chunk("border", SURFACE_BORDER.horizontal), chunk("title", `${padding}${label}${padding}`)];
+	const chunks = [chunk("border", SURFACE_BORDER.horizontal), chunk(role, `${padding}${label}${padding}`)];
 	return { chunks, width: surfaceChunksWidth(chunks) };
 }
 
@@ -276,28 +276,31 @@ export function planSurfaceBottomFrame(options: SurfaceBottomFrameOptions): Surf
 		return { ...metrics, chunks, width: surfaceChunksWidth(chunks), indicator: "", fillerWidth: 0 };
 	}
 
-	const labelBudget = Math.max(0, metrics.innerWidth - 2 - SURFACE_TITLE_PADDING_X * 2);
-	const label = !options.scrollIndicator && options.label
-		? [options.label.full, options.label.compact].find(text => visibleWidth(text) <= labelBudget)
-		: undefined;
-	if (label) {
-		const left = insetLabel(label);
-		const fillerWidth = metrics.innerWidth - left.width;
-		const chunks = [
-			chunk("border", SURFACE_BORDER.bottomLeft), ...left.chunks,
-			chunk("border", repeat(SURFACE_BORDER.horizontal, fillerWidth)), chunk("border", SURFACE_BORDER.bottomRight),
-		];
-		return { ...metrics, chunks, width: surfaceChunksWidth(chunks), indicator: "", fillerWidth,
-			labelGap: { column: 2, width: left.width - 1 } };
-	}
 	const indicator = options.scrollIndicator ? truncateSurfaceText(options.scrollIndicator, metrics.innerWidth, "") : "";
 	const indicatorWidth = visibleWidth(indicator);
+	const labelBudget = Math.max(0, metrics.innerWidth - indicatorWidth - (indicator ? 1 : 0) - 2 - SURFACE_TITLE_PADDING_X * 2);
+	const dynamicLabel = typeof options.label === "function";
+	const label = labelBudget > 0 && options.label
+		? typeof options.label === "function" ? truncateSurfaceText(options.label(labelBudget), labelBudget, "…")
+			: [options.label.full, options.label.compact].find(text => visibleWidth(text) <= labelBudget)
+		: undefined;
+	if (label) {
+		const left = insetLabel(label, dynamicLabel ? "status" : "title");
+		const fillerWidth = metrics.innerWidth - left.width - indicatorWidth;
+		const chunks = [
+			chunk("border", SURFACE_BORDER.bottomLeft), ...left.chunks,
+			chunk("border", repeat(SURFACE_BORDER.horizontal, fillerWidth)),
+			...(indicator ? [chunk("border", indicator)] : []), chunk("border", SURFACE_BORDER.bottomRight),
+		];
+		return { ...metrics, chunks, width: surfaceChunksWidth(chunks), indicator, fillerWidth,
+			labelGap: { column: 2, width: left.width - 1 } };
+	}
 	const fillerWidth = Math.max(0, metrics.innerWidth - indicatorWidth);
 	const chunks = indicator
 		? [
 				chunk("border", SURFACE_BORDER.bottomLeft),
-				chunk("border", indicator),
 				chunk("border", repeat(SURFACE_BORDER.horizontal, fillerWidth)),
+				chunk("border", indicator),
 				chunk("border", SURFACE_BORDER.bottomRight),
 			]
 		: [

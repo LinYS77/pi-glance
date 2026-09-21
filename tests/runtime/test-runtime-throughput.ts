@@ -65,6 +65,8 @@ function createContext(): TestContext {
 		modelRegistry: { getAvailable: () => [{ provider: "test-provider", id: "test-model" }] },
 		sessionManager: {
 			getCwd: () => "/repo",
+			getLeafId: () => null,
+			getEntry: () => undefined,
 			getEntries: () => [],
 			getBranch: () => [],
 		},
@@ -194,7 +196,7 @@ await test("runtime should exclude blocking extension UI prompt spans from provi
 	await runtime.events.messageEnd(messageEnd(assistant(50, {}, "stop", "prompt-split")), test.ctx);
 	const expected = expectedTurn(1_000, 6_000, 2_000, 50);
 	assert.deepEqual(slots(await captureState(runtime, test, capturedStates)), { lastRun: null, currentRun: expected }, "runtime should exclude blocking extension UI prompt spans from provisional model speed");
-	assert.equal(test.getRenderRequests() - renderBeforePrompt, 3, "title pause/resume and message_end each request a render");
+	assert.equal(test.getRenderRequests() - renderBeforePrompt, 1, "blocking UI spans do not invent a Glance animation or a model-speed render");
 	assert.equal(getRemainingNowReads(), 0, "output updates delivered inside a UI prompt span should not consume the model-speed clock");
 });
 

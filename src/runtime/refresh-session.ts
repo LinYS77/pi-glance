@@ -1,5 +1,5 @@
 import type { ExtensionContext, MessageEndEvent, MessageUpdateEvent, SessionCompactEvent } from "@earendil-works/pi-coding-agent";
-import { lifecycleInputsFromContext, stateInputsFromContext, thinkingInputsFromContext, usageTotalsFromEntry, usageTotalsFromMessage, type StateInputs, type StateLifecycleInputs, type StateMessageInputs, type StateSessionEntry } from "./snapshot.js";
+import { lifecycleInputsFromContext, thinkingInputsFromContext, usageTotalsFromEntries, usageTotalsFromEntry, usageTotalsFromMessage, type StateInputs, type StateLifecycleInputs, type StateMessageInputs, type StateSessionEntry } from "./snapshot.js";
 import {
 	addUsageTotals,
 	clearCurrentRunModelSpeed,
@@ -165,6 +165,7 @@ export class RuntimeRefreshSession {
 	private state?: GlanceState;
 	private appliedUsageObjects = new WeakSet<object>();
 	private appliedUsageKeys = new Set<string>();
+	private seenEntryIds = new Set<string>();
 	private readonly modelSpeedTracker = new ModelSpeedRunTracker();
 
 	constructor(private readonly host: RuntimeRefreshSessionHost) {}
@@ -174,10 +175,16 @@ export class RuntimeRefreshSession {
 	}
 
 	private readStateInputs(ctx: ExtensionContext): StateInputs {
-		return stateInputsFromContext(ctx, this.host.getThinkingLevel());
+		const entries = ctx.sessionManager.getEntries();
+		this.seenEntryIds = new Set(entries.map(entry => entry.id));
+		return {
+			...lifecycleInputsFromContext(ctx, this.host.getThinkingLevel()),
+			usage: usageTotalsFromEntries(entries),
+		};
 	}
 
 	private resetAccumulators(): void {
+		this.seenEntryIds.clear();
 		this.appliedUsageObjects = new WeakSet<object>();
 		this.appliedUsageKeys = new Set<string>();
 		this.modelSpeedTracker.reset();
@@ -198,8 +205,22 @@ export class RuntimeRefreshSession {
 	}
 
 	ensureState(ctx: ExtensionContext): GlanceState {
-		this.state ??= createInitialState(this.readStateInputs(ctx), this.host.getConfig());
+		if (!this.state) return this.resetState(ctx);
+		this.syncStandaloneUsage(ctx);
 		return this.state;
+	}
+
+	/** Pi redraws after background usage is persisted, without a message_end hook. */
+	private syncStandaloneUsage(ctx: ExtensionContext): void {
+		let id = ctx.sessionManager.getLeafId();
+		// Unchanged frames are O(1); only newly appended ancestors are inspected.
+		while (id && !this.seenEntryIds.has(id)) {
+			const entry: StateSessionEntry | undefined = ctx.sessionManager.getEntry(id);
+			if (!entry) break;
+			this.seenEntryIds.add(id);
+			if (entry.type === "usage") this.applyUsageDelta(entry, usageTotalsFromEntry(entry), this.entryUsageKey(entry));
+			id = entry.parentId ?? null;
+		}
 	}
 
 	private usageTotalsAreZero(delta: UsageTotals): boolean {
@@ -263,7 +284,7 @@ export class RuntimeRefreshSession {
 		}
 
 		if (plan.snapshot === "reliable") {
-			const inputs = stateInputsFromContext(ctx, this.host.getThinkingLevel());
+			const inputs = this.readStateInputs(ctx);
 			return this.applyLifecycleSnapshot(inputs, plan, inputs.usage);
 		}
 

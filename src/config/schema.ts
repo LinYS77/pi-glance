@@ -1,6 +1,28 @@
 import type { ThroughputPrecision } from "../types.js";
 
+export interface NumericSettingSpec {
+	readonly defaultValue: number;
+	readonly min: number;
+	readonly max: number;
+	readonly step: number;
+	readonly precision: number;
+	normalize(value: unknown): number;
+}
+
+function numericSetting(defaultValue: number, min: number, max: number, step: number, precision: number): NumericSettingSpec {
+	return {
+		defaultValue, min, max, step, precision,
+		normalize: value => typeof value === "number" && Number.isFinite(value)
+			? Number(Math.max(min, Math.min(max, value)).toFixed(precision)) : defaultValue,
+	};
+}
+
+export const SUMMARY_SPEED = numericSetting(0.5, 0.25, 2, 0.05, 2);
+export const RETRY_BLINK = numericSetting(0.5, 0.25, 2, 0.25, 2);
+
 export const WORKING_SPEED = {
+	step: 1,
+	precision: 0,
 	defaultValue: 47,
 	min: 10,
 	max: 120,

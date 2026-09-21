@@ -62,7 +62,7 @@ test("Glance off and discard confirmation keep the same preview area", () => {
 test("new users see four sections, readable values and save/close without focus columns", () => {
 	const h = paneHarness();
 	const text = h.text();
-	for (const label of ["Appearance", "Status line", "Working", "Light palette", "Dark palette", "Nerd Font", "Smart path", "Save & close", "No changes"]) assert.ok(text.includes(label), label);
+	for (const label of ["Appearance", "Status line", "Activity", "Light palette", "Dark palette", "Nerd Font", "Smart path", "Save & close", "No changes"]) assert.ok(text.includes(label), label);
 	assert.ok(!text.includes("General") && !text.includes("Enabled"));
 	h.press(k.space);
 	assert.match(h.text(), /Glance \*\s+Off/);
@@ -126,11 +126,11 @@ test("Pi selection bindings take precedence; Ctrl-C always cancels and input own
 	const bindings = { matches: (data: string, action: string) => ({ "tui.select.up": "u", "tui.select.down": "d", "tui.select.pageDown": "n", "tui.select.pageUp": "p", "tui.select.confirm": "!", "tui.select.cancel": "x", "tui.input.tab": "t" } as Record<string, string>)[action] === data } as unknown as KeybindingsManager;
 	const h = paneHarness(defaultConfig(), {}, bindings);
 	h.press(k.tab); assert.ok(!h.text().includes("[ Status line ]"));
-	h.press("t", "t", "d", "!"); // numeric input
+	h.press("t", "t", "d", "d", "!"); // numeric input
 	assert.ok(h.pane.render(100).join("").includes(CURSOR_MARKER));
 	h.press("s", "r", "q");
 	assert.equal(h.completion(), undefined);
-	assert.doesNotMatch(h.text(), /whole number/);
+	assert.doesNotMatch(h.text(), /Invalid value/);
 	h.press("!");
 	assert.match(h.text(), /whole number/);
 	h.press("x"); // restore
@@ -144,7 +144,7 @@ test("Pi selection bindings take precedence; Ctrl-C always cancels and input own
 
 test("number input supports correction, validation, cursor focus and local restore", () => {
 	const h = paneHarness();
-	h.press(k.backTab, k.backTab, k.down, k.enter);
+	h.press(k.backTab, k.backTab, k.down, k.down, k.enter);
 	assert.ok(h.pane.render(100).join("").includes(CURSOR_MARKER));
 	h.pane.focused = false;
 	assert.ok(!h.pane.render(100).join("").includes(CURSOR_MARKER));
@@ -166,7 +166,7 @@ test("number input supports correction, validation, cursor focus and local resto
 
 test("typing a speed replaces the initial number without requiring a delete shortcut", () => {
 	const h = paneHarness();
-	h.press(k.backTab, k.backTab, k.down, k.enter, "74", k.enter, "s");
+	h.press(k.backTab, k.backTab, k.down, k.down, k.enter, "74", k.enter, "s");
 	const saved = h.completion();
 	assert.equal(saved?.action, "save");
 	if (saved?.action === "save") assert.equal(saved.config.editor.workingSweepSpeed, 74);
@@ -216,9 +216,10 @@ test("the full-width bottom overlay keeps the editor mounted and disposes its pr
 			const layout = typeof options?.overlayOptions === "function" ? options.overlayOptions() : options?.overlayOptions;
 			assert.equal(layout?.width, "100%");
 			assert.equal(layout?.anchor, "bottom-left");
-			assert.deepEqual(layout?.margin, { bottom: mode === "fullscreen" ? 1 : 0 }, "fullscreen reserves an empty footer row");
+			assert.deepEqual(layout?.margin, { bottom: 0 }, "Pi 0.86 has no empty-footer reservation in either mode");
 			pane.handleInput?.(k.backTab);
 			pane.handleInput?.(k.backTab);
+			pane.handleInput?.(k.right);
 			assert.equal(active, 1);
 			if (fail) throw new Error("UI closed");
 			return { action: "cancel" } as T;

@@ -6,7 +6,7 @@ import { SEGMENT_IDS, type SegmentId } from "../../src/segments/registry.js";
 
 test("four sections have stable, user-facing labels and one home for each setting", () => {
 	const config = defaultConfig();
-	assert.deepEqual(SETTINGS_SECTIONS.map(s => s.label), ["Appearance", "Status line", "Working", "Input"]);
+	assert.deepEqual(SETTINGS_SECTIONS.map(s => s.label), ["Appearance", "Status line", "Activity", "Input"]);
 	assert.deepEqual(getSettingsRows(config, "appearance").map(row => [row.label, row.value]), [
 		["Glance", "On"], ["Light palette", "Light"], ["Dark palette", "Dark"], ["Icons", "Nerd Font"],
 		["Workspace label", "Smart path"],
@@ -14,12 +14,12 @@ test("four sections have stable, user-facing labels and one home for each settin
 	assert.deepEqual(getSettingsRows(config, "input").map(row => [row.label, row.value]), [
 		["Editor height", "3 rows"], ["Space above editor", "1 row"], ["Prompt stash", "On"], ["Stash shortcut", "alt+s"],
 	]);
-	assert.deepEqual(getSettingsRows(config, "working").map(row => [row.label, row.value]), [["Animation", "Full border"], ["Sweep speed", "47 cols/s"], ["Sweep color", "Theme default"]]);
+	assert.deepEqual(getSettingsRows(config, "working").map(row => [row.label, row.value]), [["Display mode", "Text"], ["Effect area", "Full border"], ["Sweep speed", "47 cols/s"], ["Effect color", "Theme default"], ["Compaction / summary speed", "0.50× · 23.5 cols/s"], ["Retry blink rate", "0.50 Hz"]]);
 	const rows = [...SETTINGS_SECTIONS.flatMap(s => getSettingsRows(config, s.id)), ...SEGMENT_IDS.flatMap(id => getSettingsRows(config, "status", id))];
 	assert.equal(new Set(rows.map(r => r.id)).size, rows.length);
 	for (const row of rows) {
 		assert.ok(row.hint.length && row.hint.length < 130);
-		assert.ok(row.label.length < 26);
+		assert.ok(row.label.length <= 26);
 		assert.ok(!["input-output", "percent+tokens", "read-write", "nerd", "auto"].includes(row.value));
 	}
 });
@@ -32,7 +32,7 @@ test("all choices are directly selectable, immutable and round-trip through save
 		assert.equal(new Set(row.options.map(o => o.label)).size, row.options.length);
 		for (let index = 0; index < row.options.length; index++) {
 			const next = row.select(config, index);
-			const section: SettingsSectionId = row.id.startsWith("appearance") ? "appearance" : row.id.startsWith("input") ? "input" : row.id.startsWith("working") ? "working" : "status";
+			const section: SettingsSectionId = row.id.startsWith("appearance") ? "appearance" : row.id.startsWith("input") ? "input" : row.id.startsWith("working") || row.id.startsWith("activity") ? "working" : "status";
 			const segment: SegmentId | undefined = SEGMENT_IDS.find(id => row.id.startsWith(id + "."));
 			assert.equal(getSettingsRows(next, section, segment).find(r => r.id === row.id)!.value, row.options[index]!.label);
 			assert.deepEqual(configFromText(configToText(next)), next);

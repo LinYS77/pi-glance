@@ -27,7 +27,10 @@ test("Nerd mode uses an inbox glyph; narrow frames keep its padding and prefer t
 	assert.match(frame(12, "nerd").at(-1)!, /^╰─  ─+╯$/);
 	assert.match(frame(12, "plain").at(-1)!, /^╰─ draft ─+╯$/);
 	assert.doesNotMatch(frame(100, "nerd").at(-1)!, /draft/);
-	assert.match(frame(100, "plain", { bottomScrollIndicator: "─── ↓ 4 more " }).at(-1)!, /^╰─── ↓ 4 more /);
+	const scrolled = frame(100, "plain", { bottomScrollIndicator: "─── ↓ 4 more " }).at(-1)!;
+	assert.match(scrolled, /^╰─ draft · alt\+s /);
+	assert.ok(scrolled.endsWith("─── ↓ 4 more ╯"), "scroll cue occupies the right side without displacing a fitting label");
+	assert.doesNotMatch(frame(12, "plain", { bottomScrollIndicator: "─── ↓ 4 more " }).at(-1)!, /draft/);
 	assert.doesNotMatch(frame(100, "plain", { hasDraft: false }).at(-1)!, /draft/);
 	for (const icons of ["plain", "nerd"] as const) for (let width = 0; width <= 120; width++) {
 		for (const line of frame(width, icons)) assert.ok(visibleWidth(line) <= width);
@@ -36,6 +39,7 @@ test("Nerd mode uses an inbox glyph; narrow frames keep its padding and prefer t
 
 test("a long draft hint does not create a dark pause in the full-border sweep", () => {
 	const config = defaultConfig(); config.icons = "plain"; config.editor.topMarginRows = 0;
+	config.editor.activityMode = "sweep";
 	config.editor.stashShortcut = "ctrl+shift+alt+super+pageDown";
 	const styles = resolveBuiltInGlanceStyles("dark");
 	let lit = false;
@@ -45,7 +49,7 @@ test("a long draft hint does not create a dark pause in the full-border sweep", 
 	for (let elapsed = 0; elapsed < 8000; elapsed += 33) {
 		lit = false;
 		const lines = renderInputSurfaceFrame({ state: testState(), config, width: 80, styles: observed,
-			body: { kind: "editor", lines: [""] }, chrome: { hasDraft: true, workingElapsedMs: elapsed } });
+			body: { kind: "editor", lines: [""] }, chrome: { hasDraft: true, animation: { kind: "sweep", elapsedMs: elapsed, speed: 47 } } });
 		assert.ok(lit, `visible beam at ${elapsed}ms`);
 		assert.ok(lines.at(-1)!.includes(styles.title(" draft · ctrl+shift+alt+super+pagedown ")));
 	}

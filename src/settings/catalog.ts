@@ -1,6 +1,6 @@
 import { shortcutLabel } from "../input/shortcut.js";
 import { cloneConfig } from "../config/model.js";
-import { WORKING_SPEED } from "../config/schema.js";
+import { RETRY_BLINK, SUMMARY_SPEED, WORKING_SPEED, type NumericSettingSpec } from "../config/schema.js";
 import { choiceSetting, toggleSetting, type SettingDescriptor, type SettingOption } from "../config/settings.js";
 import { getSegmentSettings, segmentLabel } from "../segments/registry.js";
 import { GLANCE_THEMES } from "../theme/themes.js";
@@ -12,7 +12,7 @@ export type SettingsSectionId = "appearance" | "status" | "working" | "input";
 export const SETTINGS_SECTIONS = [
 	{ id: "appearance", label: "Appearance" },
 	{ id: "status", label: "Status line" },
-	{ id: "working", label: "Working" },
+	{ id: "working", label: "Activity" },
 	{ id: "input", label: "Input" },
 ] as const;
 
@@ -21,6 +21,7 @@ interface RowBase {
 	label: string;
 	value: string;
 	hint: string;
+	inactive?: boolean;
 }
 export type SettingsRow = RowBase &
 	(
@@ -37,6 +38,9 @@ export type SettingsRow = RowBase &
 				number: number;
 				min: number;
 				max: number;
+				step: number;
+				precision: number;
+				inputHint: string;
 				setValue(config: GlanceConfig, value: number): GlanceConfig;
 		  }
 		| { kind: "segment"; segment: SegmentId; enabled: boolean }
@@ -146,14 +150,19 @@ const inputSettings = [
 		c => c.editor.stashEnabled, (c, value) => { c.editor.stashEnabled = value; }),
 ];
 
+const activityDisplay = choiceSetting(
+	"activity.mode", "Display mode", "Text shows native activity in the bottom border. Sweep uses state-driven border effects.",
+	[{ value: "text", label: "Text" }, { value: "sweep", label: "Sweep" }] as const,
+	c => c.editor.activityMode, (c, value) => { c.editor.activityMode = value; },
+);
+
 const animation = choiceSetting(
 	"working.mode",
-	"Animation",
-	"Off uses Pi's Working indicator instead of a sweep.",
+	"Effect area",
+	"Where sweeps travel and retry borders blink.",
 	[
 		{ value: "perimeter", label: "Full border", hint: "Move clockwise around the editor." },
 		{ value: "top", label: "Top edge", hint: "Sweep across the workspace title and connecting line." },
-		{ value: "off", label: "Off", hint: "Use Pi's Working indicator." },
 	],
 	(c) => c.editor.workingSweep,
 	(c, v) => {
@@ -163,8 +172,8 @@ const animation = choiceSetting(
 
 const sweepColor = choiceSetting(
 	"working.color",
-	"Sweep color",
-	"Choose an accent matched to the active Glance palette. Theme default keeps its original sweep color.",
+	"Effect color",
+	"Theme-matched accent for sweeps and retry blinking. Text-mode colors stay unchanged.",
 	[
 		{ value: "theme", label: "Theme default" },
 		{ value: "amber", label: "Amber" },
@@ -179,6 +188,19 @@ const sweepColor = choiceSetting(
 	c => c.editor.workingSweepColor,
 	(c, value) => { c.editor.workingSweepColor = value; },
 );
+
+function activityNumber(config: GlanceConfig, id: string, label: string,
+	field: "workingSweepSpeed" | "summarySpeedMultiplier" | "retryBlinkHz", spec: NumericSettingSpec,
+	value: string, unit: string, hint: string): SettingsRow {
+	return {
+		id, label, value, hint, kind: "number", number: config.editor[field],
+		min: spec.min, max: spec.max, step: spec.step, precision: spec.precision,
+		inputHint: `Enter ${spec.precision ? `a number (up to ${spec.precision} decimals)` : "a whole number"} from ${spec.min} to ${spec.max} ${unit}. Default: ${spec.defaultValue}.`,
+		setValue: (config, value) => {
+			const next = cloneConfig(config); next.editor[field] = spec.normalize(value); return next;
+		},
+	};
+}
 
 const segmentHints: Record<SegmentId, string> = {
 	git: "Branch, uncommitted changes and upstream commits.",
@@ -211,34 +233,21 @@ export function getSettingsRows(config: GlanceConfig, section: SettingsSectionId
 			kind: "shortcut", key: config.editor.stashShortcut,
 		},
 	];
-	if (section === "working")
+	if (section === "working") {
+		const editor = config.editor;
 		return [
+			descriptorRow(config, activityDisplay),
 			descriptorRow(config, animation),
-			{
-				id: "working.speed",
-				label: "Sweep speed",
-				value: `${config.editor.workingSweepSpeed} cols/s`,
-				hint:
-					config.editor.workingSweep === "off"
-						? "Turn animation on to preview the speed. Your speed is kept while off."
-						: "10–120 columns per second. Applies to both sweep modes.",
-				kind: "number",
-				number: config.editor.workingSweepSpeed,
-				min: WORKING_SPEED.min,
-				max: WORKING_SPEED.max,
-				setValue: (config, value) => {
-					const next = cloneConfig(config);
-					next.editor.workingSweepSpeed = WORKING_SPEED.normalize(value);
-					return next;
-				},
-			},
-			{
-				...descriptorRow(config, sweepColor),
-				hint: config.editor.workingSweep === "off"
-					? "Turn animation on to preview colors. Your choice is kept while off."
-					: sweepColor.hint,
-			},
-		];
+			activityNumber(config, "working.speed", "Sweep speed", "workingSweepSpeed", WORKING_SPEED,
+				`${editor.workingSweepSpeed} cols/s`, "cols/s", "Working travel speed: 10–120 columns per second."),
+			descriptorRow(config, sweepColor),
+			activityNumber(config, "activity.summarySpeed", "Compaction / summary speed", "summarySpeedMultiplier", SUMMARY_SPEED,
+				`${editor.summarySpeedMultiplier.toFixed(2)}× · ${Number((editor.workingSweepSpeed * editor.summarySpeedMultiplier).toFixed(2))} cols/s`, "×",
+				"Multiply Working speed for compaction and branch summaries. Below 1 is slower; above 1 is faster."),
+			activityNumber(config, "activity.retryBlink", "Retry blink rate", "retryBlinkHz", RETRY_BLINK,
+				`${editor.retryBlinkHz.toFixed(2)} Hz`, "Hz", `One complete bright/normal cycle every ${Number((1 / editor.retryBlinkHz).toFixed(2))}s. Does not change Pi's retry delay.`),
+		].map((row, index) => ({ ...row, inactive: index > 0 && editor.activityMode === "text" }));
+	}
 	const rows = appearance.map((descriptor) => descriptorRow(config, descriptor));
 	rows.splice(
 		1,

@@ -1,5 +1,5 @@
 import { performance } from "node:perf_hooks";
-import type { KeybindingsManager, Theme } from "@earendil-works/pi-coding-agent";
+import type { CustomEditor, KeybindingsManager, Theme } from "@earendil-works/pi-coding-agent";
 import type { EditorTheme, TUI } from "@earendil-works/pi-tui";
 import { defaultConfig } from "../src/config/model.js";
 import { createInitialState } from "../src/runtime/state.js";
@@ -27,6 +27,7 @@ for (const trueColor of [true, false]) {
 	for (const mode of ["top", "perimeter"] as const) {
 		for (const width of [80, 160]) {
 			const config = defaultConfig();
+			config.editor.activityMode = "sweep";
 			config.editor.workingSweep = mode;
 			const state = createInitialState(
 				{
@@ -47,11 +48,13 @@ for (const trueColor of [true, false]) {
 				() => state,
 				() => config,
 				{
-					getWorkingElapsedMs: () => now,
+					animationNowMs: () => now,
+					scheduleAnimationFrame: () => () => {},
 					renderStyleContext: { trueColor },
 				},
 			);
 			editor.focused = true;
+			editor.setWorkingStatusIndicator({ kind: "working", renderInBorder: () => "DEMO Working" } as unknown as NonNullable<Parameters<CustomEditor["setWorkingStatusIndicator"]>[0]>);
 			editor.setText("Your next prompt…");
 			const pane = new GlanceConfigPane(
 				config,
@@ -95,6 +98,7 @@ for (const trueColor of [true, false]) {
 				});
 			}
 			pane.dispose();
+			editor.dispose();
 		}
 	}
 }
