@@ -43,7 +43,7 @@ test("Extensions details show live publisher keys and text, including when the g
 		assert.ok(h.text().includes("DEMO 5h 10% left"), "same-map updates must also reach open details");
 		h.press(keys.enter, keys.space, keys.right, "j");
 		assert.ok(h.text().includes("No changes"), "diagnostics must not create configuration edits");
-		statuses.clear(); assert.ok(h.text().includes("No extension statuses published."));
+		statuses.clear(); assert.ok(h.text().includes("No extension statuses yet · publishers use setStatus()."));
 		h.press(keys.esc); assert.ok(h.text().includes("› Extensions"));
 	} finally { h.pane.dispose(); }
 });
@@ -74,8 +74,8 @@ test("extension diagnostics scroll, remember their place, clamp when publishers 
 
 test("diagnostics distinguish an unattached source from an attached but empty map", () => {
 	for (const [source, message] of [
-		[undefined, "Extension status source is not attached."],
-		[new Map<string, string>(), "No extension statuses published."],
+		[undefined, "No extension publisher is attached."],
+		[new Map<string, string>(), "No extension statuses yet · publishers use setStatus()."],
 	] as const) {
 		const h = paneHarness(defaultConfig(), { getExtensionStatuses: () => source });
 		try {

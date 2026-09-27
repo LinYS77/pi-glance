@@ -14,7 +14,7 @@ test("four sections have stable, user-facing labels and one home for each settin
 	assert.deepEqual(getSettingsRows(config, "input").map(row => [row.label, row.value]), [
 		["Editor height", "3 rows"], ["Space above editor", "1 row"], ["Prompt stash", "On"], ["Stash shortcut", "alt+s"],
 	]);
-	assert.deepEqual(getSettingsRows(config, "working").map(row => [row.label, row.value]), [["Display mode", "Text"], ["Effect area", "Full border"], ["Sweep speed", "47 cols/s"], ["Effect color", "Theme default"], ["Compaction / summary speed", "0.50× · 23.5 cols/s"], ["Retry blink rate", "0.50 Hz"]]);
+	assert.deepEqual(getSettingsRows(config, "working").map(row => [row.label, row.value]), [["Display mode", "Text"], ["Effect area", "Full border"], ["Sweep speed", "47 cols/s"], ["Effect color", "Theme default"], ["Summary multiplier", "0.50×"], ["Retry blink", "0.50 Hz"]]);
 	const rows = [...SETTINGS_SECTIONS.flatMap(s => getSettingsRows(config, s.id)), ...SEGMENT_IDS.flatMap(id => getSettingsRows(config, "status", id))];
 	assert.equal(new Set(rows.map(r => r.id)).size, rows.length);
 	for (const row of rows) {

@@ -31,7 +31,7 @@ test("four sections keep their selected row and expose only task-relevant contro
 	model = section(model);
 	assert.deepEqual(createPaneViewModel(model).rows.map(row => row.label), ["Git", "Cost", "Model speed", "Context", "Tokens", "Extensions", "Model"]);
 	model = section(model);
-	assert.deepEqual(createPaneViewModel(model).rows.map(row => row.label), ["Display mode", "Effect area", "Sweep speed", "Effect color", "Compaction / summary speed", "Retry blink rate"]);
+	assert.deepEqual(createPaneViewModel(model).rows.map(row => row.label), ["Display mode", "Effect area", "Sweep speed", "Effect color", "Summary multiplier", "Retry blink"]);
 	assert.equal(createPaneViewModel(model).preview.activity, "working");
 	model = section(model);
 	assert.equal(model.section, "input");

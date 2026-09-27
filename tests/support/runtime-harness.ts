@@ -1,6 +1,7 @@
 import { strict as assert } from "node:assert";
 import type { ExtensionCommandContext, ExtensionContext, ReadonlyFooterDataProvider } from "@earendil-works/pi-coding-agent";
 import { defaultConfig } from "../../src/config/model.js";
+import type { PaneCommitResult } from "../../src/settings/model.js";
 import type { ConfigLoadResult } from "../../src/config/store.js";
 import { createGlanceRuntime, type CreateGitRefresherOptions, type GlancePaneResult, type GlanceRuntimeAdapters, type RuntimeGitRefresher, type RuntimeShowPaneOptions } from "../../src/runtime/runtime.js";
 import type { StateSessionEntry } from "../../src/runtime/snapshot.js";
@@ -115,6 +116,7 @@ export interface RuntimeHarness {
 	showPanePreviewStates: Array<GlanceState | undefined>;
 	showPaneOptions: Array<RuntimeShowPaneOptions | undefined>;
 	savedConfigs: GlanceConfig[];
+	commitResults: PaneCommitResult[];
 	getLoadConfigCalls(): number;
 }
 
@@ -394,6 +396,7 @@ export function createRuntimeHarness(options: RuntimeHarnessOptions = {}): Runti
 	const showPanePreviewStates: Array<GlanceState | undefined> = [];
 	const showPaneOptions: Array<RuntimeShowPaneOptions | undefined> = [];
 	const savedConfigs: GlanceConfig[] = [];
+	const commitResults: PaneCommitResult[] = [];
 	let loadConfigCalls = 0;
 	const loadConfigSyncConfig = options.loadConfigSyncConfig ?? defaultConfig();
 	const loadConfigConfig = options.loadConfigConfig ?? loadConfigSyncConfig;
@@ -425,6 +428,12 @@ export function createRuntimeHarness(options: RuntimeHarnessOptions = {}): Runti
 			showPaneOptions.push(paneOptions);
 			const result = showPaneResults.shift();
 			assert.ok(result, "expected queued showPane result");
+			if (result.action === "save") {
+				assert.ok(paneOptions?.commit, "the runtime supplies the commit boundary");
+				const committed = await paneOptions.commit(result.config);
+				commitResults.push(committed);
+				if (committed.status !== "saved") return { action: "cancel" };
+			}
 			return result;
 		},
 		createGitRefresher: options.git?.create,
@@ -436,6 +445,7 @@ export function createRuntimeHarness(options: RuntimeHarnessOptions = {}): Runti
 		showPanePreviewStates,
 		showPaneOptions,
 		savedConfigs,
+		commitResults,
 		getLoadConfigCalls: () => loadConfigCalls,
 	};
 }

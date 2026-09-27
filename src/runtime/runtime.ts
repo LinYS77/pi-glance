@@ -22,6 +22,7 @@ import type {
 	UIPromptStartEvent,
 } from "@earendil-works/pi-coding-agent";
 import type { ConfigLoadResult } from "../config/store.js";
+import type { PaneCommit, PaneCommitResult, PaneCompletion, PanePersistence } from "../settings/model.js";
 import { GlanceEditor } from "../surface/editor.js";
 import { GlanceFooter } from "../surface/footer.js";
 import { GitRefresher } from "./git.js";
@@ -31,7 +32,7 @@ import type { GlanceRenderStyleContext } from "../theme/adapter.js";
 import { readPiAmbientTone } from "../theme/tone.js";
 import type { ExtensionStatusSource, GitSnapshot, GlanceConfig, GlanceState } from "../types.js";
 
-export type GlancePaneResult = { action: "save"; config: GlanceConfig } | { action: "cancel" };
+export type GlancePaneResult = PaneCompletion;
 
 export interface RuntimeGitRefresher {
 	schedule(immediate?: boolean): void;
@@ -46,6 +47,8 @@ export interface CreateGitRefresherOptions {
 }
 
 export interface RuntimeShowPaneOptions {
+	readonly commit?: PaneCommit;
+	readonly persistence?: PanePersistence;
 	readonly getPreviewState?: () => GlanceState;
 	readonly getExtensionStatuses?: ExtensionStatusSource;
 	readonly renderStyleContext?: GlanceRenderStyleContext;
@@ -112,6 +115,7 @@ function runtimeRenderStyleContext(ctx: ExtensionContext, getTrueColor: () => bo
 export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRuntime {
 	let config: GlanceConfig | undefined;
 	let configWritable = true;
+	let pendingSave: ConfigLoadResult["pendingSave"];
 	let configDiagnostic: string | undefined;
 	let configDiagnosticStatus: ConfigLoadResult["status"] | undefined;
 	let configDiagnosticNotified = false;
@@ -127,12 +131,14 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 	let stash: PromptStash | undefined;
 	let canFetch = () => false;
 	let uiGeneration = 0;
+	let sessionGeneration = 0;
 	const nowMs = adapters.nowMs ?? (() => performance.now());
 	const getTrueColor = adapters.getTrueColor ?? (() => getCapabilities().trueColor);
 
 	function acceptConfigLoad(result: ConfigLoadResult): GlanceConfig {
 		config = result.config;
 		configWritable = result.writable;
+		pendingSave = result.pendingSave;
 		configDiagnostic = result.diagnostic;
 		configDiagnosticStatus = result.status;
 		configDiagnosticNotified = false;
@@ -305,51 +311,58 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 					ctx.ui.notify("pi-glance configuration pane requires TUI mode", "error");
 					return;
 				}
+				const session = sessionGeneration;
 				const current = await ensureConfig();
+				if (session !== sessionGeneration) return;
 				notifyConfigDiagnostic(ctx);
 				const previewState = refreshSession.ensureState(ctx);
 				const generation = uiGeneration;
 				const renderStyleContext = runtimeRenderStyleContext(ctx, getTrueColor);
-				const result = await adapters.showPane(current, ctx, previewState, {
-					renderStyleContext, getExtensionStatuses,
-					getPreviewState: () => isCurrentUiGeneration(generation) ? refreshSession.ensureState(ctx) : previewState,
-				});
-				if (result.action === "cancel") {
-					ctx.ui.notify("pi-glance configuration cancelled", "info");
-					return;
-				}
-
-				const previousConfig = current;
-				const nextConfig = result.config;
-				if (!configWritable) {
-					ctx.ui.notify("pi-glance configuration save blocked to protect the existing file; fix or remove it, then /reload", "error");
-					return;
-				}
+				let open = true, committing = false, saved = false;
+				const isCurrent = () => open && session === sessionGeneration;
+				const commit: PaneCommit = async nextConfig => {
+					if (!isCurrent()) return { status: "retired" };
+					if (!configWritable) return { status: "failed", message: "pi-glance configuration save blocked to protect the existing file; fix or remove it, then /reload" };
+					if (committing) return { status: "failed", message: "A save is already in progress." };
+					committing = true;
+					try {
+						try { await adapters.saveConfig(nextConfig); }
+						catch {
+							return isCurrent()
+								? { status: "failed", message: "pi-glance configuration save failed; keeping previous configuration" }
+								: { status: "retired" };
+						}
+						if (!isCurrent()) return { status: "retired" };
+						const previousConfig = getConfig();
+						config = nextConfig;
+						pendingSave = undefined;
+						configDiagnostic = undefined;
+						configDiagnosticStatus = "loaded";
+						configDiagnosticNotified = false;
+						if (previousConfig.enabled && nextConfig.enabled) {
+							reconcileGitRefresher();
+							activeEditor?.refreshActivity();
+						}
+						await refreshSession.configSaved(ctx,
+							previousConfig.enabled === nextConfig.enabled ? undefined : () => installInputSurface(ctx));
+						saved = isCurrent();
+						return { status: saved ? "saved" : "retired" } satisfies PaneCommitResult;
+					} finally { committing = false; }
+				};
 				try {
-					await adapters.saveConfig(nextConfig);
-				} catch {
-					ctx.ui.notify("pi-glance configuration save failed; keeping previous configuration", "error");
-					return;
-				}
-
-				config = nextConfig;
-				configWritable = true;
-				configDiagnostic = undefined;
-				configDiagnosticStatus = "loaded";
-				configDiagnosticNotified = false;
-				if (previousConfig.enabled && nextConfig.enabled) {
-					reconcileGitRefresher();
-					activeEditor?.refreshActivity();
-				}
-				await refreshSession.configSaved(
-					ctx,
-					previousConfig.enabled === nextConfig.enabled ? undefined : () => installInputSurface(ctx),
-				);
-				ctx.ui.notify("pi-glance configuration saved", "info");
+					await adapters.showPane(current, ctx, previewState, {
+						commit, persistence: { writable: configWritable, diagnostic: configDiagnostic,
+							notice: pendingSave === "upgrade" ? "Upgrade ready" : pendingSave === "create" ? "Not saved yet" : undefined },
+						renderStyleContext, getExtensionStatuses,
+						getPreviewState: () => isCurrentUiGeneration(generation) ? refreshSession.ensureState(ctx) : previewState,
+					});
+					if (saved && session === sessionGeneration) ctx.ui.notify("pi-glance configuration saved", "info");
+				} finally { open = false; }
 			},
 		},
 		events: {
 			sessionStart: (_event, ctx) => {
+				sessionGeneration++;
 				canFetch = () => configWritable && ctx.isProjectTrusted() && process.env.PI_OFFLINE !== "1";
 				waitingForUi = false;
 				stash = undefined;
@@ -370,6 +383,7 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 				installInputSurface(ctx);
 			},
 			sessionShutdown: async (_event, ctx) => {
+				sessionGeneration++;
 				waitingForUi = false;
 				refreshSession.sessionShutdown();
 				clearUI(ctx);
@@ -417,8 +431,8 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 			agentEnd: async (event, ctx) => {
 				await refreshSession.agentEnd(event, ctx);
 			},
-			agentSettled: (_event, _ctx) => {
-				refreshSession.agentSettled();
+			agentSettled: (_event, ctx) => {
+				refreshSession.agentSettled(ctx);
 			},
 		},
 	};

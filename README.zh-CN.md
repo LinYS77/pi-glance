@@ -53,7 +53,7 @@ pi install npm:pi-glance
   <img src="https://raw.githubusercontent.com/LinYS77/pi-glance/main/assets/themes.gif" alt="pi-glance 主题预览">
 </p>
 
-预览图使用示例数据。
+`/glance` 中的当前会话事实会明确标记为 **Live**；Activity 场景、输入草稿示例和截图使用明确标记的示例数据。
 
 ## 说明
 

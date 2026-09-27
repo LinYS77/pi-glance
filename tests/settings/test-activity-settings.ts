@@ -8,7 +8,7 @@ test("Activity offers one display choice and five retained effect controls, inac
 	try {
 		h.press(k.tab, k.tab);
 		assert.match(h.text(), /\[ Activity \]/);
-		assert.deepEqual(getSettingsRows(h.config, "working").map(r => r.label), ["Display mode", "Effect area", "Sweep speed", "Effect color", "Compaction / summary speed", "Retry blink rate"]);
+		assert.deepEqual(getSettingsRows(h.config, "working").map(r => r.label), ["Display mode", "Effect area", "Sweep speed", "Effect color", "Summary multiplier", "Retry blink"]);
 		assert.match(h.text(), /Display mode\s+Text/);
 		assert.equal(h.pending(), 0);
 		h.press(k.down, k.down, k.right);
@@ -26,7 +26,8 @@ test("fractional fields have their own steps, limits and local confirmation/canc
 	const h = paneHarness();
 	try {
 		h.press(k.tab, k.tab, ...Array(4).fill(k.down), k.enter, "1.35", k.enter);
-		assert.match(h.text(), /1\.35× · 63\.45 cols\/s/);
+		assert.match(h.text(), /1\.35×/);
+		assert.match(h.text(), /63\.45 cols\/s/);
 		h.press(k.right); assert.match(h.text(), /1\.40×/);
 		h.press(k.enter, "0.2", k.enter);
 		assert.match(h.text(), /0\.25 to 2/);

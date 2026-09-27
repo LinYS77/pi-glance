@@ -164,6 +164,22 @@ test("new defaults do not overwrite saved choices from current or older configs"
 	}
 });
 
+test("an in-memory schema upgrade remains pending until an explicit save, even without edits", async () => {
+	const directory = await mkdtemp(join(tmpdir(), "glance-pending-upgrade-"));
+	try {
+		const path = join(directory, "config.json"), store = createConfigStore(path);
+		const text = JSON.stringify({ ...defaultConfig(), version: 14 });
+		await writeFile(path, text);
+		const loaded = await store.loadConfig();
+		assert.ok("pendingSave" in loaded, "the UI needs persistence state separate from draft dirtiness");
+		assert.equal(loaded.pendingSave, "upgrade");
+		assert.equal(await readFile(path, "utf8"), text);
+		await store.saveConfig(loaded.config);
+		assert.equal((await store.loadConfig()).config.version, 15);
+		assert.equal("pendingSave" in await store.loadConfig(), false);
+	} finally { await rm(directory, { recursive: true, force: true }); }
+});
+
 test("two config stores in one process remain independent", async () => {
 	const dir = await mkdtemp(join(tmpdir(), "pi-glance-config-stores-"));
 	try {
