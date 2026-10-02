@@ -59,7 +59,7 @@ test("hidden Working previews stop the clock and resume after resizing", () => {
 	h.height(10);
 	h.press(k.backTab, k.backTab, k.right);
 	const stale = h.stale();
-	assert.match(h.text(), /Preview hidden · terminal too short/);
+	assert.doesNotMatch(h.text(), /Preview/);
 	assert.equal(h.pending(), 0);
 	const renders = h.renders();
 	stale(); h.advance(5000);

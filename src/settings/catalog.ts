@@ -20,8 +20,6 @@ interface RowBase {
 	id: string;
 	label: string;
 	value: string;
-	/** The editable value, never its derived/formatted display text. */
-	current: string | number | boolean;
 	hint: string;
 	inactive?: boolean;
 }
@@ -53,7 +51,6 @@ function descriptorRow(config: GlanceConfig, descriptor: SettingDescriptor): Set
 		id: descriptor.id,
 		label: descriptor.label,
 		value: descriptor.value(config),
-		current: descriptor.read(config),
 		hint: descriptor.hint,
 		kind: descriptor.kind,
 		selectedIndex: descriptor.selectedIndex(config),
@@ -196,7 +193,7 @@ function activityNumber(config: GlanceConfig, id: string, label: string,
 	field: "workingSweepSpeed" | "summarySpeedMultiplier" | "retryBlinkHz", spec: NumericSettingSpec,
 	value: string, unit: string, hint: string): SettingsRow {
 	return {
-		id, label, value, current: config.editor[field], hint, kind: "number", number: config.editor[field],
+		id, label, value, hint, kind: "number", number: config.editor[field],
 		min: spec.min, max: spec.max, step: spec.step, precision: spec.precision,
 		inputHint: `Enter ${spec.precision ? `a number (up to ${spec.precision} decimals)` : "a whole number"} from ${spec.min} to ${spec.max} ${unit}. Default: ${spec.defaultValue}.`,
 		setValue: (config, value) => {
@@ -222,7 +219,6 @@ export function getSettingsRows(config: GlanceConfig, section: SettingsSectionId
 			id: `status.${id}`,
 			label: segmentLabel(id),
 			value: enabled ? "On" : "Off",
-			current: enabled,
 			hint: segmentHints[id],
 			kind: "segment",
 			segment: id,
@@ -234,7 +230,7 @@ export function getSettingsRows(config: GlanceConfig, section: SettingsSectionId
 		{
 			id: "input.shortcut", label: "Stash shortcut", value: shortcutLabel(config.editor.stashShortcut),
 			hint: "Press Enter, then a shortcut. Pi's own bindings cannot be replaced.",
-			kind: "shortcut", key: config.editor.stashShortcut, current: config.editor.stashShortcut,
+			kind: "shortcut", key: config.editor.stashShortcut,
 		},
 	];
 	if (section === "working") {
@@ -245,10 +241,10 @@ export function getSettingsRows(config: GlanceConfig, section: SettingsSectionId
 			activityNumber(config, "working.speed", "Sweep speed", "workingSweepSpeed", WORKING_SPEED,
 				`${editor.workingSweepSpeed} cols/s`, "cols/s", "Working travel speed: 10–120 columns per second."),
 			descriptorRow(config, sweepColor),
-			activityNumber(config, "activity.summarySpeed", "Summary multiplier", "summarySpeedMultiplier", SUMMARY_SPEED,
-				`${editor.summarySpeedMultiplier.toFixed(2)}×`, "×",
-				`Summary travel: ${Number((editor.workingSweepSpeed * editor.summarySpeedMultiplier).toFixed(2))} cols/s. Multiplies Sweep speed for compaction and summaries; below 1 is slower, above 1 is faster.`),
-			activityNumber(config, "activity.retryBlink", "Retry blink", "retryBlinkHz", RETRY_BLINK,
+			activityNumber(config, "activity.summarySpeed", "Compaction / summary speed", "summarySpeedMultiplier", SUMMARY_SPEED,
+				`${editor.summarySpeedMultiplier.toFixed(2)}× · ${Number((editor.workingSweepSpeed * editor.summarySpeedMultiplier).toFixed(2))} cols/s`, "×",
+				"Multiply Working speed for compaction and branch summaries. Below 1 is slower; above 1 is faster."),
+			activityNumber(config, "activity.retryBlink", "Retry blink rate", "retryBlinkHz", RETRY_BLINK,
 				`${editor.retryBlinkHz.toFixed(2)} Hz`, "Hz", `One complete bright/normal cycle every ${Number((1 / editor.retryBlinkHz).toFixed(2))}s. Does not change Pi's retry delay.`),
 		].map((row, index) => ({ ...row, inactive: index > 0 && editor.activityMode === "text" }));
 	}
@@ -260,11 +256,10 @@ export function getSettingsRows(config: GlanceConfig, section: SettingsSectionId
 			id: `appearance.palette.${slot}`,
 			label: slot === "light" ? "Light palette" : "Dark palette",
 			value: getThemeLabel(config.theme[slot]),
-			current: config.theme[slot],
 			hint:
 				slot === "light"
-					? "Edits Glance's Light palette for light or unrecognized Pi themes. Does not change Pi's theme."
-					: "Edits Glance's Dark palette for dark Pi themes. Does not change Pi's theme.",
+					? "Glance colors for Pi's light or unrecognized theme. Does not change Pi's theme."
+					: "Glance colors for Pi's dark theme. Does not change Pi's theme.",
 			kind: "theme" as const,
 			slot,
 		})),

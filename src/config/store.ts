@@ -11,7 +11,6 @@ export interface ConfigLoadResult {
 	config: GlanceConfig;
 	status: ConfigLoadStatus;
 	writable: boolean;
-	pendingSave?: "create" | "upgrade";
 	diagnostic?: string;
 }
 
@@ -57,12 +56,11 @@ export function createConfigStore(configPath: string) {
 			};
 		}
 
-		return { config: normalizeConfig(raw), status: "loaded", writable: true,
-			...(rawVersion === CONFIG_VERSION ? {} : { pendingSave: "upgrade" as const }) };
+		return { config: normalizeConfig(raw), status: "loaded", writable: true };
 	}
 
 	function configReadErrorResult(error: unknown): ConfigLoadResult {
-		if (isMissingConfigError(error)) return { config: defaultConfig(), status: "missing", writable: true, pendingSave: "create" };
+		if (isMissingConfigError(error)) return { config: defaultConfig(), status: "missing", writable: true };
 		return {
 			config: defaultConfig(),
 			status: "unreadable",

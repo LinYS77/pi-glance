@@ -1,4 +1,3 @@
-import type { PaneActionId } from "./bindings.js";
 import { normalizeStashShortcut, shortcutLabel } from "../input/shortcut.js";
 import { cloneConfig, defaultConfig, moveSegment, toggleSegment } from "../config/model.js";
 import {
@@ -30,9 +29,7 @@ type EditorPage =
 	| (EditorPageBase & { kind: "shortcut"; key: string; error: string })
 	| (EditorPageBase & { kind: "number"; text: string; error: string });
 type ContentPage = ListPage | EditorPage;
-type PanePage = ContentPage
-	| { kind: "confirm"; action: "discard" | "reset"; index: number; previous: ContentPage }
-	| { kind: "help"; index: number; previous: ContentPage };
+type PanePage = ContentPage | { kind: "confirm"; action: "discard" | "reset"; index: number; previous: ContentPage };
 export interface PaneModelState {
 	initial: GlanceConfig;
 	draft: GlanceConfig;
@@ -44,13 +41,6 @@ export interface PaneModelState {
 	previewActivity: ActivityPreview;
 }
 export type PaneCompletion = { action: "save"; config: GlanceConfig } | { action: "cancel" };
-export type PaneCommitResult = { status: "saved" } | { status: "failed"; message: string } | { status: "retired" };
-export interface PanePersistence {
-	writable: boolean;
-	diagnostic?: string;
-	notice?: string;
-}
-export type PaneCommit = (config: GlanceConfig) => Promise<PaneCommitResult>;
 export type PaneIntent =
 	| { type: "move"; direction: "up" | "down"; amount?: number }
 	| { type: "adjust"; direction: -1 | 1 }
@@ -58,21 +48,19 @@ export type PaneIntent =
 	| { type: "reorder"; direction: -1 | 1 }
 	| { type: "shortcut"; key?: string; error?: string }
 	| { type: "input"; text: string }
-	| { type: "activate" | "toggle" | "back" | "cancel" | "save" | "reset" | "density" | "previewActivity" | "help" };
+	| { type: "activate" | "toggle" | "back" | "cancel" | "save" | "reset" | "density" | "previewActivity" };
 export interface PaneUpdateResult {
 	model: PaneModelState;
 	completion?: PaneCompletion;
 }
 export interface HelpShortcut {
-	/** Stable action identity; effective keys are supplied by the Pi adapter. */
-	key: PaneActionId;
+	key: string;
 	label: string;
 }
 export interface GlancePaneViewModel {
 	section: SettingsSectionId;
 	title: string;
 	dirty: boolean;
-	changeCount: number;
 	rows: Array<{
 		id: string;
 		label: string;
@@ -88,7 +76,6 @@ export interface GlancePaneViewModel {
 	page: PanePage["kind"];
 	actions: HelpShortcut[];
 	help: HelpShortcut[];
-	reference?: HelpShortcut[];
 	preview: { config: GlanceConfig; activity?: ActivityPreview; density: PanePreviewDensity; ambientTone?: GlanceThemeSlot };
 }
 
@@ -123,21 +110,8 @@ function sameValue(a: unknown, b: unknown): boolean {
 		first.every(([key, value]) => Object.hasOwn(b, key) && sameValue(value, (b as Record<string, unknown>)[key]))
 	);
 }
-function changeCount(initial: GlanceConfig, draft: GlanceConfig): number {
-	function count(a: unknown, b: unknown): number {
-		if (sameValue(a, b)) return 0;
-		if (!a || !b || typeof a !== "object" || typeof b !== "object" || Array.isArray(a) || Array.isArray(b)) return 1;
-		const first = a as Record<string, unknown>, second = b as Record<string, unknown>;
-		return [...new Set([...Object.keys(first), ...Object.keys(second)])].reduce((total, key) => total + count(first[key], second[key]), 0);
-	}
-	const comparable = (config: GlanceConfig) => ({ ...config, segments: {
-		order: config.segments.map(segment => segment.id),
-		enabled: Object.fromEntries(config.segments.map(segment => [segment.id, segment.enabled])),
-	} });
-	return count(comparable(initial), comparable(draft));
-}
 function contentPage(model: PaneModelState): ContentPage {
-	return model.page.kind === "confirm" || model.page.kind === "help" ? model.page.previous : model.page;
+	return model.page.kind === "confirm" ? model.page.previous : model.page;
 }
 function listPage(model: PaneModelState): ListPage {
 	const page = contentPage(model);
@@ -224,7 +198,7 @@ function updateNumber(model: PaneModelState, text: string, confirm = false): Pan
 }
 function back(model: PaneModelState): PaneUpdateResult {
 	const page = model.page;
-	if (page.kind === "confirm" || page.kind === "help") return { model: { ...model, page: page.previous } };
+	if (page.kind === "confirm") return { model: { ...model, page: page.previous } };
 	if (page.kind !== "list") return { model: { ...model, draft: page.restore, page: page.parent } };
 	if (page.segment)
 		return {
@@ -242,7 +216,6 @@ function back(model: PaneModelState): PaneUpdateResult {
 }
 function activate(model: PaneModelState): PaneUpdateResult {
 	const page = model.page;
-	if (page.kind === "help") return { model };
 	if (page.kind === "confirm") {
 		if (page.index === 0) return { model: { ...model, page: page.previous } };
 		if (page.action === "discard") return { model, completion: { action: "cancel" } };
@@ -326,10 +299,8 @@ function adjustRow(config: GlanceConfig, row: SettingsRow, direction: -1 | 1): G
 	}
 }
 
-export function updatePaneModel(model: PaneModelState, intent: PaneIntent, dynamicRowCount = 0): PaneUpdateResult {
+export function updatePaneModel(model: PaneModelState, intent: PaneIntent, extensionStatusCount = 0): PaneUpdateResult {
 	const page = model.page;
-	if (intent.type === "help") return { model: page.kind === "list" || page.kind === "choices" || page.kind === "theme"
-		? { ...model, page: { kind: "help", index: 0, previous: page } } : model };
 	if (intent.type === "cancel") return { model, completion: { action: "cancel" } };
 	if (intent.type === "back") return back(model);
 	if (intent.type === "activate") return activate(model);
@@ -350,12 +321,11 @@ export function updatePaneModel(model: PaneModelState, intent: PaneIntent, dynam
 		const amount = Number.isFinite(intent.amount) ? Math.max(1, Math.floor(intent.amount!)) : 1;
 		const step = (intent.direction === "up" ? -1 : 1) * amount;
 		if (page.kind === "number" || page.kind === "shortcut") return { model };
-		if (page.kind === "help") return { model: { ...model, page: { ...page, index: clampIndex(page.index + step, dynamicRowCount) } } };
 		if (page.kind === "confirm")
 			return { model: { ...model, page: { ...page, index: clampIndex(page.index + step, 2) } } };
 		if (page.kind === "theme" || page.kind === "choices")
 			return { model: selectChoice(model, page, clampIndex(page.index + step, pickerCount(model, page))) };
-		const count = page.segment === "extensions" ? dynamicRowCount : rowsFor(model).length;
+		const count = page.segment === "extensions" ? extensionStatusCount : rowsFor(model).length;
 		return { model: withList(model, { ...page, index: clampIndex(clampIndex(page.index, count) + step, count) }) };
 	}
 	if (page.kind !== "list") return { model };
@@ -416,16 +386,8 @@ export function createPaneViewModel(model: PaneModelState): GlancePaneViewModel 
 	let hint = row?.kind === "choice" ? (row.options[row.selectedIndex]?.hint ?? row.hint) : (row?.hint ?? "");
 	if (list.segment && !model.draft.segments.find((segment) => segment.id === list.segment)?.enabled) title += " (Off)";
 	let choices: GlancePaneViewModel["choices"] = [];
-	let reference: HelpShortcut[] | undefined;
 	let help: HelpShortcut[], actions: HelpShortcut[];
-	if (page.kind === "help") {
-		const previous = createPaneViewModel({ ...model, page: page.previous });
-		title = "Keyboard help";
-		hint = "Keys apply to the page you came from. Esc returns without changing your draft.";
-		reference = [...previous.help, ...previous.actions].filter(item => item.key !== "?");
-		help = [{ key: "↑↓", label: "Scroll" }];
-		actions = [{ key: "Esc", label: "Back" }];
-	} else if (page.kind === "confirm") {
+	if (page.kind === "confirm") {
 		title = page.action === "reset" ? "Reset all settings?" : "Discard unsaved changes?";
 		hint =
 			page.action === "reset"
@@ -467,7 +429,7 @@ export function createPaneViewModel(model: PaneModelState): GlancePaneViewModel 
 				selected: index === page.index,
 				checked: theme.id === page.restore.theme[page.slot],
 			}));
-			hint = selected ? `${selected.groupLabel} · ${selected.description}. ${row?.hint ?? ""}`.trim() : hint;
+			hint = selected ? `${selected.groupLabel} · ${selected.description}` : hint;
 		} else {
 			const previous = pickerRow(model, page);
 			if (previous) {
@@ -494,7 +456,7 @@ export function createPaneViewModel(model: PaneModelState): GlancePaneViewModel 
 			{ key: "Esc", label: "Cancel" },
 		];
 	} else if (page.kind === "list" && page.segment === "extensions") {
-		hint = "Live, read-only setStatus() output. The preview below may omit publisher text when built-in facts need the space.";
+		hint = "Live, read-only setStatus() output. Published text may be hidden above when space is limited.";
 		help = [{ key: "Tab/Shift+Tab", label: "Section" }, { key: "↑↓", label: "Scroll" }, { key: "D", label: "Preview layout" }];
 		actions = [{ key: "S", label: "Save & close" }, { key: "Esc", label: "Back" }, { key: "R", label: "Reset" }];
 	} else {
@@ -523,19 +485,16 @@ export function createPaneViewModel(model: PaneModelState): GlancePaneViewModel 
 			{ key: "R", label: "Reset" },
 		];
 	}
-	if (page.kind === "list" || page.kind === "choices" || page.kind === "theme") actions.push({ key: "?", label: "Help" });
 	const original = getSettingsRows(model.initial, model.section, list.segment);
 	return {
 		section: model.section,
 		title,
 		page: page.kind,
 		dirty: paneIsDirty(model),
-		changeCount: changeCount(model.initial, model.draft),
-		hint: row?.inactive && page.kind !== "help" && page.kind !== "confirm" ? `Stored setting. Used in Sweep mode. ${hint}` : hint,
+		hint: row?.inactive ? `Used in Sweep mode. ${hint}` : hint,
 		extensionStatusIndex: page.kind === "list" && page.segment === "extensions" ? page.index : undefined,
 		choices,
 		help,
-		reference,
 		actions,
 		rows: rows.map((row, index) => ({
 			id: row.id,
@@ -545,7 +504,7 @@ export function createPaneViewModel(model: PaneModelState): GlancePaneViewModel 
 			kind: row.kind,
 			selected: index === list.index,
 			changed:
-				row.current !== original.find((previous) => previous.id === row.id)?.current ||
+				row.value !== original.find((previous) => previous.id === row.id)?.value ||
 				(row.kind === "segment" && original[index]?.id !== row.id),
 		})),
 		preview: {

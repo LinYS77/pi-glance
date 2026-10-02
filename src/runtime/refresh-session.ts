@@ -177,11 +177,6 @@ export class RuntimeRefreshSession {
 	private readStateInputs(ctx: ExtensionContext): StateInputs {
 		const entries = ctx.sessionManager.getEntries();
 		this.seenEntryIds = new Set(entries.map(entry => entry.id));
-		for (const entry of entries) {
-			if (this.usageTotalsAreZero(usageTotalsFromEntry(entry))) continue;
-			const message = entry.type === "message" ? entry.message : undefined;
-			this.claimUsageDelta(message ?? entry, message ? this.messageUsageKey(message) : this.entryUsageKey(entry));
-		}
 		return {
 			...lifecycleInputsFromContext(ctx, this.host.getThinkingLevel()),
 			usage: usageTotalsFromEntries(entries),
@@ -211,23 +206,19 @@ export class RuntimeRefreshSession {
 
 	ensureState(ctx: ExtensionContext): GlanceState {
 		if (!this.state) return this.resetState(ctx);
-		this.syncPersistedUsage(ctx);
+		this.syncStandaloneUsage(ctx);
 		return this.state;
 	}
 
-	/** Persisted non-message receipts need not emit a native session_compact hook. */
-	private syncPersistedUsage(ctx: ExtensionContext): void {
+	/** Pi redraws after background usage is persisted, without a message_end hook. */
+	private syncStandaloneUsage(ctx: ExtensionContext): void {
 		let id = ctx.sessionManager.getLeafId();
 		// Unchanged frames are O(1); only newly appended ancestors are inspected.
 		while (id && !this.seenEntryIds.has(id)) {
 			const entry: StateSessionEntry | undefined = ctx.sessionManager.getEntry(id);
 			if (!entry) break;
 			this.seenEntryIds.add(id);
-			// Messages are accounted for by message_end; summaries share their entry ID
-			// with native events, so either observation order settles them only once.
-			if (entry.type === "usage" || entry.type === "compaction" || entry.type === "branch_summary") {
-				this.applyUsageDelta(entry, usageTotalsFromEntry(entry), this.entryUsageKey(entry));
-			}
+			if (entry.type === "usage") this.applyUsageDelta(entry, usageTotalsFromEntry(entry), this.entryUsageKey(entry));
 			id = entry.parentId ?? null;
 		}
 	}
@@ -396,14 +387,9 @@ export class RuntimeRefreshSession {
 		await this.refresh(ctx, LIFECYCLE_NO_MODEL_ON_WORKSPACE_CHANGE);
 	}
 
-	agentSettled(ctx: ExtensionContext): void {
+	agentSettled(): void {
 		const intent = this.modelSpeedTracker.settle();
-		if (!this.state) return;
-		const version = this.state.version;
-		this.syncPersistedUsage(ctx);
-		refreshContextUsage(this.state, { contextUsage: ctx.getContextUsage() ?? undefined, model: ctx.model });
-		applyModelSpeedIntent(this.state, intent);
-		if (this.state.version !== version) this.host.requestRender();
+		if (this.state && applyModelSpeedIntent(this.state, intent)) this.host.requestRender();
 	}
 
 	applyGitSnapshot(cwd: string, snapshot: GitSnapshot): boolean {

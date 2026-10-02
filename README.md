@@ -41,9 +41,9 @@ No runtime dependencies. No telemetry.
 
 ## Configure
 
-Run `/glance` for **Appearance**, **Status line**, **Activity**, and **Input**. `Tab` switches sections; arrows adjust; `S` saves.
+Run `/glance` for **Appearance**, **Status line**, **Activity**, and **Input** settings. `Tab` switches sections, arrows adjust, and `S` saves.
 
-The full-width preview stays below; closing preserves input and cursor.
+The full-width preview sits below settings. Closing preserves input and cursor.
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/LinYS77/pi-glance/main/assets/settings.png" alt="pi-glance settings pane">
@@ -53,7 +53,7 @@ The full-width preview stays below; closing preserves input and cursor.
   <img src="https://raw.githubusercontent.com/LinYS77/pi-glance/main/assets/themes.gif" alt="pi-glance theme preview">
 </p>
 
-Facts are **Live**; screenshots use example data.
+Previews use example data.
 
 ## Notes
 

@@ -12,7 +12,6 @@ export interface SettingDescriptor {
 	hint: string;
 	kind: "toggle" | "choice";
 	options: readonly SettingOption[];
-	read(config: GlanceConfig): string | number | boolean;
 	value(config: GlanceConfig): string;
 	selectedIndex(config: GlanceConfig): number;
 	select(config: GlanceConfig, index: number): void;
@@ -33,7 +32,6 @@ export function choiceSetting<T extends string | number | boolean>(
 		hint,
 		kind: "choice",
 		options,
-		read,
 		value: (config) => {
 			const value = read(config);
 			return options.find((option) => option.value === value)?.label ?? format(value);

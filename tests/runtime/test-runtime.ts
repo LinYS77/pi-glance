@@ -759,7 +759,7 @@ await test("assistant message_end counter baseline should include the session_st
 	assert.deepEqual(previewState.usage, { input: 20, output: 23, cacheRead: 26, cacheWrite: 29, cost: 2.6 }, "agent_end should preserve complete incremental session usage without full entries reconciliation");
 });
 
-await test("save failure returns an inline error and preserves active configuration", async () => {
+await test("save failure should notify the exact error copy", async () => {
 	const initialConfig = defaultConfig();
 	const nextConfig = disabledConfig(initialConfig);
 	const git = createGitHarness();
@@ -777,7 +777,7 @@ await test("save failure returns an inline error and preserves active configurat
 	const renderBaseline = test.getRenderRequests();
 	await harness.runtime.commands.openPane("", test.ctx);
 
-	assert.deepEqual(harness.commitResults, [{ status: "failed", message: "pi-glance configuration save failed; keeping previous configuration" }], "save failure is returned to the still-open pane");
+	assert.equal(hasNotification(test.notifications, "pi-glance configuration save failed; keeping previous configuration", "error"), true, "save failure should notify the exact error copy");
 	assert.equal(hasNotification(test.notifications, "pi-glance configuration saved", "info"), false, "save failure should not notify success");
 	assert.deepEqual(test.surfaceCalls.slice(surfaceBaseline), [], "save failure should not reinstall or clear the input surface");
 	assert.deepEqual(git.schedules.slice(scheduleBaseline), [], "save failure should not schedule git refreshes");
@@ -811,8 +811,11 @@ await test("invalid config load should notify its diagnostic once at session sta
 	await harness.runtime.commands.openPane("", test.ctx);
 
 	assert.deepEqual(harness.savedConfigs, [], "read-only fallback config should block /glance from overwriting the existing file");
-	assert.equal(test.notifications.length, notificationBaseline, "the persistent pane explains save restrictions without another notification");
-	assert.deepEqual(harness.commitResults, [{ status: "failed", message: "pi-glance configuration save blocked to protect the existing file; fix or remove it, then /reload" }]);
+	assert.equal(
+		hasNotification(test.notifications.slice(notificationBaseline), "pi-glance configuration save blocked to protect the existing file; fix or remove it, then /reload", "error"),
+		true,
+		"blocked save should explain how to recover",
+	);
 	assert.equal(test.notifications.filter((notification) => notification.message === diagnostic).length, 1, "opening /glance should not repeat an already reported load diagnostic");
 	assert.deepEqual(test.surfaceCalls.slice(surfaceBaseline), [], "blocked save should preserve the active input surface");
 });
@@ -990,7 +993,7 @@ await test("disabled->enabled save should not create a git refresher before disk
 	assertAmbientPaneOptions(harness.showPaneOptions[1], "enabled active config pane open");
 });
 
-await test("disabled-start save failure returns an inline error without installing UI", async () => {
+await test("disabled-start save failure should notify the exact error copy", async () => {
 	const initialConfig = disabledConfig();
 	const nextConfig = nextEnabledConfig(initialConfig);
 	const git = createGitHarness();
@@ -1006,7 +1009,7 @@ await test("disabled-start save failure returns an inline error without installi
 	const surfaceBaseline = test.surfaceCalls.length;
 	await harness.runtime.commands.openPane("", test.ctx);
 
-	assert.equal(harness.commitResults[0]?.status, "failed", "the pane receives the failed commit");
+	assert.equal(hasNotification(test.notifications, "pi-glance configuration save failed; keeping previous configuration", "error"), true, "disabled-start save failure should notify the exact error copy");
 	assert.deepEqual(harness.savedConfigs, [], "disabled-start failed save should not record a persisted config");
 	assert.deepEqual(test.surfaceCalls.slice(surfaceBaseline), [], "disabled-start save failure should not install or clear the input surface");
 	assert.equal(git.created, 0, "disabled-start save failure should not create a git refresher");
@@ -1032,7 +1035,7 @@ for (const startingEnabled of [true, false] as const) {
 	const renderBaseline = test.getRenderRequests();
 	await harness.runtime.commands.openPane("", test.ctx);
 
-	assert.deepEqual(test.notifications, [], "closing settings quietly does not add a cancellation notification");
+	assert.equal(hasNotification(test.notifications, "pi-glance configuration cancelled", "info"), true, `${startingEnabled ? "enabled" : "disabled"} cancel should notify cancellation`);
 	assert.deepEqual(harness.savedConfigs, [], `${startingEnabled ? "enabled" : "disabled"} cancel should not save config`);
 	assert.deepEqual(test.surfaceCalls.slice(surfaceBaseline), [], `${startingEnabled ? "enabled" : "disabled"} cancel should not install or clear the surface`);
 	assert.deepEqual(git.schedules.slice(scheduleBaseline), [], `${startingEnabled ? "enabled" : "disabled"} cancel should not schedule git refreshes`);
