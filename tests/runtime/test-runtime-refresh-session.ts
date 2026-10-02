@@ -363,7 +363,7 @@ function createSessionHarness(initialConfig: GlanceConfig = cloneConfig()): Sess
 		assert.ok(state.throughput.lastRun, "agentSettled should set final model speed before render");
 		assert.equal(state.throughput.currentRun, null, "agentSettled should clear provisional model speed before render");
 	});
-	harness.session.agentSettled();
+	harness.session.agentSettled(ctx.ctx);
 	harness.setOnRender(undefined);
 	const settledSpeed = state.throughput.lastRun as { elapsedMs: number } | null;
 	assert.equal(settledSpeed?.elapsedMs, 500, "agentSettled should preserve active model stream duration");
@@ -399,7 +399,7 @@ function createSessionHarness(initialConfig: GlanceConfig = cloneConfig()): Sess
 		assert.ok(state.throughput.lastRun, "agentSettled should set last-run model speed before render");
 		assert.equal(state.throughput.currentRun, null, "agentSettled should clear current-run model speed before render");
 	});
-	harness.session.agentSettled();
+	harness.session.agentSettled(ctx.ctx);
 	harness.setOnRender(undefined);
 	assert.ok(state.throughput.lastRun, "agentSettled should leave final model speed visible");
 	assert.equal(state.throughput.currentRun, null, "agentSettled should leave provisional model speed cleared");
@@ -427,7 +427,7 @@ function createSessionHarness(initialConfig: GlanceConfig = cloneConfig()): Sess
 	harness.setNowMs(2000);
 	harness.session.sessionShutdown();
 	await harness.session.agentEnd({ messages: [eventMessage("assistant", { usage: { output: 10, totalTokens: 10 } })] }, ctx.ctx);
-	harness.session.agentSettled();
+	harness.session.agentSettled(ctx.ctx);
 	assert.equal(restartedState.throughput.lastRun, null, "sessionShutdown should reset the tracker so later end/settled events cannot create final model speed");
 }
 

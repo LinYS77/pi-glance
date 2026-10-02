@@ -13,7 +13,7 @@ Pi still handles text editing and terminal layout. Glance does not provide a sep
 - **Billed-session facts** — usage and cost accumulated across every persisted Pi session entry that carries provider usage.
 - **Context truth** — Pi's current public `ctx.getContextUsage()` result. `null` means unknown and is not inferred from another source.
 - **Model speed** — provider-reported non-reasoning output divided by measured active text/tool-call output-stream time for the settled logical run.
-- **Ambient tone** — `light`, `dark`, or `unknown`, derived only from the exact public Pi theme name.
+- **Ambient tone** — `light`, `dark`, or `unknown`, from public Pi `theme.appearance` when available, with an exact theme-name fallback for older hosts.
 - **Theme slot** — the configured Glance palette selected for a light or dark ambient tone.
 - **Refresh session** — `RuntimeRefreshSession` handles lifecycle events, usage deduplication, Model speed tracking, Git refresh scheduling, and render decisions.
 - **Config store** — reads a configuration file and replaces it atomically on save. Its path is supplied when the extension is created.
@@ -112,10 +112,10 @@ Each built-in segment returns display content, a color level, and any custom ico
 
 - `session_start` and structural `session_tree` may reconcile full persisted entries.
 - Ordinary lifecycle events use public lifecycle snapshots and event deltas; they do not rescan all entries.
-- Compaction usage comes from `SessionCompactEvent.compactionEntry`.
-- Pi 0.86 standalone `usage` entries (including cache warming and unknown kinds) belong to the same billed-session ledger. Initial/reliable snapshots count them alongside messages and summaries. Before a live editor or settings preview reads its state, an in-memory cursor checks the public `getLeafId()` and walks only unseen `getEntry(id).parentId` links, applying standalone usage once. Pi's own post-warming redraw drives idle updates; unchanged frames are O(1), with no timer, full-history rescan, fabricated event, or use of pre-request cost estimates. This does not touch Context or Model speed. Reliable snapshots reseed the cursor, and retired UI callbacks cannot read a replaced session.
+- Compaction usage comes from `SessionCompactEvent.compactionEntry` or persisted boundary summaries, deduplicated by public entry ID.
+- Pi 0.86 standalone `usage` entries (including cache warming and unknown kinds) belong to the same billed-session ledger. Initial/reliable snapshots count them alongside messages and summaries. Before a live editor or settings preview reads its state, an in-memory cursor checks the public `getLeafId()` and walks only unseen `getEntry(id).parentId` links, applying standalone usage and compaction/branch-summary usage once. Pi's own post-warming redraw drives idle updates; unchanged frames are O(1), with no timer, full-history rescan, fabricated event, or use of pre-request cost estimates. This does not touch Context or Model speed. Reliable snapshots seed both the cursor and event deduplication ledger, and retired UI callbacks cannot read a replaced session. `agent_settled` also reconciles persisted usage and refreshes public Context after final boundary entries, requesting one render only when visible facts change.
 - Assistant/tool-result usage comes from `message_end` deltas and is deduplicated by stable public IDs when available.
-- Context always comes from `ctx.getContextUsage()`.
+- Context always comes from `ctx.getContextUsage()`, with selected-model capacity only a fallback when the public result is absent. Selection/thinking metadata updates do not overwrite Context; a virtual selection can have different limits from its physical responding model.
 - Git scheduling is independent from render decisions.
 - Ordinary lifecycle events request a render only when visible Glance state changes.
 - Blocking `ui_prompt_start` / `ui_prompt_end` spans pause Model speed timing without requesting a render.
@@ -275,13 +275,16 @@ Config stores two Glance palettes:
 { theme: { light: GlanceThemeName, dark: GlanceThemeName } }
 ```
 
-Palette selection uses the exact Pi theme name:
+Palette selection prefers public appearance (Pi 0.99+) and falls back for older hosts:
 
 ```text
-Pi theme.name === "light" -> theme.light
-Pi theme.name === "dark"  -> theme.dark
-otherwise                 -> theme.light
+Pi theme.appearance === "light" -> theme.light
+Pi theme.appearance === "dark"  -> theme.dark
+otherwise, exact theme.name "light" / "dark" -> corresponding slot
+otherwise -> theme.light
 ```
+
+The current theme is read lazily so `system` appearance changes and custom themes select the correct slot without querying terminal colors or changing Pi's theme.
 
 Both slots can select any of the 22 palettes. `/glance` does not change Pi themes. Colors use Pi's reported terminal capability: RGB when truecolor is available, ANSI 256 otherwise.
 
@@ -312,7 +315,7 @@ At extremely narrow widths, the inherited editor is given enough room for a two-
 - Node floor: `>=22.19.0`.
 - Pi packages are `>=0.86.1` peer dependencies supplied by Pi and are not bundled.
 - Production source is shipped directly as TypeScript: root `index.ts` plus `src/**/*.ts`. Tests and fixtures are not shipped.
-- CI and GitHub Release share the Node 22.19/24 test workflow. Branch CI does not run on tags.
+- CI and GitHub Release share a four-job matrix: Node 22.19/24 × Pi 0.86.1/1.0.0. Each job verifies actual SDK versions, typechecks, and runs the behavior/package suite with an isolated agent directory. The newer SDK is installed without modifying the pinned minimum-version manifest or lockfile. Branch CI does not run on tags.
 - Tests import the project interfaces directly. Import-graph checks detect cycles and forbidden dependencies; separate fixtures verify palette data.
 - Display tests separate config upgrades, the shared save transaction, footer lifecycle, fitting and settings interactions. Live/preview parity compares the real entry points, not a copy of the renderer inside test helpers. Color-data checks cover all palette/color/depth combinations; UI tests use representative choices and scroll boundaries instead of repeating the same save matrix for every preference.
 - The package test compares `npm pack --dry-run` output with the full production file list.

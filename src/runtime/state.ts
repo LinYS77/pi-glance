@@ -171,13 +171,12 @@ export function refreshModel(state: GlanceState, inputs: Pick<StateInputs, "mode
 	const id = inputs.model?.id;
 	const provider = inputs.model?.provider;
 	const displayName = shortenModel(inputs.model?.id, config.model.customNames, inputs.model?.name);
-	const window = inputs.model?.contextWindow ?? state.context.window;
+	// Selection metadata does not own Context: virtual and physical limits can differ.
 	if (
 		state.model.id === id &&
 		state.model.provider === provider &&
 		state.model.displayName === displayName &&
-		state.model.thinking === inputs.thinkingLevel &&
-		state.context.window === window
+		state.model.thinking === inputs.thinkingLevel
 	) {
 		return false;
 	}
@@ -185,7 +184,6 @@ export function refreshModel(state: GlanceState, inputs: Pick<StateInputs, "mode
 	state.model.provider = provider;
 	state.model.displayName = displayName;
 	state.model.thinking = inputs.thinkingLevel;
-	state.context.window = window;
 	touch(state);
 	return true;
 }

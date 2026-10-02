@@ -177,6 +177,15 @@ export class RuntimeRefreshSession {
 	private readStateInputs(ctx: ExtensionContext): StateInputs {
 		const entries = ctx.sessionManager.getEntries();
 		this.seenEntryIds = new Set(entries.map(entry => entry.id));
+		// Reliable snapshots have already billed these entries. Late event delivery
+		// must use the same deduplication ledger as incremental persistence reads.
+		for (const entry of entries) {
+			if (entry.type === "message" && entry.message) {
+				this.claimUsageDelta(entry.message, this.messageUsageKey(entry.message));
+			} else if (entry.type === "usage" || entry.type === "compaction" || entry.type === "branch_summary") {
+				this.claimUsageDelta(entry, this.entryUsageKey(entry));
+			}
+		}
 		return {
 			...lifecycleInputsFromContext(ctx, this.host.getThinkingLevel()),
 			usage: usageTotalsFromEntries(entries),
@@ -206,21 +215,25 @@ export class RuntimeRefreshSession {
 
 	ensureState(ctx: ExtensionContext): GlanceState {
 		if (!this.state) return this.resetState(ctx);
-		this.syncStandaloneUsage(ctx);
+		this.syncPersistedUsage(ctx);
 		return this.state;
 	}
 
-	/** Pi redraws after background usage is persisted, without a message_end hook. */
-	private syncStandaloneUsage(ctx: ExtensionContext): void {
+	/** Background usage and boundary summaries can be persisted without a matching event. */
+	private syncPersistedUsage(ctx: ExtensionContext): boolean {
+		let changed = false;
 		let id = ctx.sessionManager.getLeafId();
 		// Unchanged frames are O(1); only newly appended ancestors are inspected.
 		while (id && !this.seenEntryIds.has(id)) {
 			const entry: StateSessionEntry | undefined = ctx.sessionManager.getEntry(id);
 			if (!entry) break;
 			this.seenEntryIds.add(id);
-			if (entry.type === "usage") this.applyUsageDelta(entry, usageTotalsFromEntry(entry), this.entryUsageKey(entry));
+			if (entry.type === "usage" || entry.type === "compaction" || entry.type === "branch_summary") {
+				changed = this.applyUsageDelta(entry, usageTotalsFromEntry(entry), this.entryUsageKey(entry)) || changed;
+			}
 			id = entry.parentId ?? null;
 		}
+		return changed;
 	}
 
 	private usageTotalsAreZero(delta: UsageTotals): boolean {
@@ -387,9 +400,13 @@ export class RuntimeRefreshSession {
 		await this.refresh(ctx, LIFECYCLE_NO_MODEL_ON_WORKSPACE_CHANGE);
 	}
 
-	agentSettled(): void {
+	agentSettled(ctx: ExtensionContext): void {
 		const intent = this.modelSpeedTracker.settle();
-		if (this.state && applyModelSpeedIntent(this.state, intent)) this.host.requestRender();
+		if (!this.state) return;
+		let changed = this.syncPersistedUsage(ctx);
+		changed = refreshContextUsage(this.state, { contextUsage: ctx.getContextUsage() ?? undefined, model: ctx.model }) || changed;
+		changed = applyModelSpeedIntent(this.state, intent) || changed;
+		if (changed) this.host.requestRender();
 	}
 
 	applyGitSnapshot(cwd: string, snapshot: GitSnapshot): boolean {

@@ -450,7 +450,7 @@ await test("thinking_level_select counter baseline should include the session_st
 	assert.equal(previewState.model.displayName, "Opus Custom", "thinking_level_select should honor configured model custom names");
 	assert.equal(previewState.model.thinking, "high", "thinking_level_select should refresh the visible thinking level");
 	assert.equal(previewState.context.tokens, 99, "thinking_level_select should not overwrite context tokens when the plan does not refresh context usage");
-	assert.equal(previewState.context.window, 500_000, "thinking_level_select should refresh context window from the current model");
+	assert.equal(previewState.context.window, 128_000, "thinking_level_select should preserve Context alongside its tokens and percentage");
 	assert.equal(previewState.context.percent, 0.077, "thinking_level_select should not overwrite context percent when the plan does not refresh context usage");
 	assert.equal(test.getEntryReads(), entryBaseline, "opening /glance after thinking_level_select should not hide a session entries scan");
 	assert.equal(test.getBranchReads(), branchBaseline, "opening /glance after thinking_level_select should not hide a session branch scan");
