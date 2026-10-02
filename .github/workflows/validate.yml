@@ -21,7 +21,6 @@ jobs:
           - "0.86.1"
           - "1.0.0"
     env:
-      PI_CODING_AGENT_DIR: ${{ runner.temp }}/pi-glance-agent
       PI_OFFLINE: "1"
     steps:
       - name: Checkout
@@ -32,6 +31,11 @@ jobs:
         with:
           node-version: ${{ matrix.node-version }}
           cache: npm
+
+      - name: Isolate Pi agent state
+        run: |
+          mkdir -p "$RUNNER_TEMP/pi-glance-agent"
+          echo "PI_CODING_AGENT_DIR=$RUNNER_TEMP/pi-glance-agent" >> "$GITHUB_ENV"
 
       - name: Install dependencies
         run: npm ci
