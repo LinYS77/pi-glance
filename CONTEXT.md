@@ -12,7 +12,7 @@ Pi still handles text editing and terminal layout. Glance does not provide a sep
 - **Glance state** — the in-memory, render-ready facts consumed by the input surface.
 - **Billed-session facts** — usage and cost accumulated across every persisted Pi session entry that carries provider usage.
 - **Context truth** — Pi's current public `ctx.getContextUsage()` result. `null` means unknown and is not inferred from another source.
-- **Model speed** — provider-reported non-reasoning output divided by measured active text/tool-call output-stream time for the settled logical run.
+- **Model speed** — effective output throughput: provider output minus reported reasoning, divided by summed full model request durations. This is not raw decode speed.
 - **Ambient tone** — `light`, `dark`, or `unknown`, from public Pi `theme.appearance` when available, with an exact theme-name fallback for older hosts.
 - **Theme slot** — the configured Glance palette selected for a light or dark ambient tone.
 - **Refresh session** — `RuntimeRefreshSession` handles lifecycle events, usage deduplication, Model speed tracking, Git refresh scheduling, and render decisions.
@@ -160,12 +160,16 @@ Context does not reuse that ledger. Pi's public context result is authoritative 
 Model speed is intentionally narrower than Tokens and Cost:
 
 ```text
-(provider output - reported reasoning, when available)
--------------------------------------------------------
-active text + tool-call output-stream time
+sum(provider output - reported reasoning, when available)
+---------------------------------------------------------
+sum(full model request durations, minus blocking UI pauses)
 ```
 
-It excludes pre-output waiting, reasoning spans, tool execution, and gaps between model calls. `message_end` is provisional; `agent_settled` is final.
+Timing uses a monotonic clock from `before_provider_request` through assistant `message_end`, including initial latency, thinking and streaming. Tool-call output is included in provider output. Reasoning-only requests still contribute their duration. Excluding reported reasoning tokens while including thinking time changes the metric semantics: this measures effective output per request second, not raw decode speed. If reasoning usage is not reported, it cannot be subtracted.
+
+Tool execution, inter-request gaps, retry backoff, compaction and user pauses outside requests are excluded. Blocking `ui_prompt_start` / `ui_prompt_end` spans within requests are subtracted. Chunk counts and delivery timing do not affect the rate; zero or one delta is sufficient when request boundaries and provider usage are valid.
+
+`message_end` publishes a provisional average of completed requests (`~`); `agent_settled` finalizes the logical run. Fresh runs clear the previous rate; invalid settled runs clear both slots. Missing request boundaries, non-positive/non-finite timing or invalid output/reasoning usage mean unknown, never a token estimate or a capped speed. Retries discard failed attempts, overflow compaction retracts replaced length responses, and completion deduplication remains by response ID or object identity. No timers, tickers or diagnostic event bus are used.
 
 ## Editor integration
 
@@ -245,7 +249,7 @@ The shared meaning is **details → primary facts → identity/essential state**
 | --- | --- | --- | --- |
 | Git | Branch, change summary, upstream counts | Branch and changed-file count | Branch and dirty/conflict marker |
 | Cost | Compact USD | Same | Same |
-| Model speed | `43 tok/s` | `43/s` | Same as compact |
+| Model speed | `43 avg tok/s` | `43/s` | Same as compact |
 | Context | Percentage and token capacity | Percentage | Same as compact |
 | Tokens | Input/output and cache rate | Cache rate | Same as compact |
 | Model | Provider/name and Thinking | Complete model name | Model name without a matching Provider prefix |

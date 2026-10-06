@@ -339,6 +339,7 @@ function createSessionHarness(initialConfig: GlanceConfig = cloneConfig()): Sess
 	harness.session.agentStart();
 	assert.equal(harness.getRenderCount(), 0, "agentStart with no visible throughput change should not render");
 	harness.setNowMs(1000);
+	harness.session.providerRequest();
 	harness.session.messageUpdate({ message: eventMessage("assistant", { usage: { output: 10, totalTokens: 10 } }), assistantMessageEvent: { type: "text_delta" } });
 	harness.setNowMs(1500);
 	harness.session.messageUpdate({ message: eventMessage("assistant", { usage: { output: 10, totalTokens: 10 } }), assistantMessageEvent: { type: "text_delta" } });
@@ -369,9 +370,9 @@ function createSessionHarness(initialConfig: GlanceConfig = cloneConfig()): Sess
 	assert.equal(settledSpeed?.elapsedMs, 500, "agentSettled should preserve active model stream duration");
 	const renderAfterSettled = harness.getRenderCount();
 	harness.session.agentStart();
-	assert.ok(state.throughput.lastRun, "a new logical run should preserve the previous trusted model speed");
+	assert.equal(state.throughput.lastRun, null, "a new logical run should clear the previous trusted model speed");
 	assert.equal(state.throughput.currentRun, null, "a new logical run should begin without a provisional measurement");
-	assert.equal(harness.getRenderCount(), renderAfterSettled, "new agentStart should not render when currentRun is already clear");
+	assert.equal(harness.getRenderCount(), renderAfterSettled + 1, "new agentStart should render once when clearing the previous final rate");
 }
 
 {
@@ -382,6 +383,7 @@ function createSessionHarness(initialConfig: GlanceConfig = cloneConfig()): Sess
 	const branchBaseline = ctx.getBranchReads();
 	harness.session.agentStart();
 	harness.setNowMs(1000);
+	harness.session.providerRequest();
 	harness.session.messageUpdate({ message: eventMessage("assistant", { usage: { output: 4, totalTokens: 4 } }), assistantMessageEvent: { type: "text_delta" } });
 	harness.setNowMs(1400);
 	harness.session.messageUpdate({ message: eventMessage("assistant", { usage: { output: 4, totalTokens: 4 } }), assistantMessageEvent: { type: "text_delta" } });

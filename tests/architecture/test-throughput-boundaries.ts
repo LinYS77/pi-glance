@@ -41,4 +41,10 @@ for (const file of files) {
 	assert.equal(/\.notify\s*\([^;\n]*(?:throughput|model speed|TPS|tok\/s|spd)/i.test(file.text), false, `${file.path}: Model speed copy must not be sent through notifications`);
 }
 
+const entry = byPath.get("index.ts");
+const runtime = byPath.get("src/runtime/runtime.ts");
+assert.ok(entry && runtime);
+assert.match(entry.text, /pi\.on\("before_provider_request", runtime\.events\.providerRequest\)/, "wire the pre-request boundary through the public Pi event");
+assert.match(runtime.text, /performance\.now\(\)/, "use a monotonic production clock");
+
 console.log("✓ Model speed safety guardrails passed");

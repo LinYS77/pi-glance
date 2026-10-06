@@ -5,6 +5,7 @@ import type {
 	AgentEndEvent,
 	AgentSettledEvent,
 	AgentStartEvent,
+	BeforeProviderRequestEvent,
 	ExtensionCommandContext,
 	ExtensionContext,
 	ExtensionEvent,
@@ -83,6 +84,7 @@ export interface GlanceRuntime {
 		toolExecutionEnd(event: ToolExecutionEndEvent, ctx: ExtensionContext): Promise<void>;
 		sessionTree(event: SessionTreeEvent, ctx: ExtensionContext): Promise<void>;
 		sessionCompact(event: SessionCompactEvent, ctx: ExtensionContext): Promise<void>;
+		providerRequest(event: BeforeProviderRequestEvent, ctx: ExtensionContext): void;
 		messageUpdate(event: MessageUpdateEvent, ctx: ExtensionContext): void;
 		uiPromptStart(event: UIPromptStartEvent, ctx: ExtensionContext): void;
 		uiPromptEnd(event: UIPromptEndEvent, ctx: ExtensionContext): void;
@@ -391,6 +393,9 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 			},
 			sessionCompact: async (event, ctx) => {
 				await refreshSession.sessionCompact(event, ctx);
+			},
+			providerRequest: (_event, _ctx) => {
+				refreshSession.providerRequest();
 			},
 			messageUpdate: (event, _ctx) => {
 				refreshSession.messageUpdate(event);

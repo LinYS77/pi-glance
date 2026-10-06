@@ -69,18 +69,18 @@ expectTurn(
 expectTurn(
 	calculateModelSpeed({
 		streams: [
-			stream(assistant({ output: 50, reasoning: 50, totalTokens: 50 }), Number.NaN, Number.NaN, Number.NaN),
+			stream(assistant({ output: 50, reasoning: 50, totalTokens: 50 }), 0, 1_000),
 			stream(assistant({ output: 30, totalTokens: 30 }), 2_000, 3_000),
 		],
 	}),
 	{
-		startedAtMs: 2_000,
+		startedAtMs: 0,
 		endedAtMs: 3_000,
-		elapsedMs: 1_000,
-		tokensPerSecond: 30,
-		usage: { input: 0, output: 30, cacheRead: 0, cacheWrite: 0, totalTokens: 30, assistantMessages: 1 },
+		elapsedMs: 2_000,
+		tokensPerSecond: 15,
+		usage: { input: 0, output: 30, cacheRead: 0, cacheWrite: 0, totalTokens: 80, assistantMessages: 2 },
 	},
-	"reasoning-only calls should not require non-reasoning output timing",
+	"reasoning-only calls contribute full request time even though their effective output is zero",
 );
 
 expectTurn(
@@ -107,7 +107,15 @@ for (const [streams, message] of [
 	[[stream(assistant({ output: 20 }), 1_000, 1_000, 0)], "one-timestamp output should be unknown"],
 	[[stream(assistant({ output: 20 }), 2_000, 1_000, -1_000)], "negative timing should be unknown"],
 	[[stream(assistant({ output: 20 }), 0, 1_000, 1_001)], "active duration larger than its observed span should be rejected"],
+	[[stream(assistant({ output: 20 }), -Number.MAX_VALUE, Number.MAX_VALUE, 1_000)], "overflowed boundary spans should be rejected"],
 	[[stream(assistant({ output: 20 }), Number.NaN, 1_000, 500)], "non-finite timestamps should be rejected"],
+	[[stream(assistant({ output: Number.NaN }), 0, 1_000), stream(assistant({ output: 20 }), 2_000, 3_000)], "invalid output must invalidate the entire average"],
+	[[stream(assistant({ output: -1 }), 0, 1_000)], "negative provider output should be unknown"],
+	[[stream(assistant({ output: "20" }), 0, 1_000)], "non-numeric provider output should be unknown"],
+	[[stream(assistant({ output: 20, reasoning: Number.NaN }), 0, 1_000)], "invalid reported reasoning should be unknown"],
+	[[stream(assistant({ output: 20, reasoning: 21 }), 0, 1_000)], "reasoning cannot exceed provider output"],
+	[[stream(assistant({ output: 20, reasoning: -1 }), 0, 1_000)], "reasoning cannot be negative"],
+	[[stream(assistant({ output: 20, reasoning: 20 }), Number.NaN, Number.NaN, Number.NaN), stream(assistant({ output: 20 }), 0, 1_000)], "reasoning-only calls still require valid request boundaries"],
 	[[stream(assistant({ output: 20 }, "error"), 0, 1_000)], "errored assistant calls should not become trusted speed"],
 	[[stream(assistant({ output: 20 }, "aborted"), 0, 1_000)], "aborted assistant calls should not become trusted speed"],
 ] as const) {
@@ -118,11 +126,10 @@ expectTurn(
 	calculateModelSpeed({
 		streams: [
 			stream(
-				assistant({ input: -10, output: Number.NaN, reasoning: Number.POSITIVE_INFINITY, cacheRead: -1, cacheWrite: Number.NEGATIVE_INFINITY }),
-				0,
-				1_000,
+				assistant({ input: -10, output: 20.4, reasoning: 0.4, cacheRead: -1, cacheWrite: Number.NEGATIVE_INFINITY }),
+				2_000,
+				3_000,
 			),
-			stream(assistant({ input: 2.9, output: 20.4, reasoning: 0.4, cacheRead: 3.5, cacheWrite: 4.1 }), 2_000, 3_000),
 		],
 	}),
 	{
@@ -130,9 +137,9 @@ expectTurn(
 		endedAtMs: 3_000,
 		elapsedMs: 1_000,
 		tokensPerSecond: 20,
-		usage: { input: 2.9, output: 20, cacheRead: 3.5, cacheWrite: 4.1, totalTokens: 30.9, assistantMessages: 1 },
+		usage: { input: 0, output: 20, cacheRead: 0, cacheWrite: 0, totalTokens: 20.4, assistantMessages: 1 },
 	},
-	"invalid usage fields should normalize without estimating from message or delta content",
+	"unrelated billing fields normalize without estimating output from content",
 );
 
 const originalDateNow = Date.now;

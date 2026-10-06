@@ -1,11 +1,11 @@
 import type { ModelSpeedMeasurement, ModelSpeedUsage } from "../types.js";
 
 export interface ModelStreamSample {
-	/** First observed non-reasoning output delta timestamp. */
+	/** Timestamp immediately before sending the provider request. */
 	startedAtMs: number;
-	/** Last observed non-reasoning output delta timestamp. */
+	/** Timestamp of the completed assistant message. */
 	endedAtMs: number;
-	/** Sum of measured non-reasoning output-stream intervals. */
+	/** Full request duration, excluding blocking UI prompts. */
 	elapsedMs: number;
 	/** Final authoritative assistant message for provider usage. */
 	message: unknown;
@@ -71,11 +71,10 @@ function emptyUsage(): ModelSpeedUsage {
 }
 
 /**
- * Calculate observed model generation speed from completed assistant output
- * streams. The numerator is provider-reported output minus its reported
- * reasoning subset. The denominator is measured non-reasoning output-stream
- * time across text and tool-call deltas. No message or delta content is
- * tokenized.
+ * Calculate effective output throughput across completed model requests.
+ * Provider output minus reported reasoning is divided by full request time,
+ * including initial latency and thinking. Tool waits and blocking UI prompts
+ * are excluded. Chunk timing and content are not used to estimate tokens.
  */
 export function calculateModelSpeed(input: CalculateModelSpeedInput): ModelSpeedMeasurement | undefined {
 	const usage = emptyUsage();
@@ -86,16 +85,25 @@ export function calculateModelSpeed(input: CalculateModelSpeedInput): ModelSpeed
 	for (const stream of input.streams) {
 		if (!isAssistantMessage(stream.message)) continue;
 		if (invalidStopReason(stream.message.stopReason)) return undefined;
+		const reportedUsage = stream.message.usage;
+		if (!isRecord(reportedUsage)
+			|| typeof reportedUsage.output !== "number"
+			|| !Number.isFinite(reportedUsage.output) || reportedUsage.output < 0) return undefined;
+		if (reportedUsage.reasoning !== undefined && (
+			typeof reportedUsage.reasoning !== "number"
+			|| !Number.isFinite(reportedUsage.reasoning)
+			|| reportedUsage.reasoning < 0 || reportedUsage.reasoning > reportedUsage.output
+		)) return undefined;
 
-		const parts = normalizeUsage(stream.message.usage);
-		const measuredOutput = Math.max(0, parts.output - parts.reasoning);
-		if (measuredOutput <= 0) continue;
+		const parts = normalizeUsage(reportedUsage);
+		const measuredOutput = parts.output - parts.reasoning;
 
 		const spanMs = stream.endedAtMs - stream.startedAtMs;
 		if (
 			!Number.isFinite(stream.startedAtMs)
 			|| !Number.isFinite(stream.endedAtMs)
 			|| !Number.isFinite(stream.elapsedMs)
+			|| !Number.isFinite(spanMs)
 			|| spanMs <= 0
 			|| stream.elapsedMs <= 0
 			|| stream.elapsedMs > spanMs
@@ -115,12 +123,14 @@ export function calculateModelSpeed(input: CalculateModelSpeedInput): ModelSpeed
 	}
 
 	if (usage.output <= 0 || elapsedMs <= 0) return undefined;
+	const tokensPerSecond = usage.output / (elapsedMs / 1000);
+	if (!Number.isFinite(elapsedMs) || !Number.isFinite(tokensPerSecond)) return undefined;
 
 	return {
 		startedAtMs,
 		endedAtMs,
 		elapsedMs,
-		tokensPerSecond: usage.output / (elapsedMs / 1000),
+		tokensPerSecond,
 		usage,
 	};
 }

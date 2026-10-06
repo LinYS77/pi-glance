@@ -129,11 +129,11 @@ export interface ModelSpeedUsage {
 }
 
 export interface ModelSpeedMeasurement {
-	/** First measured non-reasoning text or tool-call output delta timestamp. */
+	/** Start of the first measured provider request. */
 	startedAtMs: number;
-	/** Last measured non-reasoning text or tool-call output delta timestamp. */
+	/** Completion of the last measured assistant response. */
 	endedAtMs: number;
-	/** Sum of active non-reasoning output-stream intervals across the settled run. */
+	/** Sum of full request durations, including latency/thinking, excluding tool/UI waits. */
 	elapsedMs: number;
 	tokensPerSecond: number;
 	usage: ModelSpeedUsage;
