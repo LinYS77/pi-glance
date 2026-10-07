@@ -32,16 +32,18 @@ Restart Pi or run `/reload`.
 ## Features
 
 - **Rounded editor** — Pi's editing, history, autocomplete and keybindings stay unchanged.
-- **Adaptive status line** — Git · Cost · Model speed · Context · Tokens · Extensions · Model. Model is the last item hidden.
+- **Adaptive status line** — Git · Cost · Output throughput · Context · Tokens · Extensions · Model. Model is the last item hidden.
 - **Prompt stash** — `alt+s` puts input aside; press again to restore or swap.
 - **Activity** — bottom-border text, or sweeps for work/summaries and blinking for retries. Adjust speed, color, summary multiplier and blink rate.
 - **22 palettes** — light and dark choices with live preview.
 
 No runtime dependencies. No telemetry.
 
-### Model speed
+### Output throughput
 
-`avg tok/s` is **effective output throughput**, not raw decode speed: provider output (including tool calls) minus reported reasoning tokens, divided by summed full model request durations. Timing includes initial latency and thinking, but excludes tool execution, gaps between requests and blocking UI prompts. Subtracting reasoning tokens while including thinking time changes the metric's meaning: it measures useful output per request second, not generation speed.
+`tok/s` is **average output throughput**, not raw decode speed: total provider-reported output tokens (including reasoning and tool calls), divided by the summed observed request durations. Reasoning is already included in output and is neither subtracted nor added again. Timing includes initial latency and thinking, but excludes tool execution, gaps between requests and blocking UI prompts.
+
+Pi session-level retries exclude failed attempts and their backoff. SDK-internal or upstream retries may remain inside the observed request duration; their waiting time cannot be reliably separated.
 
 `~` marks the average of completed requests in the current run; it becomes final when the run settles. A fresh run clears the old rate. Missing or ambiguous boundaries, or invalid timing/output usage, show unknown; no tokens are guessed from chunks, and no speed cap is applied.
 

@@ -76,7 +76,7 @@ assertSegments(
 		{ id: "extensions", enabled: true },
 		{ id: "model", enabled: false },
 	],
-	"v3 default-order saved configs should migrate to the curated Model speed order while preserving existing enabled flags",
+	"v3 default-order saved configs should migrate to the curated Output throughput order while preserving existing enabled flags",
 );
 
 assertSegments(

@@ -1,4 +1,4 @@
-import { calculateModelSpeed, type ModelStreamSample } from "./throughput.js";
+import { calculateModelSpeed, type ModelRequestSample } from "./throughput.js";
 import type { ModelSpeedMeasurement } from "../types.js";
 
 export type ModelSpeedClock = () => number;
@@ -55,7 +55,7 @@ export class ModelSpeedRunTracker {
 	private running = false;
 	private awaitingResponse = false;
 	private activeRequest: ActiveModelRequest | null = null;
-	private completedRequests: ModelStreamSample[] = [];
+	private completedRequests: ModelRequestSample[] = [];
 	private pendingFailure = false;
 	private uiPromptActive = false;
 	private completedMessageObjects = new WeakSet<object>();
@@ -137,7 +137,7 @@ export class ModelSpeedRunTracker {
 		return true;
 	}
 
-	private finalizeActiveRequest(message: AssistantLikeMessage, nowMs: ModelSpeedClock): ModelStreamSample {
+	private finalizeActiveRequest(message: AssistantLikeMessage, nowMs: ModelSpeedClock): ModelRequestSample {
 		const request = this.activeRequest;
 		this.activeRequest = null;
 		if (!request) {
@@ -154,7 +154,7 @@ export class ModelSpeedRunTracker {
 	}
 
 	private currentIntent(): ModelSpeedStateIntent {
-		const currentRun = calculateModelSpeed({ streams: this.completedRequests });
+		const currentRun = calculateModelSpeed(this.completedRequests);
 		return currentRun ? { kind: "set-current-run", currentRun } : { kind: "clear-current-run" };
 	}
 
@@ -189,7 +189,7 @@ export class ModelSpeedRunTracker {
 		if (!this.running) return { kind: "clear-current-run" };
 		try {
 			const lastRun = this.pendingFailure || this.activeRequest
-				? undefined : calculateModelSpeed({ streams: this.completedRequests });
+				? undefined : calculateModelSpeed(this.completedRequests);
 			return { kind: "set-last-run-and-clear-current-run", lastRun: lastRun ?? null };
 		} finally {
 			this.resetRunState();
@@ -206,9 +206,8 @@ export class ModelSpeedRunTracker {
 		this.completedMessageKeys = new Set<string>();
 	}
 
-	reset(): ModelSpeedStateIntent {
+	reset(): void {
 		this.resetRunState();
 		this.uiPromptActive = false;
-		return NONE_INTENT;
 	}
 }

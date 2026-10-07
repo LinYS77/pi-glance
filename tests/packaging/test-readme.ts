@@ -55,8 +55,8 @@ assert.match(chineseReadme, /普通字体.*Appearance.*Icons.*`Plain`/, "the Chi
 assert.equal(GLANCE_THEMES.length, 22, "the curated theme collection should remain complete");
 assertIncludes(readme, "22 palettes", "the English README should state the palette count");
 assertIncludes(chineseReadme, "22 套配色", "the Chinese README should state the palette count");
-assertIncludes(readme, "Git · Cost · Model speed · Context · Tokens · Extensions · Model", "the English README should name the adaptive facts");
-assertIncludes(chineseReadme, "Git · 费用 · 模型速度 · 上下文 · Tokens · 扩展状态 · 模型", "the Chinese README should name the adaptive facts");
+assertIncludes(readme, "Git · Cost · Output throughput · Context · Tokens · Extensions · Model", "the English README should name the adaptive facts");
+assertIncludes(chineseReadme, "Git · 费用 · 输出吞吐率 · 上下文 · Tokens · 扩展状态 · 模型", "the Chinese README should name the adaptive facts");
 assert.match(readme, /no telemetry/i, "the English README should state the privacy boundary");
 assertIncludes(chineseReadme, "不收集遥测数据", "the Chinese README should state the privacy boundary");
 assertIncludes(readme, "Pi 1.0.0+", "the English README should state the Pi floor");

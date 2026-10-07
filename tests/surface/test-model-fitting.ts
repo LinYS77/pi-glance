@@ -20,8 +20,7 @@ function reportedState() {
 		context: { tokens: 163_200, window: 680_000, percent: 24 },
 		usage: { input: 1_000_000, output: 1_700_000, cacheRead: 24_000_000, cacheWrite: 0, cost: 414.1 },
 		throughput: { currentRun: null, lastRun: {
-			startedAtMs: 0, endedAtMs: 1000, elapsedMs: 1000, tokensPerSecond: 43,
-			usage: { input: 0, output: 43, cacheRead: 0, cacheWrite: 0, totalTokens: 43, assistantMessages: 1 },
+			elapsedMs: 1000, outputTokens: 43, tokensPerSecond: 43,
 		} },
 	});
 }

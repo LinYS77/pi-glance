@@ -12,7 +12,7 @@ test("status settings expose the curated order, labels and enabled defaults", ()
 	const config = defaultConfig();
 	assert.deepEqual(config.segments, ids.map(id => ({ id, enabled: true })));
 	assert.deepEqual(getSettingsRows(config, "status").map(row => [row.label, row.value]), [
-		["Git", "On"], ["Cost", "On"], ["Model speed", "On"], ["Context", "On"],
+		["Git", "On"], ["Cost", "On"], ["Output throughput", "On"], ["Context", "On"],
 		["Tokens", "On"], ["Extensions", "On"], ["Model", "On"],
 	]);
 	const changed = defaultSegmentConfigs(); changed[0]!.enabled = false;

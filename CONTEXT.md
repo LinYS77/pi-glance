@@ -12,10 +12,10 @@ Pi still handles text editing and terminal layout. Glance does not provide a sep
 - **Glance state** — the in-memory, render-ready facts consumed by the input surface.
 - **Billed-session facts** — usage and cost accumulated across every persisted Pi session entry that carries provider usage.
 - **Context truth** — Pi's current public `ctx.getContextUsage()` result. `null` means unknown and is not inferred from another source.
-- **Model speed** — effective output throughput: provider output minus reported reasoning, divided by summed full model request durations. This is not raw decode speed.
-- **Ambient tone** — `light`, `dark`, or `unknown`, from public Pi `theme.appearance` when available, with an exact theme-name fallback for older hosts.
+- **Output throughput** — complete provider output, including reasoning, divided by summed observed model request durations. This is not raw decode speed.
+- **Ambient tone** — `light` or `dark`, read directly from public Pi `theme.appearance`.
 - **Theme slot** — the configured Glance palette selected for a light or dark ambient tone.
-- **Refresh session** — `RuntimeRefreshSession` handles lifecycle events, usage deduplication, Model speed tracking, Git refresh scheduling, and render decisions.
+- **Refresh session** — `RuntimeRefreshSession` handles lifecycle events, usage deduplication, Output throughput tracking, Git refresh scheduling, and render decisions.
 - **Config store** — reads a configuration file and replaces it atomically on save. Its path is supplied when the extension is created.
 - **Segment tone** — `normal`, `warning`, or `error`, supplied alongside display content by a segment feature. It is distinct from the light/dark ambient tone.
 
@@ -27,7 +27,7 @@ pi-glance handles:
 - always-on adaptive segment fitting;
 - the `/glance` settings pane, bounded theme browser, and transient density preview;
 - Pi selection keybindings, four settings sections and direct row editing;
-- six built-in facts (Git, Cost, Model speed, Context, Tokens, Model) and one external Extensions group;
+- six built-in facts (Git, Cost, Output throughput, Context, Tokens, Model) and one external Extensions group;
 - its 22 palettes;
 - asynchronous cached Git summaries and noninteractive upstream fetch;
 - a single session-local prompt stash with configurable shortcut;
@@ -54,8 +54,8 @@ The following are outside Glance's scope:
 - Pi theme enumeration, installation, switching, or reimplementation of theme token-color rendering;
 - terminal background queries, ANSI inspection, or fuzzy light/dark inference;
 - render-time filesystem, process, or network work;
-- Model speed token estimation from text/content length;
-- Model speed timers, tickers, or notifications;
+- Output throughput token estimation from text/content length;
+- Output throughput timers, tickers, or notifications;
 - production `sessionManager.getBranch()` reads.
 
 ## Runtime architecture
@@ -102,7 +102,7 @@ scripts/                              developer utilities, not test implementati
 
 `src/runtime/runtime.ts` connects Pi events to the refresh session and manages editor/footer installation. State updates belong in `state.ts`, session accounting in `refresh-session.ts`, and frame rendering in `src/surface/`.
 
-Configuration rules, setting descriptors, settings state and catalog, Git status parsing, and Model speed tracking have no file/process IO or Pi runtime imports, including through local dependencies. File access stays in `src/config/store.ts` and `src/input/store.ts`; Git process IO stays in `src/runtime/git-command.ts`.
+Configuration rules, setting descriptors, settings state and catalog, Git status parsing, and Output throughput tracking have no file/process IO or Pi runtime imports, including through local dependencies. File access stays in `src/config/store.ts` and `src/input/store.ts`; Git process IO stays in `src/runtime/git-command.ts`.
 
 `RuntimeRefreshSession` exposes lifecycle methods such as `modelSelect`, `sessionTree`, `messageEnd`, and `agentSettled`. It handles snapshot selection and update ordering internally.
 
@@ -113,12 +113,12 @@ Each built-in segment returns display content, a color level, and any custom ico
 - `session_start` and structural `session_tree` may reconcile full persisted entries.
 - Ordinary lifecycle events use public lifecycle snapshots and event deltas; they do not rescan all entries.
 - Compaction usage comes from `SessionCompactEvent.compactionEntry` or persisted boundary summaries, deduplicated by public entry ID.
-- Standalone `usage` entries (including cache warming and unknown kinds) belong to the same billed-session ledger. Initial/reliable snapshots count them alongside messages and summaries. Before a live editor or settings preview reads its state, an in-memory cursor checks the public `getLeafId()` and walks only unseen `getEntry(id).parentId` links, applying standalone usage and compaction/branch-summary usage once. Pi's own post-warming redraw drives idle updates; unchanged frames are O(1), with no timer, full-history rescan, fabricated event, or use of pre-request cost estimates. This does not touch Context or Model speed. Reliable snapshots seed both the cursor and event deduplication ledger, and retired UI callbacks cannot read a replaced session. `agent_settled` also reconciles persisted usage and refreshes public Context after final boundary entries, requesting one render only when visible facts change.
+- Standalone `usage` entries (including cache warming and unknown kinds) belong to the same billed-session ledger. Initial/reliable snapshots count them alongside messages and summaries. Before a live editor or settings preview reads its state, an in-memory cursor checks the public `getLeafId()` and walks only unseen `getEntry(id).parentId` links, applying standalone usage and compaction/branch-summary usage once. Pi's own post-warming redraw drives idle updates; unchanged frames are O(1), with no timer, full-history rescan, fabricated event, or use of pre-request cost estimates. This does not touch Context or Output throughput. Reliable snapshots seed both the cursor and event deduplication ledger, and retired UI callbacks cannot read a replaced session. `agent_settled` also reconciles persisted usage and refreshes public Context after final boundary entries, requesting one render only when visible facts change.
 - Assistant/tool-result usage comes from `message_end` deltas and is deduplicated by stable public IDs when available.
 - Context always comes from `ctx.getContextUsage()`, with selected-model capacity only a fallback when the public result is absent. Selection/thinking metadata updates do not overwrite Context; a virtual selection can have different limits from its physical responding model.
 - Git scheduling is independent from render decisions.
 - Ordinary lifecycle events request a render only when visible Glance state changes.
-- Blocking `ui_prompt_start` / `ui_prompt_end` spans pause Model speed timing without requesting a render.
+- Blocking `ui_prompt_start` / `ui_prompt_end` spans pause Output throughput timing without requesting a render.
 - Config save always requests a render because display configuration can change without changing session facts.
 - Git snapshots request a render only when visible Git facts change; timestamp-only updates remain silent.
 
@@ -157,21 +157,25 @@ cacheRead / (input + cacheRead + cacheWrite)
 
 Context does not reuse that ledger. Pi's public context result is authoritative even when it reports unknown values after compaction.
 
-Model speed is intentionally narrower than Tokens and Cost:
+Output throughput is intentionally narrower than Tokens and Cost:
 
 ```text
-sum(provider output - reported reasoning, when available)
----------------------------------------------------------
-sum(full model request durations, minus blocking UI pauses)
+sum(Pi usage.output, already including reasoning and tool calls)
+--------------------------------------------------------------
+sum(observed model request durations, minus blocking UI pauses)
 ```
 
-Timing uses a monotonic clock from `before_provider_request` through assistant `message_end`, including initial latency, thinking and streaming. Tool-call output is included in provider output. Reasoning-only requests still contribute their duration. Excluding reported reasoning tokens while including thinking time changes the metric semantics: this measures effective output per request second, not raw decode speed. If reasoning usage is not reported, it cannot be subtracted.
+**v0.7.6 metric change:** 0.7.4/0.7.5 subtract reported reasoning from the numerator. Starting with 0.7.6, the metric counts complete output while retaining full-request timing. It does not return to 0.7.3's delta-interval timing. The setting is renamed from Model speed to Output throughput; its stable `throughput` ID, precision preference and schema 15 remain unchanged. Tokens and Cost accounting is unaffected.
 
-Tool execution, inter-request gaps, retry backoff, compaction and user pauses outside requests are excluded. Blocking `ui_prompt_start` / `ui_prompt_end` spans within requests are subtracted. Chunk counts and delivery timing do not affect the rate; zero or one delta is sufficient when request boundaries and provider usage are valid.
+Timing uses a monotonic clock from `before_provider_request` through assistant `message_end`, including initial latency, thinking and streaming. Pi's `usage.output` already includes reasoning and tool-call tokens: do not subtract reasoning or add it again, and do not substitute input-inclusive `totalTokens`. Reasoning-only requests contribute both output and duration. Missing or malformed reasoning metadata does not affect a valid output measurement. This is a client-observed request average, not raw decode speed or a live token prediction.
 
-`turn_start` arms timing for the next assistant response; its `message_end` closes that scope. Cache warming can reuse `before_provider_request`, so hooks during tool/continuation gaps must be ignored. If multiple request callbacks overlap within a turn, the public event has no correlation ID to distinguish foreground requests, provider retries and cache replays: that sample is unknown rather than guessing a start time. Real Pi SDK tests exercise warming during tools, context preparation and response streaming with a local provider and injected clock.
+Tool execution, inter-request gaps, compaction and user pauses outside requests are excluded. Pi session-level retries discard failed assistant attempts and their between-request backoff. SDK-internal HTTP retries and upstream retries can occur inside a single observed request without separate public boundaries; their elapsed time remains included and is not guessed or subtracted. Blocking `ui_prompt_start` / `ui_prompt_end` spans within requests are subtracted. Chunk counts and delivery timing do not affect the rate; zero or one delta is sufficient when request boundaries and provider usage are valid.
 
-`message_end` publishes a provisional average of completed requests (`~`); `agent_settled` finalizes the logical run. Fresh runs clear the previous rate; invalid settled runs clear both slots. Missing request boundaries, non-positive/non-finite timing or invalid output/reasoning usage mean unknown, never a token estimate or a capped speed. Retries discard failed attempts, overflow compaction retracts replaced length responses, and completion deduplication remains by response ID or object identity. No timers, tickers or diagnostic event bus are used.
+`turn_start` arms timing for the next assistant response; its `message_end` closes that scope. Cache warming can reuse `before_provider_request`, so hooks during tool/continuation gaps must be ignored. If multiple request callbacks overlap within a turn, the public event has no correlation ID to distinguish foreground requests and cache replays: that sample is unknown rather than guessing a start time. Real Pi SDK tests exercise warming during tools, context preparation and response streaming. A local HTTP server additionally exercises the standard OpenAI Responses transport and usage parser, including buffered/reasoning-only output and SDK-internal retries. Test resources and clocks are isolated; no paid model calls are made.
+
+Throughput measurements store only `outputTokens`, `elapsedMs`, and `tokensPerSecond`. Request timestamps stay inside the timing samples for validation. Input/cache/cost totals belong to the billed-session ledger; the throughput calculator does not collect or normalize them.
+
+`message_end` publishes a provisional average of completed requests (`~`); `agent_settled` finalizes the logical run. The status line uses `tok/s` in full density and `/s` in compact/minimal density, without an `avg` prefix. Rates are weighted by summed tokens / summed durations, not by averaging per-request rates. Fresh runs clear the previous rate; invalid settled runs clear both slots. Missing request boundaries, non-positive/non-finite timing or invalid output usage mean unknown, never a token estimate or a capped speed. Overflow compaction retracts replaced length responses, and completion deduplication remains by response ID or object identity. No timers, tickers or diagnostic event bus are used.
 
 ## Editor integration
 
@@ -225,7 +229,7 @@ Text renders the current native `renderInBorder(width)` content in the bottom-le
 
 Sweep uses **Top edge** or **Full border** (`editor.workingSweep: top | perimeter`). Working moves at `workingSweepSpeed`, default 47 horizontal columns/s. Compaction and branch summary use that base multiplied by `summarySpeedMultiplier`, default 0.50×. Actual speed remains fractional and ranges from 2.5 to 240 cols/s, independently of the base setting's integer 10–120 constraint. Retry switches from motion to alternating normal/highlighted border lines at `retryBlinkHz`, default 0.50 Hz: one complete cycle every two seconds. `Effect area` governs both moving and blinking borders. Retry never flashes input, status facts, workspace text, draft labels or scroll text, and its frequency never changes Pi's retry policy. No native activity means no effects; cache warming does not invent an activity.
 
-`src/runtime/activity-animation.ts` owns one `ActivityClock` per surface. Native phase, current configuration, focus, blocking UI and editor ownership determine whether it runs. It tracks travelled columns or complete blink cycles, preserves phase across rate changes/pauses, and never replays blocked time. Sweeps schedule at 30 FPS; blinking schedules only the next half-cycle boundary. Frame reads reconcile state without scheduling extra redraws. Saves refresh the current editor in place; late callbacks cannot revive disposed instances. Agent lifecycle events still feed accounting/Model speed but no longer start or stop border effects.
+`src/runtime/activity-animation.ts` owns one `ActivityClock` per surface. Native phase, current configuration, focus, blocking UI and editor ownership determine whether it runs. It tracks travelled columns or complete blink cycles, preserves phase across rate changes/pauses, and never replays blocked time. Sweeps schedule at 30 FPS; blinking schedules only the next half-cycle boundary. Frame reads reconcile state without scheduling extra redraws. Saves refresh the current editor in place; late callbacks cannot revive disposed instances. Agent lifecycle events still feed accounting/Output throughput but no longer start or stop border effects.
 
 The settings preview shares the clock and frame renderer, using clearly labeled local examples rather than fake Pi events. It pauses when hidden and disposes on close, rejection or external completion. `npm run preview:working` exercises the same presentation without model calls or config writes.
 
@@ -239,7 +243,7 @@ The live editor, settings preview and Working demo share `GlanceLineRenderer` in
 
 `src/surface/text.ts` owns plain and styled clipping. Plain text is measured once per grapheme; styled text that already fits bypasses truncation, preserving its bytes. Overflow still uses Pi's ANSI-aware truncation. Palette and gradient styles precompute their escape prefixes, including ANSI256 conversion. The style cache is bounded to 22 palettes × 2 color modes × 9 sweep colors.
 
-Animation does not recolor or estimate status facts or initiate their IO. The state-read boundary checks already-persisted standalone usage independently of the animation clock. `src/surface/sweep.ts` shades only glyphs near the beam and emits unlit text in bulk. Unicode measurements have a bounded cache (32 strings, at most 1,024 UTF-16 units each); palette/gradient resources are reused by theme and color mode. `top-edge-sweep.ts` supplies the open-path profile; `perimeter-sweep.ts` maps frame coordinates to the closed path. Animation does not share the Model speed clock, invalidate its data, or replay missed frames after a blocked event loop.
+Animation does not recolor or estimate status facts or initiate their IO. The state-read boundary checks already-persisted standalone usage independently of the animation clock. `src/surface/sweep.ts` shades only glyphs near the beam and emits unlit text in bulk. Unicode measurements have a bounded cache (32 strings, at most 1,024 UTF-16 units each); palette/gradient resources are reused by theme and color mode. `top-edge-sweep.ts` supplies the open-path profile; `perimeter-sweep.ts` maps frame coordinates to the closed path. Animation does not share the Output throughput clock, invalidate its data, or replay missed frames after a blocked event loop.
 
 ## Status density
 
@@ -251,7 +255,7 @@ The shared meaning is **details → primary facts → identity/essential state**
 | --- | --- | --- | --- |
 | Git | Branch, change summary, upstream counts | Branch and changed-file count | Branch and dirty/conflict marker |
 | Cost | Compact USD | Same | Same |
-| Model speed | `43 avg tok/s` | `43/s` | Same as compact |
+| Output throughput | `43 tok/s` | `43/s` | Same as compact |
 | Context | Percentage and token capacity | Percentage | Same as compact |
 | Tokens | Input/output and cache rate | Cache rate | Same as compact |
 | Model | Provider/name and Thinking | Complete model name | Model name without a matching Provider prefix |

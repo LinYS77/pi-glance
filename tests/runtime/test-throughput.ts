@@ -1,165 +1,33 @@
 import { strict as assert } from "node:assert";
+import { calculateModelSpeed, type ModelRequestSample } from "../../src/runtime/throughput.js";
 
-import { calculateModelSpeed, type ModelStreamSample } from "../../src/runtime/throughput.js";
-import type { ModelSpeedMeasurement as ModelSpeedExpectation } from "../../src/types.js";
-
-function assistant(usage?: Record<string, unknown>, stopReason = "stop"): unknown {
-	return { role: "assistant", stopReason, usage };
+function request(output: unknown, startedAtMs: number, endedAtMs: number, elapsedMs = endedAtMs - startedAtMs): ModelRequestSample {
+	return { startedAtMs, endedAtMs, elapsedMs, message: { role: "assistant", usage: { output } } };
 }
 
-function user(): unknown {
-	return { role: "user", usage: { output: 999 } };
-}
-
-function stream(message: unknown, startedAtMs: number, endedAtMs: number, elapsedMs = endedAtMs - startedAtMs): ModelStreamSample {
-	return { startedAtMs, endedAtMs, elapsedMs, message };
-}
-
-function expectTurn(actual: unknown, expected: ModelSpeedExpectation, message: string): void {
-	assert.deepEqual(actual, expected, message);
-}
-
-function expectUndefined(streams: readonly ModelStreamSample[], message: string): void {
-	assert.equal(calculateModelSpeed({ streams }), undefined, message);
-}
-
-expectTurn(
-	calculateModelSpeed({ streams: [stream(assistant({ output: 50, totalTokens: 50 }), 1_000, 3_500)] }),
-	{
-		startedAtMs: 1_000,
-		endedAtMs: 3_500,
-		elapsedMs: 2_500,
-		tokensPerSecond: 20,
-		usage: { input: 0, output: 50, cacheRead: 0, cacheWrite: 0, totalTokens: 50, assistantMessages: 1 },
-	},
-	"one measured assistant output stream should calculate provider output tokens per active second",
-);
-
-expectTurn(
-	calculateModelSpeed({
-		streams: [
-			stream(assistant({ input: 10, output: 20, cacheRead: 3, cacheWrite: 4, totalTokens: 37 }), 0, 1_000),
-			stream(assistant({ input: 5, output: 30, cacheRead: 7, cacheWrite: 8, totalTokens: 50 }), 4_000, 4_500),
-		],
-	}),
-	{
-		startedAtMs: 0,
-		endedAtMs: 4_500,
-		elapsedMs: 1_500,
-		tokensPerSecond: 100 / 3,
-		usage: { input: 15, output: 50, cacheRead: 10, cacheWrite: 12, totalTokens: 87, assistantMessages: 2 },
-	},
-	"settled-run speed should sum per-call active durations while excluding tool and inter-call gaps",
-);
-
-expectTurn(
-	calculateModelSpeed({
-		streams: [stream(assistant({ input: 1, output: 100, reasoning: 60, totalTokens: 101 }), 0, 1_000)],
-	}),
-	{
-		startedAtMs: 0,
-		endedAtMs: 1_000,
-		elapsedMs: 1_000,
-		tokensPerSecond: 40,
-		usage: { input: 1, output: 40, cacheRead: 0, cacheWrite: 0, totalTokens: 101, assistantMessages: 1 },
-	},
-	"provider-reported reasoning should be removed from the model-speed numerator",
-);
-
-expectTurn(
-	calculateModelSpeed({
-		streams: [
-			stream(assistant({ output: 50, reasoning: 50, totalTokens: 50 }), 0, 1_000),
-			stream(assistant({ output: 30, totalTokens: 30 }), 2_000, 3_000),
-		],
-	}),
-	{
-		startedAtMs: 0,
-		endedAtMs: 3_000,
-		elapsedMs: 2_000,
-		tokensPerSecond: 15,
-		usage: { input: 0, output: 30, cacheRead: 0, cacheWrite: 0, totalTokens: 80, assistantMessages: 2 },
-	},
-	"reasoning-only calls contribute full request time even though their effective output is zero",
-);
-
-expectTurn(
-	calculateModelSpeed({
-		streams: [
-			stream(user(), 0, 10_000),
-			stream(assistant({ output: 20, totalTokens: 20 }), 100, 1_100),
-		],
-	}),
-	{
-		startedAtMs: 100,
-		endedAtMs: 1_100,
-		elapsedMs: 1_000,
-		tokensPerSecond: 20,
-		usage: { input: 0, output: 20, cacheRead: 0, cacheWrite: 0, totalTokens: 20, assistantMessages: 1 },
-	},
-	"non-assistant records should never enter model-speed usage",
-);
-
-for (const [streams, message] of [
-	[[], "no model streams should be unknown"],
-	[[stream(assistant(), 0, 1_000)], "missing provider usage should be unknown"],
-	[[stream(assistant({ output: 0 }), 0, 1_000)], "zero non-reasoning output should be unknown"],
-	[[stream(assistant({ output: 20 }), 1_000, 1_000, 0)], "one-timestamp output should be unknown"],
-	[[stream(assistant({ output: 20 }), 2_000, 1_000, -1_000)], "negative timing should be unknown"],
-	[[stream(assistant({ output: 20 }), 0, 1_000, 1_001)], "active duration larger than its observed span should be rejected"],
-	[[stream(assistant({ output: 20 }), -Number.MAX_VALUE, Number.MAX_VALUE, 1_000)], "overflowed boundary spans should be rejected"],
-	[[stream(assistant({ output: 20 }), Number.NaN, 1_000, 500)], "non-finite timestamps should be rejected"],
-	[[stream(assistant({ output: Number.NaN }), 0, 1_000), stream(assistant({ output: 20 }), 2_000, 3_000)], "invalid output must invalidate the entire average"],
-	[[stream(assistant({ output: -1 }), 0, 1_000)], "negative provider output should be unknown"],
-	[[stream(assistant({ output: "20" }), 0, 1_000)], "non-numeric provider output should be unknown"],
-	[[stream(assistant({ output: 20, reasoning: Number.NaN }), 0, 1_000)], "invalid reported reasoning should be unknown"],
-	[[stream(assistant({ output: 20, reasoning: 21 }), 0, 1_000)], "reasoning cannot exceed provider output"],
-	[[stream(assistant({ output: 20, reasoning: -1 }), 0, 1_000)], "reasoning cannot be negative"],
-	[[stream(assistant({ output: 20, reasoning: 20 }), Number.NaN, Number.NaN, Number.NaN), stream(assistant({ output: 20 }), 0, 1_000)], "reasoning-only calls still require valid request boundaries"],
-	[[stream(assistant({ output: 20 }, "error"), 0, 1_000)], "errored assistant calls should not become trusted speed"],
-	[[stream(assistant({ output: 20 }, "aborted"), 0, 1_000)], "aborted assistant calls should not become trusted speed"],
+// Lifecycle, retries, reasoning and weighting are covered through the tracker
+// and real SDK. Keep the calculator's untrusted numeric boundaries here.
+for (const [requests, label] of [
+	[[], "no completed requests"],
+	[[request(0, 0, 1_000)], "zero total output"],
+	[[request(20, 1_000, 1_000, 0)], "zero duration"],
+	[[request(20, 2_000, 1_000, -1_000)], "reversed duration"],
+	[[request(20, 0, 1_000, 1_001)], "active time exceeds the observed span"],
+	[[request(20, -Number.MAX_VALUE, Number.MAX_VALUE, 1_000)], "overflowed span"],
+	[[request(20, Number.NaN, 1_000, 500)], "invalid start"],
+	[[request(20, 0, Infinity, 500)], "invalid end"],
+	[[request(20, 0, 1_000, Number.NaN)], "invalid elapsed time"],
+	[[request(20, 0, 1_000, -1)], "negative elapsed time"],
+	[[request(Number.MAX_VALUE, 0, 1_000), request(Number.MAX_VALUE, 1_000, 2_000)], "overflowed output sum"],
+	[[request(20, 0, Number.MAX_VALUE), request(20, 0, Number.MAX_VALUE)], "overflowed elapsed sum"],
 ] as const) {
-	expectUndefined(streams, message);
+	assert.equal(calculateModelSpeed(requests), undefined, label);
 }
 
-expectTurn(
-	calculateModelSpeed({
-		streams: [
-			stream(
-				assistant({ input: -10, output: 20.4, reasoning: 0.4, cacheRead: -1, cacheWrite: Number.NEGATIVE_INFINITY }),
-				2_000,
-				3_000,
-			),
-		],
-	}),
-	{
-		startedAtMs: 2_000,
-		endedAtMs: 3_000,
-		elapsedMs: 1_000,
-		tokensPerSecond: 20,
-		usage: { input: 0, output: 20, cacheRead: 0, cacheWrite: 0, totalTokens: 20.4, assistantMessages: 1 },
-	},
-	"unrelated billing fields normalize without estimating output from content",
+assert.deepEqual(
+	calculateModelSpeed([request(20.4, 2_000, 3_000)]),
+	{ outputTokens: 20.4, elapsedMs: 1_000, tokensPerSecond: 20.4 },
+	"preserve provider output precision; rounding belongs to display",
 );
 
-const originalDateNow = Date.now;
-try {
-	Date.now = () => {
-		throw new Error("pure model-speed calculation must only use supplied timestamps");
-	};
-	expectTurn(
-		calculateModelSpeed({ streams: [stream(assistant({ output: 40, totalTokens: 40, content: "never tokenize me" }), 10, 2_010)] }),
-		{
-			startedAtMs: 10,
-			endedAtMs: 2_010,
-			elapsedMs: 2_000,
-			tokensPerSecond: 20,
-			usage: { input: 0, output: 40, cacheRead: 0, cacheWrite: 0, totalTokens: 40, assistantMessages: 1 },
-		},
-		"calculation should remain clock-independent and content-independent",
-	);
-} finally {
-	Date.now = originalDateNow;
-}
-
-console.log("✓ model-speed calculation checks passed");
+console.log("✓ throughput numeric boundary checks passed");

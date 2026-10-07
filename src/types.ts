@@ -118,25 +118,12 @@ export interface UsageTotals {
 	cost: number;
 }
 
-export interface ModelSpeedUsage {
-	input: number;
-	/** Provider output tokens with the reported reasoning subset removed when available. */
-	output: number;
-	cacheRead: number;
-	cacheWrite: number;
-	totalTokens: number;
-	assistantMessages: number;
-}
-
 export interface ModelSpeedMeasurement {
-	/** Start of the first measured provider request. */
-	startedAtMs: number;
-	/** Completion of the last measured assistant response. */
-	endedAtMs: number;
-	/** Sum of full request durations, including latency/thinking, excluding tool/UI waits. */
+	/** Pi usage.output, including reasoning and tool-call tokens, counted exactly once. */
+	outputTokens: number;
+	/** Sum of observed request durations, including latency/thinking/hidden retries, excluding tool/UI waits. */
 	elapsedMs: number;
 	tokensPerSecond: number;
-	usage: ModelSpeedUsage;
 }
 
 export interface GitChangeSummary {

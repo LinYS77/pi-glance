@@ -94,7 +94,7 @@ for (const warmAt of ["tool", "context", "stream"] as const) test(`Pi cache warm
 		assert.equal(requestEvents, 3, "Pi's warming callback shares the public request event");
 		const rate = tracked.getState()?.throughput.lastRun;
 		if (warmAt === "tool") {
-			assert.equal(rate?.usage.output, 80);
+			assert.equal(rate?.outputTokens, 80);
 			assert.equal(rate?.elapsedMs, 2_000, "two 1s primary requests, excluding the tool wait and warm replay");
 			assert.equal(rate?.tokensPerSecond, 40);
 		} else {

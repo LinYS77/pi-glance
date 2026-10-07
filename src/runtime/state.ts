@@ -47,16 +47,9 @@ function modelSpeedEqual(a: ModelSpeedMeasurement | null, b: ModelSpeedMeasureme
 	if (a === b) return true;
 	if (!a || !b) return false;
 	return (
-		a.startedAtMs === b.startedAtMs &&
-		a.endedAtMs === b.endedAtMs &&
+		a.outputTokens === b.outputTokens &&
 		a.elapsedMs === b.elapsedMs &&
-		a.tokensPerSecond === b.tokensPerSecond &&
-		a.usage.input === b.usage.input &&
-		a.usage.output === b.usage.output &&
-		a.usage.cacheRead === b.usage.cacheRead &&
-		a.usage.cacheWrite === b.usage.cacheWrite &&
-		a.usage.totalTokens === b.usage.totalTokens &&
-		a.usage.assistantMessages === b.usage.assistantMessages
+		a.tokensPerSecond === b.tokensPerSecond
 	);
 }
 
@@ -65,10 +58,6 @@ export function setLastRunModelSpeed(state: GlanceState, next: ModelSpeedMeasure
 	state.throughput.lastRun = next;
 	touch(state);
 	return true;
-}
-
-export function clearLastRunModelSpeed(state: GlanceState): boolean {
-	return setLastRunModelSpeed(state, null);
 }
 
 export function setCurrentRunModelSpeed(state: GlanceState, next: ModelSpeedMeasurement | null): boolean {

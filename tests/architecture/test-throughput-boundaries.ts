@@ -19,26 +19,26 @@ const modelSpeedFiles = MODEL_SPEED_FILES.map((path) => {
 });
 
 for (const file of modelSpeedFiles) {
-	assert.equal(/\b(?:setInterval|setTimeout|setImmediate|requestAnimationFrame)\s*\(/.test(file.text), false, `${file.path}: Model speed must not use timers or tickers`);
+	assert.equal(/\b(?:setInterval|setTimeout|setImmediate|requestAnimationFrame)\s*\(/.test(file.text), false, `${file.path}: Output throughput must not use timers or tickers`);
 	if (NO_NOTIFY_MODEL_SPEED_FILES.has(file.path)) {
-		assert.equal(/\.notify\s*\(/.test(file.text), false, `${file.path}: Model speed modules must not notify`);
+		assert.equal(/\.notify\s*\(/.test(file.text), false, `${file.path}: Output throughput modules must not notify`);
 	}
 	assert.equal(
 		/(?:\.\s*(?:content|delta|text_delta|thinking_delta)\b|\[\s*["'](?:content|delta|text_delta|thinking_delta)["']\s*\])/.test(file.text),
 		false,
-		`${file.path}: Model speed must not estimate tokens from message or delta content`,
+		`${file.path}: Output throughput must not estimate tokens from message or delta content`,
 	);
 
 	if (!PURE_MODEL_SPEED_FILES.has(file.path)) continue;
-	assert.equal(/\bDate\.now\s*\(/.test(file.text), false, `${file.path}: pure Model speed logic should use injected timestamps`);
+	assert.equal(/\bDate\.now\s*\(/.test(file.text), false, `${file.path}: pure Output throughput logic should use injected timestamps`);
 	for (const { specifier } of importsFrom(file)) {
-		assert.equal(specifier.startsWith("@earendil-works/pi-"), false, `${file.path}: pure Model speed logic must not import Pi`);
-		assert.equal(IO_NETWORK_PROCESS_IMPORTS.has(specifier), false, `${file.path}: pure Model speed logic must not import ${specifier}`);
+		assert.equal(specifier.startsWith("@earendil-works/pi-"), false, `${file.path}: pure Output throughput logic must not import Pi`);
+		assert.equal(IO_NETWORK_PROCESS_IMPORTS.has(specifier), false, `${file.path}: pure Output throughput logic must not import ${specifier}`);
 	}
 }
 
 for (const file of files) {
-	assert.equal(/\.notify\s*\([^;\n]*(?:throughput|model speed|TPS|tok\/s|spd)/i.test(file.text), false, `${file.path}: Model speed copy must not be sent through notifications`);
+	assert.equal(/\.notify\s*\([^;\n]*(?:throughput|model speed|TPS|tok\/s|spd)/i.test(file.text), false, `${file.path}: Output throughput copy must not be sent through notifications`);
 }
 
 const entry = byPath.get("index.ts");
@@ -47,4 +47,4 @@ assert.ok(entry && runtime);
 assert.match(entry.text, /pi\.on\("before_provider_request", runtime\.events\.providerRequest\)/, "wire the pre-request boundary through the public Pi event");
 assert.match(runtime.text, /performance\.now\(\)/, "use a monotonic production clock");
 
-console.log("✓ Model speed safety guardrails passed");
+console.log("✓ Output throughput safety guardrails passed");

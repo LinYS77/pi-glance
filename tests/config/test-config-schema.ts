@@ -27,7 +27,7 @@ for (const value of descriptor.values) {
 assert.equal(normalizeConfig({ throughput: { precision: "manual" } }).throughput.precision, descriptor.defaultValue, "invalid config precision should use the descriptor default");
 
 const precisionSetting = throughputSegmentFeature.settings.find((setting) => setting.id === "throughput.precision");
-assert.ok(precisionSetting, "Model speed feature should expose its precision setting");
+assert.ok(precisionSetting, "Output throughput feature should expose its precision setting");
 const config = defaultConfig();
 assert.equal(precisionSetting.value(config), "Automatic", "setting uses a readable automatic label");
 precisionSetting.select(config, 1);

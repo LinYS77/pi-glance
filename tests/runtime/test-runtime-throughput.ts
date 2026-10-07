@@ -121,21 +121,8 @@ function slots(state: GlanceState): GlanceState["throughput"] {
 	return state.throughput;
 }
 
-function expectedTurn(startedAtMs: number, endedAtMs: number, elapsedMs: number, output: number, options: Partial<ModelSpeedExpectation["usage"]> = {}): ModelSpeedExpectation {
-	return {
-		startedAtMs,
-		endedAtMs,
-		elapsedMs,
-		tokensPerSecond: output / (elapsedMs / 1000),
-		usage: {
-			input: options.input ?? 0,
-			output,
-			cacheRead: options.cacheRead ?? 0,
-			cacheWrite: options.cacheWrite ?? 0,
-			totalTokens: options.totalTokens ?? output,
-			assistantMessages: options.assistantMessages ?? 1,
-		},
-	};
+function expectedTurn(elapsedMs: number, outputTokens: number): ModelSpeedExpectation {
+	return { elapsedMs, outputTokens, tokensPerSecond: outputTokens / (elapsedMs / 1000) };
 }
 
 await test("message_end should expose provisional model speed with the current-run slot", async () => {
@@ -145,7 +132,7 @@ await test("message_end should expose provisional model speed with the current-r
 	runtime.events.agentStart({ type: "agent_start" }, test.ctx);
 	runtime.events.providerRequest({ type: "before_provider_request", payload: {} }, test.ctx);
 	await runtime.events.messageEnd(messageEnd(assistant(40, {}, "stop", "basic")), test.ctx);
-	const expected = expectedTurn(1_000, 2_250, 1_250, 40);
+	const expected = expectedTurn(1_250, 40);
 	assert.deepEqual(slots(await captureState(runtime, test, capturedStates)), { lastRun: null, currentRun: expected }, "message_end should expose provisional model speed with the current-run slot");
 
 	await runtime.events.agentEnd({ type: "agent_end", messages: [] }, test.ctx);
@@ -156,7 +143,7 @@ await test("message_end should expose provisional model speed with the current-r
 	assert.equal(getRemainingNowReads(), 0, "settlement should not add task wall time to model speed");
 });
 
-await test("mixed text/tool-call output uses non-reasoning tokens over the full request duration", async () => {
+await test("text, tool-call and reasoning output use the full request duration without changing billing", async () => {
 	const test = createContext();
 	const { runtime, capturedStates, getRemainingNowReads } = createRuntime([1_000, 2_500]);
 	runtime.events.sessionStart({ type: "session_start" }, test.ctx);
@@ -164,8 +151,10 @@ await test("mixed text/tool-call output uses non-reasoning tokens over the full 
 	runtime.events.providerRequest({ type: "before_provider_request", payload: {} }, test.ctx);
 
 	await runtime.events.messageEnd(messageEnd(assistant(100, { reasoning: 20, totalTokens: 100 }, "toolUse", "mixed")), test.ctx);
-	const expected = expectedTurn(1_000, 2_500, 1_500, 80, { totalTokens: 100 });
-	assert.deepEqual(slots(await captureState(runtime, test, capturedStates)), { lastRun: null, currentRun: expected }, "mixed text/tool-call output uses non-reasoning tokens over the full request duration");
+	const expected = expectedTurn(1_500, 100);
+	const state = await captureState(runtime, test, capturedStates);
+	assert.deepEqual(slots(state), { lastRun: null, currentRun: expected }, "all reported output enters the request average exactly once");
+	assert.deepEqual(state.usage, { input: 0, output: 100, cacheRead: 0, cacheWrite: 0, cost: 0 }, "the billed ledger still counts the same complete provider output");
 	assert.equal(getRemainingNowReads(), 0, "one completed request reads only its start and end clocks");
 });
 
@@ -179,7 +168,7 @@ await test("runtime should exclude blocking extension UI prompt spans from provi
 	runtime.events.uiPromptStart({ type: "ui_prompt_start", reason: "ui_prompt", kind: "confirm", title: "Continue?" }, test.ctx);
 	runtime.events.uiPromptEnd({ type: "ui_prompt_end", reason: "ui_prompt", kind: "confirm", title: "Continue?" }, test.ctx);
 	await runtime.events.messageEnd(messageEnd(assistant(50, {}, "stop", "prompt-split")), test.ctx);
-	const expected = expectedTurn(1_000, 6_000, 2_000, 50);
+	const expected = expectedTurn(2_000, 50);
 	assert.deepEqual(slots(await captureState(runtime, test, capturedStates)), { lastRun: null, currentRun: expected }, "runtime should exclude blocking extension UI prompt spans from provisional model speed");
 	assert.equal(test.getRenderRequests() - renderBeforePrompt, 1, "blocking UI spans do not invent a Glance animation or a model-speed render");
 	assert.equal(getRemainingNowReads(), 0, "output updates delivered inside a UI prompt span should not consume the model-speed clock");
@@ -201,7 +190,7 @@ await test("failed attempt should not create trusted or provisional speed", asyn
 	await runtime.events.agentEnd({ type: "agent_end", messages: [] }, test.ctx);
 	runtime.events.agentSettled({ type: "agent_settled" }, test.ctx);
 	const state = await captureState(runtime, test, capturedStates);
-	assert.deepEqual(slots(state), { lastRun: expectedTurn(3_000, 4_000, 1_000, 40, { input: 20 }), currentRun: null }, "successful retry should finalize only its measurable successful response");
+	assert.deepEqual(slots(state), { lastRun: expectedTurn(1_000, 40), currentRun: null }, "successful retry should finalize only its measurable successful response");
 	assert.deepEqual(state.usage, { input: 30, output: 45, cacheRead: 0, cacheWrite: 0, cost: 3 }, "billed-session usage should still include both failed and successful provider calls");
 });
 
@@ -233,7 +222,7 @@ await test("recoverable length response should be provisional until Pi announces
 	await runtime.events.agentEnd({ type: "agent_end", messages: [] }, test.ctx);
 	runtime.events.agentSettled({ type: "agent_settled" }, test.ctx);
 	const state = await captureState(runtime, test, capturedStates);
-	assert.deepEqual(slots(state), { lastRun: expectedTurn(3_000, 4_000, 1_000, 30, { input: 2 }), currentRun: null }, "settled speed should contain the replacement response, not the recoverable truncated response");
+	assert.deepEqual(slots(state), { lastRun: expectedTurn(1_000, 30), currentRun: null }, "settled speed should contain the replacement response, not the recoverable truncated response");
 	assert.deepEqual(state.usage, { input: 10, output: 138, cacheRead: 0, cacheWrite: 0, cost: 1.8 }, "complete session usage should retain truncated response, compaction, and replacement billing");
 });
 
@@ -245,7 +234,7 @@ await test("first core run should remain provisional while a continuation can be
 	runtime.events.providerRequest({ type: "before_provider_request", payload: {} }, test.ctx);
 	await runtime.events.messageEnd(messageEnd(assistant(20, {}, "toolUse", "first")), test.ctx);
 	await runtime.events.agentEnd({ type: "agent_end", messages: [] }, test.ctx);
-	const first = expectedTurn(1_000, 2_000, 1_000, 20);
+	const first = expectedTurn(1_000, 20);
 	assert.deepEqual(slots(await captureState(runtime, test, capturedStates)), { lastRun: null, currentRun: first }, "first core run should remain provisional while a continuation can be queued");
 
 	runtime.events.agentStart({ type: "agent_start" }, test.ctx);
@@ -256,7 +245,7 @@ await test("first core run should remain provisional while a continuation can be
 	runtime.events.agentSettled({ type: "agent_settled" }, test.ctx);
 	assert.deepEqual(
 		slots(await captureState(runtime, test, capturedStates)),
-		{ lastRun: expectedTurn(1_000, 6_000, 2_000, 80, { totalTokens: 80, assistantMessages: 2 }), currentRun: null },
+		{ lastRun: expectedTurn(2_000, 80), currentRun: null },
 		"queued follow-up calls should aggregate under one settled-run measurement while excluding their gap",
 	);
 });
@@ -279,7 +268,7 @@ await test("toolResult usage and turn lifecycle alone should not synthesize mode
 	assert.equal(getRemainingNowReads(), 1, "non-assistant and lifecycle events should not consume request clocks");
 });
 
-await test("weighted multiple requests include reasoning-only duration but not long tool gaps", async () => {
+await test("weighted multiple requests include reasoning-only output and duration but not long tool gaps", async () => {
 	const test = createContext();
 	const { runtime, capturedStates, getRemainingNowReads } = createRuntime([0, 3_000, 63_000, 64_000]);
 	runtime.events.sessionStart({ type: "session_start" }, test.ctx);
@@ -292,7 +281,7 @@ await test("weighted multiple requests include reasoning-only duration but not l
 	await runtime.events.messageEnd(messageEnd(assistant(120, {}, "stop", "answer")), test.ctx);
 	runtime.events.agentSettled({ type: "agent_settled" }, test.ctx);
 	assert.deepEqual(slots(await captureState(runtime, test, capturedStates)), {
-		lastRun: expectedTurn(0, 64_000, 4_000, 120, { totalTokens: 200, assistantMessages: 2 }), currentRun: null,
+		lastRun: expectedTurn(4_000, 200), currentRun: null,
 	});
 	assert.equal(getRemainingNowReads(), 0);
 });
