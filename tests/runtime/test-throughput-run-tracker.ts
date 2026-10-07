@@ -22,6 +22,7 @@ function expectFinal(run: ModelSpeedRunTracker, expected: ModelSpeedMeasurement)
 	assert.deepEqual(run.settle(), { kind: "set-last-run-and-clear-current-run", lastRun: expected });
 }
 function response(run: ModelSpeedRunTracker, message: unknown, start: number, end: number): ModelSpeedStateIntent {
+	run.turnStart();
 	run.requestStart(clock(start));
 	return run.messageEnd(message, clock(end));
 }
@@ -168,9 +169,10 @@ await test("duplicate response IDs or identical objects never add samples or con
 	}
 });
 
-await test("repeated pre-request callback retains the earliest boundary", () => {
+await test("ambiguous overlapping request callbacks show unknown rather than guessing a boundary", () => {
 	const run = new ModelSpeedRunTracker(); run.start(); run.requestStart(clock(0)); run.requestStart(throwingClock);
-	expectCurrent(run.messageEnd(assistant(120), clock(4_000)), measurement(0, 4_000, 4_000, 120));
+	assert.deepEqual(run.messageEnd(assistant(120), clock(4_000)), { kind: "clear-current-run" });
+	assert.deepEqual(run.settle(), unknownFinal);
 });
 
 await test("invalid clocks, zero or reversed durations invalidate the run", () => {
@@ -199,7 +201,7 @@ await test("invalid/missing provider output cannot be replaced by content estima
 
 await test("unfinished request cannot settle an earlier provisional aggregate", () => {
 	const run = new ModelSpeedRunTracker(); run.start(); response(run, assistant(30), 0, 1_000);
-	run.requestStart(clock(2_000));
+	run.turnStart(); run.requestStart(clock(2_000));
 	assert.deepEqual(run.settle(), unknownFinal);
 });
 

@@ -1,6 +1,6 @@
 {
   "name": "pi-glance",
-  "version": "0.7.3",
+  "version": "0.7.4",
   "description": "A rounded editor and adaptive status line for Pi.",
   "keywords": [
     "pi-package",
@@ -18,6 +18,9 @@
     "node": ">=22.19.0"
   },
   "author": "linys77",
+  "contributors": [
+    { "name": "derekszen", "url": "https://github.com/derekszen" }
+  ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/LinYS77/pi-glance.git"
@@ -69,7 +72,7 @@
     "test:session-start": "npm run build:dev --silent && node .tmp-test/tests/runtime/test-session-start-order.js",
     "test:state-inputs": "npm run build:dev --silent && node .tmp-test/tests/runtime/test-state-inputs.js",
     "test:status-line": "npm run build:dev --silent && node .tmp-test/tests/surface/test-status-line.js",
-    "test:throughput": "npm run build:dev --silent && node .tmp-test/tests/runtime/test-throughput.js && node .tmp-test/tests/runtime/test-throughput-run-tracker.js && node .tmp-test/tests/runtime/test-state-throughput.js && node .tmp-test/tests/runtime/test-runtime-throughput.js && node .tmp-test/tests/surface/test-throughput-status-line.js && node .tmp-test/tests/config/test-throughput-config.js && node .tmp-test/tests/settings/test-throughput-settings.js && node .tmp-test/tests/architecture/test-throughput-boundaries.js && node .tmp-test/tests/packaging/test-throughput-readme.js",
+    "test:throughput": "npm run build:dev --silent && node .tmp-test/tests/runtime/test-throughput.js && node .tmp-test/tests/runtime/test-throughput-run-tracker.js && node .tmp-test/tests/runtime/test-state-throughput.js && node .tmp-test/tests/runtime/test-runtime-throughput.js && node --test .tmp-test/tests/runtime/test-throughput-host.js && node .tmp-test/tests/surface/test-throughput-status-line.js && node .tmp-test/tests/config/test-throughput-config.js && node .tmp-test/tests/settings/test-throughput-settings.js && node .tmp-test/tests/architecture/test-throughput-boundaries.js && node .tmp-test/tests/packaging/test-throughput-readme.js",
     "test:dev": "npm run build:dev --silent && node --test --test-concurrency=4 .tmp-test/tests/*/test-*.js",
     "test:git": "npm run build:dev --silent && node --test .tmp-test/tests/runtime/test-git*.js .tmp-test/tests/runtime/test-state-git.js .tmp-test/tests/surface/test-render-git.js .tmp-test/tests/surface/test-git-summary-fitting.js",
     "test:catalog": "npm run build:dev --silent && node .tmp-test/tests/settings/test-settings-catalog.js",

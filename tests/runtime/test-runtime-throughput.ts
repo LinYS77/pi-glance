@@ -337,6 +337,7 @@ await test("weighted multiple requests include reasoning-only duration but not l
 	runtime.events.providerRequest({ type: "before_provider_request", payload: {} }, test.ctx);
 	await runtime.events.messageEnd(messageEnd(assistant(80, { reasoning: 80 }, "toolUse", "reasoning-only")), test.ctx);
 	await runtime.events.toolExecutionEnd({ type: "tool_execution_end" }, test.ctx);
+	await runtime.events.turnStart({ type: "turn_start" }, test.ctx);
 	runtime.events.providerRequest({ type: "before_provider_request", payload: {} }, test.ctx);
 	await runtime.events.messageEnd(messageEnd(assistant(120, {}, "stop", "answer")), test.ctx);
 	runtime.events.agentSettled({ type: "agent_settled" }, test.ctx);

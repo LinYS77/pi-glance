@@ -53,6 +53,7 @@ function messageKey(message: AssistantLikeMessage): string | undefined {
 
 export class ModelSpeedRunTracker {
 	private running = false;
+	private awaitingResponse = false;
 	private activeRequest: ActiveModelRequest | null = null;
 	private completedRequests: ModelStreamSample[] = [];
 	private pendingFailure = false;
@@ -62,6 +63,7 @@ export class ModelSpeedRunTracker {
 
 	/** Start a logical Pi run, or resume it after retry/continuation. */
 	start(): ModelSpeedStateIntent {
+		this.awaitingResponse = true;
 		if (this.running) {
 			this.activeRequest = null;
 			this.pendingFailure = false;
@@ -77,9 +79,20 @@ export class ModelSpeedRunTracker {
 		return { kind: "set-last-run-and-clear-current-run", lastRun: null };
 	}
 
+	/** Pi also reuses the request hook for cache warming during tool/continuation gaps. */
+	turnStart(): void {
+		if (this.running) this.awaitingResponse = true;
+	}
+
 	/** Called before the provider request, not after headers or the first chunk. */
 	requestStart(nowMs: ModelSpeedClock): void {
-		if (!this.running || this.pendingFailure || this.activeRequest) return;
+		if (!this.running || !this.awaitingResponse || this.pendingFailure) return;
+		if (this.activeRequest) {
+			// Public request events have no correlation ID. A replay overlapping a
+			// foreground request cannot be paired reliably, so do not invent a rate.
+			this.activeRequest.timingInvalid = true;
+			return;
+		}
 		const startedAtMs = nowMs();
 		const previousEndMs = this.completedRequests.at(-1)?.endedAtMs;
 		this.activeRequest = {
@@ -152,6 +165,7 @@ export class ModelSpeedRunTracker {
 
 	messageEnd(message: unknown, nowMs: ModelSpeedClock): ModelSpeedStateIntent {
 		if (!this.running || !isAssistantMessage(message) || !this.claimMessage(message)) return NONE_INTENT;
+		this.awaitingResponse = false;
 		if (isInvalidStopReason(message.stopReason)) {
 			this.pendingFailure = true;
 			this.activeRequest = null;
@@ -165,6 +179,7 @@ export class ModelSpeedRunTracker {
 	/** Remove a truncated response that Pi will replace after compaction. */
 	compactionRetry(willRetry: boolean): ModelSpeedStateIntent {
 		if (!this.running || !willRetry) return NONE_INTENT;
+		this.awaitingResponse = false;
 		this.pendingFailure = true;
 		this.activeRequest = null;
 		const latest = this.completedRequests.at(-1);
@@ -188,6 +203,7 @@ export class ModelSpeedRunTracker {
 
 	private resetRunState(): void {
 		this.running = false;
+		this.awaitingResponse = false;
 		this.activeRequest = null;
 		this.completedRequests = [];
 		this.pendingFailure = false;

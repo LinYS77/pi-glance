@@ -169,6 +169,8 @@ Timing uses a monotonic clock from `before_provider_request` through assistant `
 
 Tool execution, inter-request gaps, retry backoff, compaction and user pauses outside requests are excluded. Blocking `ui_prompt_start` / `ui_prompt_end` spans within requests are subtracted. Chunk counts and delivery timing do not affect the rate; zero or one delta is sufficient when request boundaries and provider usage are valid.
 
+`turn_start` arms timing for the next assistant response; its `message_end` closes that scope. Cache warming can reuse `before_provider_request`, so hooks during tool/continuation gaps must be ignored. If multiple request callbacks overlap within a turn, the public event has no correlation ID to distinguish foreground requests, provider retries and cache replays: that sample is unknown rather than guessing a start time. Real Pi SDK tests exercise warming during tools, context preparation and response streaming with a local provider and injected clock.
+
 `message_end` publishes a provisional average of completed requests (`~`); `agent_settled` finalizes the logical run. Fresh runs clear the previous rate; invalid settled runs clear both slots. Missing request boundaries, non-positive/non-finite timing or invalid output/reasoning usage mean unknown, never a token estimate or a capped speed. Retries discard failed attempts, overflow compaction retracts replaced length responses, and completion deduplication remains by response ID or object identity. No timers, tickers or diagnostic event bus are used.
 
 ## Editor integration

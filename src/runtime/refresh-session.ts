@@ -325,6 +325,7 @@ export class RuntimeRefreshSession {
 	}
 
 	async turnStart(ctx: ExtensionContext): Promise<void> {
+		this.modelSpeedTracker.turnStart();
 		await this.refresh(ctx, LIFECYCLE_MODEL_ON_WORKSPACE_CHANGE);
 	}
 
