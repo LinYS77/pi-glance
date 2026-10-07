@@ -47,9 +47,9 @@ function collectThroughput(ctx: SegmentRenderContext): SegmentData | undefined {
 	const marker = turn === currentRun ? "~" : "";
 	const formatted = `${marker}${formatThroughputRate(turn.tokensPerSecond, ctx.config.throughput.precision)}`;
 	return {
-		primary: `${formatted} tok/s`,
+		primary: `${formatted} avg tok/s`,
 		display: {
-			full: `${formatted} tok/s`,
+			full: `${formatted} avg tok/s`,
 			compact: `${formatted}/s`,
 			minimal: `${formatted}/s`,
 		},
@@ -65,7 +65,7 @@ export const throughputSegmentFeature = {
 		choiceSetting(
 			"throughput.precision",
 			"Decimal places",
-			"Output tokens per second, excluding reasoning and tool waits.",
+			"Average non-reasoning output per full request second, including latency/thinking; excluding tool waits.",
 			THROUGHPUT_PRECISION_DESCRIPTOR.values.map((value) => ({
 				value,
 				label: value === "auto" ? "Automatic" : value === 1 ? "1 decimal" : "Whole numbers",

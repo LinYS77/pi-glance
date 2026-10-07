@@ -7,15 +7,15 @@ export type ModelSpeedStateIntent =
 	| { kind: "none" }
 	| { kind: "set-current-run"; currentRun: ModelSpeedMeasurement }
 	| { kind: "clear-current-run" }
-	| { kind: "set-last-run-and-clear-current-run"; lastRun: ModelSpeedMeasurement };
+	| { kind: "set-last-run-and-clear-current-run"; lastRun: ModelSpeedMeasurement | null };
 
 const NONE_INTENT: ModelSpeedStateIntent = { kind: "none" };
 
-interface ActiveModelStream {
+interface ActiveModelRequest {
 	startedAtMs: number;
-	lastOutputAtMs: number;
-	outputElapsedMs: number;
-	outputSegmentStartedAtMs: number | null;
+	activeStartedAtMs: number | null;
+	lastBoundaryAtMs: number;
+	elapsedMs: number;
 	timingInvalid: boolean;
 }
 
@@ -33,30 +33,18 @@ function isAssistantMessage(value: unknown): value is AssistantLikeMessage {
 	return isRecord(value) && value.role === "assistant";
 }
 
-function eventType(value: unknown): unknown {
-	return isRecord(value) ? value.type : undefined;
-}
-
-function isOutputDelta(value: unknown): boolean {
-	const type = eventType(value);
-	return type === "text_delta" || type === "toolcall_delta";
-}
-
-function isThinkingEvent(value: unknown): boolean {
-	const type = eventType(value);
-	return type === "thinking_start" || type === "thinking_delta" || type === "thinking_end";
-}
-
 function isInvalidStopReason(value: unknown): boolean {
 	return value === "error" || value === "aborted";
 }
 
-function closeOutputSegment(stream: ActiveModelStream): void {
-	if (stream.outputSegmentStartedAtMs === null) return;
-	const segmentElapsedMs = stream.lastOutputAtMs - stream.outputSegmentStartedAtMs;
-	if (!Number.isFinite(segmentElapsedMs) || segmentElapsedMs < 0) stream.timingInvalid = true;
-	else stream.outputElapsedMs += segmentElapsedMs;
-	stream.outputSegmentStartedAtMs = null;
+function closeActiveInterval(request: ActiveModelRequest, nowMs: number): void {
+	if (!Number.isFinite(nowMs) || nowMs < request.lastBoundaryAtMs) request.timingInvalid = true;
+	request.lastBoundaryAtMs = nowMs;
+	if (request.activeStartedAtMs === null) return;
+	const elapsedMs = nowMs - request.activeStartedAtMs;
+	if (!Number.isFinite(elapsedMs) || elapsedMs < 0) request.timingInvalid = true;
+	else request.elapsedMs += elapsedMs;
+	request.activeStartedAtMs = null;
 }
 
 function messageKey(message: AssistantLikeMessage): string | undefined {
@@ -65,70 +53,81 @@ function messageKey(message: AssistantLikeMessage): string | undefined {
 
 export class ModelSpeedRunTracker {
 	private running = false;
-	private activeStream: ActiveModelStream | null = null;
-	private completedStreams: ModelStreamSample[] = [];
+	private awaitingResponse = false;
+	private activeRequest: ActiveModelRequest | null = null;
+	private completedRequests: ModelStreamSample[] = [];
 	private pendingFailure = false;
 	private uiPromptActive = false;
 	private completedMessageObjects = new WeakSet<object>();
 	private completedMessageKeys = new Set<string>();
 
-	/** Start a logical Pi run, or resume the same run after retry/continuation. */
+	/** Start a logical Pi run, or resume it after retry/continuation. */
 	start(): ModelSpeedStateIntent {
+		this.awaitingResponse = true;
 		if (this.running) {
-			this.activeStream = null;
+			this.activeRequest = null;
 			this.pendingFailure = false;
 			return NONE_INTENT;
 		}
 		this.running = true;
-		this.activeStream = null;
-		this.completedStreams = [];
+		this.activeRequest = null;
+		this.completedRequests = [];
 		this.pendingFailure = false;
 		this.completedMessageObjects = new WeakSet<object>();
 		this.completedMessageKeys = new Set<string>();
-		return { kind: "clear-current-run" };
+		// Never present the previous run as a measurement of this run.
+		return { kind: "set-last-run-and-clear-current-run", lastRun: null };
 	}
 
-	/** Record timestamps only; rendering remains event-driven at message_end. */
-	messageUpdate(message: unknown, assistantMessageEvent: unknown, nowMs: ModelSpeedClock): ModelSpeedStateIntent {
-		if (!this.running || this.pendingFailure || this.uiPromptActive || !isAssistantMessage(message)) return NONE_INTENT;
-		if (isThinkingEvent(assistantMessageEvent)) {
-			if (this.activeStream) closeOutputSegment(this.activeStream);
-			return NONE_INTENT;
-		}
-		if (!isOutputDelta(assistantMessageEvent)) return NONE_INTENT;
+	/** Pi also reuses the request hook for cache warming during tool/continuation gaps. */
+	turnStart(): void {
+		if (this.running) this.awaitingResponse = true;
+	}
 
-		const eventAtMs = nowMs();
-		if (!this.activeStream) {
-			this.activeStream = {
-				startedAtMs: eventAtMs,
-				lastOutputAtMs: eventAtMs,
-				outputElapsedMs: 0,
-				outputSegmentStartedAtMs: eventAtMs,
-				timingInvalid: !Number.isFinite(eventAtMs),
-			};
-			return NONE_INTENT;
+	/** Called before the provider request, not after headers or the first chunk. */
+	requestStart(nowMs: ModelSpeedClock): void {
+		if (!this.running || !this.awaitingResponse || this.pendingFailure) return;
+		if (this.activeRequest) {
+			// Public request events have no correlation ID. A replay overlapping a
+			// foreground request cannot be paired reliably, so do not invent a rate.
+			this.activeRequest.timingInvalid = true;
+			return;
 		}
+		const startedAtMs = nowMs();
+		const previousEndMs = this.completedRequests.at(-1)?.endedAtMs;
+		this.activeRequest = {
+			startedAtMs,
+			activeStartedAtMs: this.uiPromptActive ? null : startedAtMs,
+			lastBoundaryAtMs: startedAtMs,
+			elapsedMs: 0,
+			timingInvalid: !Number.isFinite(startedAtMs)
+				|| (previousEndMs !== undefined && startedAtMs < previousEndMs),
+		};
+	}
 
-		if (!Number.isFinite(eventAtMs) || eventAtMs < this.activeStream.lastOutputAtMs) {
-			this.activeStream.timingInvalid = true;
-		}
-		if (this.activeStream.outputSegmentStartedAtMs === null) {
-			this.activeStream.outputSegmentStartedAtMs = eventAtMs;
-		}
-		this.activeStream.lastOutputAtMs = eventAtMs;
+	/** Chunk delivery and thinking events do not control request-duration timing. */
+	messageUpdate(_message: unknown, _assistantMessageEvent: unknown, _nowMs: ModelSpeedClock): ModelSpeedStateIntent {
 		return NONE_INTENT;
 	}
 
-	/** Pause timing around Pi's coalesced blocking extension UI prompt span. */
-	uiPromptStart(): void {
+	/** Exclude Pi's coalesced blocking extension UI prompt span. */
+	uiPromptStart(nowMs: ModelSpeedClock): void {
 		if (this.uiPromptActive) return;
 		this.uiPromptActive = true;
-		if (this.activeStream) closeOutputSegment(this.activeStream);
+		if (this.activeRequest) closeActiveInterval(this.activeRequest, nowMs());
 	}
 
-	/** Resume timing lazily from the next measurable output delta. */
-	uiPromptEnd(): void {
+	uiPromptEnd(nowMs: ModelSpeedClock): void {
+		if (!this.uiPromptActive) return;
 		this.uiPromptActive = false;
+		if (this.activeRequest) {
+			const resumedAtMs = nowMs();
+			if (!Number.isFinite(resumedAtMs) || resumedAtMs < this.activeRequest.lastBoundaryAtMs) {
+				this.activeRequest.timingInvalid = true;
+			}
+			this.activeRequest.lastBoundaryAtMs = resumedAtMs;
+			this.activeRequest.activeStartedAtMs = resumedAtMs;
+		}
 	}
 
 	private claimMessage(message: AssistantLikeMessage): boolean {
@@ -143,58 +142,60 @@ export class ModelSpeedRunTracker {
 		return true;
 	}
 
-	private finalizeActiveStream(message: AssistantLikeMessage): ModelStreamSample {
-		const stream = this.activeStream;
-		this.activeStream = null;
-		if (!stream) {
+	private finalizeActiveRequest(message: AssistantLikeMessage, nowMs: ModelSpeedClock): ModelStreamSample {
+		const request = this.activeRequest;
+		this.activeRequest = null;
+		if (!request) {
 			return { startedAtMs: Number.NaN, endedAtMs: Number.NaN, elapsedMs: Number.NaN, message };
 		}
-		closeOutputSegment(stream);
+		const endedAtMs = nowMs();
+		closeActiveInterval(request, endedAtMs);
 		return {
-			startedAtMs: stream.startedAtMs,
-			endedAtMs: stream.lastOutputAtMs,
-			elapsedMs: stream.timingInvalid ? Number.NaN : stream.outputElapsedMs,
+			startedAtMs: request.startedAtMs,
+			endedAtMs,
+			elapsedMs: request.timingInvalid ? Number.NaN : request.elapsedMs,
 			message,
 		};
 	}
 
 	private currentIntent(): ModelSpeedStateIntent {
-		const currentRun = calculateModelSpeed({ streams: this.completedStreams });
+		const currentRun = calculateModelSpeed({ streams: this.completedRequests });
 		return currentRun ? { kind: "set-current-run", currentRun } : { kind: "clear-current-run" };
 	}
 
-	messageEnd(message: unknown): ModelSpeedStateIntent {
+	messageEnd(message: unknown, nowMs: ModelSpeedClock): ModelSpeedStateIntent {
 		if (!this.running || !isAssistantMessage(message) || !this.claimMessage(message)) return NONE_INTENT;
+		this.awaitingResponse = false;
 		if (isInvalidStopReason(message.stopReason)) {
 			this.pendingFailure = true;
-			this.activeStream = null;
+			this.activeRequest = null;
 			return { kind: "clear-current-run" };
 		}
-
 		this.pendingFailure = false;
-		this.completedStreams.push(this.finalizeActiveStream(message));
+		this.completedRequests.push(this.finalizeActiveRequest(message, nowMs));
 		return this.currentIntent();
 	}
 
-	/** Remove the recoverable response that Pi will replace after compaction. */
+	/** Remove a truncated response that Pi will replace after compaction. */
 	compactionRetry(willRetry: boolean): ModelSpeedStateIntent {
 		if (!this.running || !willRetry) return NONE_INTENT;
+		this.awaitingResponse = false;
 		this.pendingFailure = true;
-		this.activeStream = null;
-		const latest = this.completedStreams.at(-1);
+		this.activeRequest = null;
+		const latest = this.completedRequests.at(-1);
 		if (latest && isAssistantMessage(latest.message) && latest.message.stopReason === "length") {
-			this.completedStreams.pop();
+			this.completedRequests.pop();
 		}
 		return this.currentIntent();
 	}
 
-	/** Finalize only after Pi guarantees no retry, compaction, or continuation remains. */
+	/** Finalize only when no retry, compaction, or continuation remains. */
 	settle(): ModelSpeedStateIntent {
 		if (!this.running) return { kind: "clear-current-run" };
 		try {
-			if (this.pendingFailure) return { kind: "clear-current-run" };
-			const lastRun = calculateModelSpeed({ streams: this.completedStreams });
-			return lastRun ? { kind: "set-last-run-and-clear-current-run", lastRun } : { kind: "clear-current-run" };
+			const lastRun = this.pendingFailure || this.activeRequest
+				? undefined : calculateModelSpeed({ streams: this.completedRequests });
+			return { kind: "set-last-run-and-clear-current-run", lastRun: lastRun ?? null };
 		} finally {
 			this.resetRunState();
 		}
@@ -202,8 +203,9 @@ export class ModelSpeedRunTracker {
 
 	private resetRunState(): void {
 		this.running = false;
-		this.activeStream = null;
-		this.completedStreams = [];
+		this.awaitingResponse = false;
+		this.activeRequest = null;
+		this.completedRequests = [];
 		this.pendingFailure = false;
 		this.completedMessageObjects = new WeakSet<object>();
 		this.completedMessageKeys = new Set<string>();

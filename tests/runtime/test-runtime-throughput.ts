@@ -103,7 +103,7 @@ function createRuntime(nowValues: number[]): { runtime: RuntimeRecord; capturedS
 		createGitRefresher: () => ({ schedule: (_immediate?: boolean) => {}, dispose: () => {} }),
 		scheduleSweepFrame: () => () => {},
 		nowMs: () => {
-			assert.ok(pendingNowValues.length > 0, "runtime should read injected time only for text/tool-call output deltas");
+			assert.ok(pendingNowValues.length > 0, "runtime should read injected time only at request/completion and blocking UI boundaries");
 			return pendingNowValues.shift()!;
 		},
 	};
@@ -147,6 +147,7 @@ await test("message_end should expose provisional model speed with the current-r
 	const { runtime, capturedStates, getRemainingNowReads } = createRuntime([1_000, 2_250]);
 	runtime.events.sessionStart({ type: "session_start" }, test.ctx);
 	runtime.events.agentStart({ type: "agent_start" }, test.ctx);
+	runtime.events.providerRequest({ type: "before_provider_request", payload: {} }, test.ctx);
 	runtime.events.messageUpdate(messageUpdate(assistant(40), "text_delta"), test.ctx);
 	runtime.events.messageUpdate(messageUpdate(assistant(40), "text_delta"), test.ctx);
 	await runtime.events.messageEnd(messageEnd(assistant(40, {}, "stop", "basic")), test.ctx);
@@ -161,11 +162,12 @@ await test("message_end should expose provisional model speed with the current-r
 	assert.equal(getRemainingNowReads(), 0, "settlement should not add task wall time to model speed");
 });
 
-await test("mixed text/tool-call output should use one aligned non-reasoning numerator and output-stream denominator", async () => {
+await test("mixed text/tool-call output uses non-reasoning tokens over the full request duration", async () => {
 	const test = createContext();
-	const { runtime, capturedStates, getRemainingNowReads } = createRuntime([1_000, 1_500, 2_000, 2_500]);
+	const { runtime, capturedStates, getRemainingNowReads } = createRuntime([1_000, 2_500]);
 	runtime.events.sessionStart({ type: "session_start" }, test.ctx);
 	runtime.events.agentStart({ type: "agent_start" }, test.ctx);
+	runtime.events.providerRequest({ type: "before_provider_request", payload: {} }, test.ctx);
 	const partial = assistant(100);
 	runtime.events.messageUpdate(messageUpdate(partial, "text_delta"), test.ctx);
 	runtime.events.messageUpdate(messageUpdate(partial, "text_delta"), test.ctx);
@@ -175,7 +177,7 @@ await test("mixed text/tool-call output should use one aligned non-reasoning num
 	runtime.events.messageUpdate(messageUpdate(partial, "toolcall_delta"), test.ctx);
 	await runtime.events.messageEnd(messageEnd(assistant(100, { reasoning: 20, totalTokens: 100 }, "toolUse", "mixed")), test.ctx);
 	const expected = expectedTurn(1_000, 2_500, 1_500, 80, { totalTokens: 100 });
-	assert.deepEqual(slots(await captureState(runtime, test, capturedStates)), { lastRun: null, currentRun: expected }, "mixed text/tool-call output should use one aligned non-reasoning numerator and output-stream denominator");
+	assert.deepEqual(slots(await captureState(runtime, test, capturedStates)), { lastRun: null, currentRun: expected }, "mixed text/tool-call output uses non-reasoning tokens over the full request duration");
 	assert.equal(getRemainingNowReads(), 0, "text/tool-call boundary events should not read timing clocks");
 });
 
@@ -184,6 +186,7 @@ await test("runtime should exclude blocking extension UI prompt spans from provi
 	const { runtime, capturedStates, getRemainingNowReads } = createRuntime([1_000, 2_000, 5_000, 6_000]);
 	runtime.events.sessionStart({ type: "session_start" }, test.ctx);
 	runtime.events.agentStart({ type: "agent_start" }, test.ctx);
+	runtime.events.providerRequest({ type: "before_provider_request", payload: {} }, test.ctx);
 	const partial = assistant(50);
 	runtime.events.messageUpdate(messageUpdate(partial, "text_delta"), test.ctx);
 	runtime.events.messageUpdate(messageUpdate(partial, "text_delta"), test.ctx);
@@ -202,9 +205,10 @@ await test("runtime should exclude blocking extension UI prompt spans from provi
 
 await test("failed attempt should not create trusted or provisional speed", async () => {
 	const test = createContext();
-	const { runtime, capturedStates } = createRuntime([1_000, 2_000, 3_000, 4_000]);
+	const { runtime, capturedStates } = createRuntime([1_000, 3_000, 4_000]);
 	runtime.events.sessionStart({ type: "session_start" }, test.ctx);
 	runtime.events.agentStart({ type: "agent_start" }, test.ctx);
+	runtime.events.providerRequest({ type: "before_provider_request", payload: {} }, test.ctx);
 	runtime.events.messageUpdate(messageUpdate(assistant(5), "text_delta"), test.ctx);
 	runtime.events.messageUpdate(messageUpdate(assistant(5), "text_delta"), test.ctx);
 	await runtime.events.messageEnd(messageEnd(assistant(5, { input: 10, cost: { total: 1 } }, "error", "failed")), test.ctx);
@@ -212,6 +216,7 @@ await test("failed attempt should not create trusted or provisional speed", asyn
 	assert.deepEqual(slots(await captureState(runtime, test, capturedStates)), { lastRun: null, currentRun: null }, "failed attempt should not create trusted or provisional speed");
 
 	runtime.events.agentStart({ type: "agent_start" }, test.ctx);
+	runtime.events.providerRequest({ type: "before_provider_request", payload: {} }, test.ctx);
 	runtime.events.messageUpdate(messageUpdate(assistant(40), "text_delta"), test.ctx);
 	runtime.events.messageUpdate(messageUpdate(assistant(40), "text_delta"), test.ctx);
 	await runtime.events.messageEnd(messageEnd(assistant(40, { input: 20, cost: { total: 2 } }, "stop", "retry-success")), test.ctx);
@@ -227,6 +232,7 @@ await test("recoverable length response should be provisional until Pi announces
 	const { runtime, capturedStates } = createRuntime([1_000, 2_000, 3_000, 4_000]);
 	runtime.events.sessionStart({ type: "session_start" }, test.ctx);
 	runtime.events.agentStart({ type: "agent_start" }, test.ctx);
+	runtime.events.providerRequest({ type: "before_provider_request", payload: {} }, test.ctx);
 	runtime.events.messageUpdate(messageUpdate(assistant(100), "text_delta"), test.ctx);
 	runtime.events.messageUpdate(messageUpdate(assistant(100), "text_delta"), test.ctx);
 	await runtime.events.messageEnd(messageEnd(assistant(100, { input: 1, cost: { total: 1 } }, "length", "truncated")), test.ctx);
@@ -246,6 +252,7 @@ await test("recoverable length response should be provisional until Pi announces
 	assert.deepEqual(slots(await captureState(runtime, test, capturedStates)), { lastRun: null, currentRun: null }, "compaction retry should retract the truncated response speed before replacement");
 
 	runtime.events.agentStart({ type: "agent_start" }, test.ctx);
+	runtime.events.providerRequest({ type: "before_provider_request", payload: {} }, test.ctx);
 	runtime.events.messageUpdate(messageUpdate(assistant(30), "text_delta"), test.ctx);
 	runtime.events.messageUpdate(messageUpdate(assistant(30), "text_delta"), test.ctx);
 	await runtime.events.messageEnd(messageEnd(assistant(30, { input: 2, cost: { total: 0.3 } }, "stop", "replacement")), test.ctx);
@@ -261,6 +268,7 @@ await test("first core run should remain provisional while a continuation can be
 	const { runtime, capturedStates } = createRuntime([1_000, 2_000, 5_000, 6_000]);
 	runtime.events.sessionStart({ type: "session_start" }, test.ctx);
 	runtime.events.agentStart({ type: "agent_start" }, test.ctx);
+	runtime.events.providerRequest({ type: "before_provider_request", payload: {} }, test.ctx);
 	runtime.events.messageUpdate(messageUpdate(assistant(20), "text_delta"), test.ctx);
 	runtime.events.messageUpdate(messageUpdate(assistant(20), "text_delta"), test.ctx);
 	await runtime.events.messageEnd(messageEnd(assistant(20, {}, "toolUse", "first")), test.ctx);
@@ -270,6 +278,7 @@ await test("first core run should remain provisional while a continuation can be
 
 	runtime.events.agentStart({ type: "agent_start" }, test.ctx);
 	assert.deepEqual(slots(await captureState(runtime, test, capturedStates)), { lastRun: null, currentRun: first }, "queued continuation agent_start should preserve prior model calls");
+	runtime.events.providerRequest({ type: "before_provider_request", payload: {} }, test.ctx);
 	runtime.events.messageUpdate(messageUpdate(assistant(60), "text_delta"), test.ctx);
 	runtime.events.messageUpdate(messageUpdate(assistant(60), "text_delta"), test.ctx);
 	await runtime.events.messageEnd(messageEnd(assistant(60, {}, "stop", "second")), test.ctx);
@@ -298,6 +307,68 @@ await test("toolResult usage and turn lifecycle alone should not synthesize mode
 	assert.deepEqual(slots(state), { lastRun: null, currentRun: null }, "toolResult usage and turn lifecycle alone should not synthesize model speed without assistant stream timing");
 	assert.deepEqual(state.usage, { input: 4, output: 5, cacheRead: 6, cacheWrite: 7, cost: 0.8 }, "usage-bearing tools should still enter the complete billed-session ledger");
 	assert.equal(getRemainingNowReads(), 1, "non-assistant and lifecycle events should not consume model-stream clocks");
+});
+
+await test("buffered and single-delta tool calls include initial latency without chunk clock reads", async () => {
+	for (const deltaCount of [0, 1]) {
+		const test = createContext();
+		const { runtime, capturedStates, getRemainingNowReads } = createRuntime([1_000, 5_000]);
+		runtime.events.sessionStart({ type: "session_start" }, test.ctx);
+		runtime.events.agentStart({ type: "agent_start" }, test.ctx);
+		runtime.events.providerRequest({ type: "before_provider_request", payload: {} }, test.ctx);
+		const message = { ...assistant(140, { reasoning: 20 }, "toolUse", `buffered-${deltaCount}`),
+			content: [{ type: "toolCall", id: "tool-1", name: "example", arguments: { count: 1 } }] };
+		for (let i = 0; i < deltaCount; i++) runtime.events.messageUpdate(messageUpdate(message, "toolcall_delta"), test.ctx);
+		assert.deepEqual(slots(await captureState(runtime, test, capturedStates)), { lastRun: null, currentRun: null });
+		await runtime.events.messageEnd(messageEnd(message), test.ctx);
+		runtime.events.agentSettled({ type: "agent_settled" }, test.ctx);
+		assert.deepEqual(slots(await captureState(runtime, test, capturedStates)), {
+			lastRun: expectedTurn(1_000, 5_000, 4_000, 120, { totalTokens: 140 }), currentRun: null,
+		});
+		assert.equal(getRemainingNowReads(), 0);
+	}
+});
+
+await test("weighted multiple requests include reasoning-only duration but not long tool gaps", async () => {
+	const test = createContext();
+	const { runtime, capturedStates, getRemainingNowReads } = createRuntime([0, 3_000, 63_000, 64_000]);
+	runtime.events.sessionStart({ type: "session_start" }, test.ctx);
+	runtime.events.agentStart({ type: "agent_start" }, test.ctx);
+	runtime.events.providerRequest({ type: "before_provider_request", payload: {} }, test.ctx);
+	await runtime.events.messageEnd(messageEnd(assistant(80, { reasoning: 80 }, "toolUse", "reasoning-only")), test.ctx);
+	await runtime.events.toolExecutionEnd({ type: "tool_execution_end" }, test.ctx);
+	await runtime.events.turnStart({ type: "turn_start" }, test.ctx);
+	runtime.events.providerRequest({ type: "before_provider_request", payload: {} }, test.ctx);
+	await runtime.events.messageEnd(messageEnd(assistant(120, {}, "stop", "answer")), test.ctx);
+	runtime.events.agentSettled({ type: "agent_settled" }, test.ctx);
+	assert.deepEqual(slots(await captureState(runtime, test, capturedStates)), {
+		lastRun: expectedTurn(0, 64_000, 4_000, 120, { totalTokens: 200, assistantMessages: 2 }), currentRun: null,
+	});
+	assert.equal(getRemainingNowReads(), 0);
+});
+
+await test("fresh runs and invalid settled runs clear stale rates and duplicate settlement is silent", async () => {
+	const test = createContext();
+	const { runtime, capturedStates, getRemainingNowReads } = createRuntime([0, 4_000, 10_000, 11_000]);
+	runtime.events.sessionStart({ type: "session_start" }, test.ctx);
+	runtime.events.agentStart({ type: "agent_start" }, test.ctx);
+	runtime.events.providerRequest({ type: "before_provider_request", payload: {} }, test.ctx);
+	await runtime.events.messageEnd(messageEnd(assistant(120, {}, "stop", "old")), test.ctx);
+	runtime.events.agentSettled({ type: "agent_settled" }, test.ctx);
+	assert.equal(slots(await captureState(runtime, test, capturedStates)).lastRun?.tokensPerSecond, 30);
+	runtime.events.agentStart({ type: "agent_start" }, test.ctx);
+	assert.deepEqual(slots(await captureState(runtime, test, capturedStates)), { lastRun: null, currentRun: null });
+	runtime.events.providerRequest({ type: "before_provider_request", payload: {} }, test.ctx);
+	await runtime.events.messageEnd(messageEnd(assistant(30, {}, "toolUse", "valid-part")), test.ctx);
+	assert.ok(slots(await captureState(runtime, test, capturedStates)).currentRun);
+	// Missing request hook after one valid completion invalidates the entire run.
+	await runtime.events.messageEnd(messageEnd(assistant(30, {}, "stop", "missing-boundary")), test.ctx);
+	runtime.events.agentSettled({ type: "agent_settled" }, test.ctx);
+	assert.deepEqual(slots(await captureState(runtime, test, capturedStates)), { lastRun: null, currentRun: null });
+	const beforeDuplicate = test.getRenderRequests();
+	runtime.events.agentSettled({ type: "agent_settled" }, test.ctx);
+	assert.equal(test.getRenderRequests(), beforeDuplicate);
+	assert.equal(getRemainingNowReads(), 0);
 });
 
 console.log("✓ runtime model-speed checks passed");

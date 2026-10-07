@@ -65,6 +65,22 @@ test("the reported half-screen frame folds Git and Model details alongside Conte
 	}
 });
 
+test("measured full density explicitly labels avg tok/s; compact densities preserve provisional markers", () => {
+	const config = defaultConfig();
+	config.icons = "plain";
+	config.segments = [{ id: "throughput", enabled: true }];
+	const state = densityState();
+	const measurement = { startedAtMs: 0, endedAtMs: 4_000, elapsedMs: 4_000, tokensPerSecond: 30,
+		usage: { input: 0, output: 120, cacheRead: 0, cacheWrite: 0, totalTokens: 120, assistantMessages: 1 } };
+	for (const provisional of [false, true]) {
+		state.throughput = { currentRun: provisional ? measurement : null, lastRun: provisional ? null : measurement };
+		const marker = provisional ? "~" : "";
+		for (const [width, label] of [[96, `${marker}30 avg tok/s`], [95, `${marker}30/s`], [64, `${marker}30/s`], [63, `${marker}30/s`]] as const) {
+			assert.equal(stripControls(renderGlanceLine(state, config, width)), `spd ${label}`);
+		}
+	}
+});
+
 test("density preserves alerts, explicit detail choices and model always labels", () => {
 	const config = defaultConfig(), state = densityState();
 	config.icons = "plain";

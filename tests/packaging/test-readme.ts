@@ -22,8 +22,8 @@ function assertIncludes(document: string, fragment: string, message: string): vo
 	assert.ok(document.includes(fragment), message);
 }
 
-assert.ok(readme.length < 3_000, "the English README should remain a concise product page");
-assert.ok(chineseReadme.length < 2_400, "the Chinese README should remain a concise product page");
+assert.ok(readme.length < 4_000, "the English README should remain a concise product page");
+assert.ok(chineseReadme.length < 2_800, "the Chinese README should remain a concise product page");
 
 assert.match(readme, /rounded editor/i, "the English README should describe the editor");
 assertIncludes(readme, "README.zh-CN.md", "the English README should link to Simplified Chinese");

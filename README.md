@@ -39,6 +39,12 @@ Restart Pi or run `/reload`.
 
 No runtime dependencies. No telemetry.
 
+### Model speed
+
+`avg tok/s` is **effective output throughput**, not raw decode speed: provider output (including tool calls) minus reported reasoning tokens, divided by summed full model request durations. Timing includes initial latency and thinking, but excludes tool execution, gaps between requests and blocking UI prompts. Subtracting reasoning tokens while including thinking time changes the metric's meaning: it measures useful output per request second, not generation speed.
+
+`~` marks the average of completed requests in the current run; it becomes final when the run settles. A fresh run clears the old rate. Missing or ambiguous boundaries, or invalid timing/output usage, show unknown; no tokens are guessed from chunks, and no speed cap is applied.
+
 ## Configure
 
 Run `/glance` for **Appearance**, **Status line**, **Activity**, and **Input** settings. `Tab` switches sections, arrows adjust, and `S` saves.

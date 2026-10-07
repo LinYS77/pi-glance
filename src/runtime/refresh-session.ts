@@ -325,6 +325,7 @@ export class RuntimeRefreshSession {
 	}
 
 	async turnStart(ctx: ExtensionContext): Promise<void> {
+		this.modelSpeedTracker.turnStart();
 		await this.refresh(ctx, LIFECYCLE_MODEL_ON_WORKSPACE_CHANGE);
 	}
 
@@ -340,23 +341,27 @@ export class RuntimeRefreshSession {
 		await this.refresh(ctx, CONFIG_SAVED, { beforeRender });
 	}
 
+	providerRequest(): void {
+		this.modelSpeedTracker.requestStart(() => this.host.nowMs());
+	}
+
 	messageUpdate(event: RuntimeMessageUpdateInput): void {
 		this.modelSpeedTracker.messageUpdate(event.message, event.assistantMessageEvent, () => this.host.nowMs());
 	}
 
 	uiPromptStart(): void {
-		this.modelSpeedTracker.uiPromptStart();
+		this.modelSpeedTracker.uiPromptStart(() => this.host.nowMs());
 	}
 
 	uiPromptEnd(): void {
-		this.modelSpeedTracker.uiPromptEnd();
+		this.modelSpeedTracker.uiPromptEnd(() => this.host.nowMs());
 	}
 
 	async messageEnd(event: RuntimeMessageEndInput, ctx: ExtensionContext): Promise<void> {
 		const message = event.message;
 		const hadState = this.state !== undefined;
 		const delta = usageTotalsFromMessage(message);
-		const modelSpeedIntent = this.modelSpeedTracker.messageEnd(message);
+		const modelSpeedIntent = this.modelSpeedTracker.messageEnd(message, () => this.host.nowMs());
 		const plan = message.role === "assistant"
 			? ASSISTANT_MESSAGE_END
 			: message.role === "toolResult" && !this.usageTotalsAreZero(delta)
