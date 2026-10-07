@@ -216,7 +216,7 @@ test("the full-width bottom overlay keeps the editor mounted and disposes its pr
 			const layout = typeof options?.overlayOptions === "function" ? options.overlayOptions() : options?.overlayOptions;
 			assert.equal(layout?.width, "100%");
 			assert.equal(layout?.anchor, "bottom-left");
-			assert.deepEqual(layout?.margin, { bottom: 0 }, "Pi 0.86 has no empty-footer reservation in either mode");
+			assert.deepEqual(layout?.margin, { bottom: 0 }, "An empty Pi footer reserves no rows in either mode");
 			pane.handleInput?.(k.backTab);
 			pane.handleInput?.(k.backTab);
 			pane.handleInput?.(k.right);

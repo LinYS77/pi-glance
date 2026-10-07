@@ -39,7 +39,6 @@ await test("fresh agent_start clears both rate slots; continuation preserves com
 await test("events outside a run and non-assistant events ignore the clock", () => {
 	const run = new ModelSpeedRunTracker();
 	run.requestStart(throwingClock);
-	assert.deepEqual(run.messageUpdate(assistant(40), { type: "text_delta" }, throwingClock), { kind: "none" });
 	assert.deepEqual(run.messageEnd(assistant(40), throwingClock), { kind: "none" });
 	run.start();
 	assert.deepEqual(run.messageEnd({ role: "user" }, throwingClock), { kind: "none" });
@@ -53,43 +52,17 @@ await test("message_end is provisional and only settle finalizes; duplicate sett
 	assert.deepEqual(run.settle(), { kind: "clear-current-run" });
 });
 
-await test("initial latency, thinking and chunk bursts are included, independent of chunk count", () => {
-	for (const chunks of [[], [4_999], [1_500, 2_000, 4_998, 4_999]]) {
-		const run = new ModelSpeedRunTracker(); run.start(); run.requestStart(clock(1_000));
-		const message = assistant(140, { reasoning: 20 }, "toolUse", "burst");
-		for (const type of ["thinking_start", "thinking_delta", "thinking_end", "text_end", "toolcall_start"]) {
-			assert.deepEqual(run.messageUpdate(message, { type }, throwingClock), { kind: "none" });
-		}
-		for (const at of chunks) {
-			run.messageUpdate(message, { type: "text_delta" }, clock(at));
-			run.messageUpdate(message, { type: "toolcall_delta" }, clock(at));
-		}
-		expectCurrent(run.messageEnd(message, clock(5_000)), measurement(1_000, 5_000, 4_000, 120, { totalTokens: 140 }));
-		expectFinal(run, measurement(1_000, 5_000, 4_000, 120, { totalTokens: 140 }));
-	}
-});
-
-await test("thinking between output spans still contributes full request time", () => {
+await test("non-reasoning output uses the full request duration", () => {
 	const run = new ModelSpeedRunTracker(); run.start(); run.requestStart(clock(1_000));
-	for (const type of ["text_delta", "thinking_delta", "text_delta"]) run.messageUpdate(assistant(50), { type }, throwingClock);
-	expectCurrent(run.messageEnd(assistant(50), clock(6_000)), measurement(1_000, 6_000, 5_000, 50));
-});
-
-await test("zero or one toolcall delta works using final provider usage", () => {
-	for (const count of [0, 1]) {
-		const run = new ModelSpeedRunTracker(); run.start(); run.requestStart(clock(0));
-		const message = { ...(assistant(120, {}, "toolUse") as object),
-			content: [{ type: "toolCall", id: "tool-1", name: "example", arguments: {} }] };
-		for (let i = 0; i < count; i++) run.messageUpdate(message, { type: "toolcall_delta" }, throwingClock);
-		expectCurrent(run.messageEnd(message, clock(4_000)), measurement(0, 4_000, 4_000, 120));
-	}
+	const message = assistant(140, { reasoning: 20 }, "toolUse", "response");
+	expectCurrent(run.messageEnd(message, clock(5_000)), measurement(1_000, 5_000, 4_000, 120, { totalTokens: 140 }));
+	expectFinal(run, measurement(1_000, 5_000, 4_000, 120, { totalTokens: 140 }));
 });
 
 await test("blocking UI pauses exclude only the prompt span; duplicate boundaries are coalesced", () => {
 	const run = new ModelSpeedRunTracker(); run.start(); run.requestStart(clock(1_000));
 	run.uiPromptEnd(throwingClock);
 	run.uiPromptStart(clock(2_000)); run.uiPromptStart(throwingClock);
-	run.messageUpdate(assistant(50), { type: "text_delta" }, throwingClock);
 	run.uiPromptEnd(clock(5_000)); run.uiPromptEnd(throwingClock);
 	expectCurrent(run.messageEnd(assistant(50), clock(6_000)), measurement(1_000, 6_000, 2_000, 50));
 });
@@ -152,9 +125,8 @@ await test("unrecovered errors or aborts clear final and provisional rates", () 
 	}
 });
 
-await test("missing request boundary stays unknown even with deltas or earlier valid requests", () => {
+await test("missing request boundary invalidates earlier valid requests", () => {
 	const run = new ModelSpeedRunTracker(); run.start(); response(run, assistant(30), 0, 1_000);
-	run.messageUpdate(assistant(20), { type: "text_delta" }, throwingClock);
 	assert.deepEqual(run.messageEnd(assistant(20), throwingClock), { kind: "clear-current-run" });
 	assert.deepEqual(run.settle(), unknownFinal);
 });

@@ -113,7 +113,7 @@ Each built-in segment returns display content, a color level, and any custom ico
 - `session_start` and structural `session_tree` may reconcile full persisted entries.
 - Ordinary lifecycle events use public lifecycle snapshots and event deltas; they do not rescan all entries.
 - Compaction usage comes from `SessionCompactEvent.compactionEntry` or persisted boundary summaries, deduplicated by public entry ID.
-- Pi 0.86 standalone `usage` entries (including cache warming and unknown kinds) belong to the same billed-session ledger. Initial/reliable snapshots count them alongside messages and summaries. Before a live editor or settings preview reads its state, an in-memory cursor checks the public `getLeafId()` and walks only unseen `getEntry(id).parentId` links, applying standalone usage and compaction/branch-summary usage once. Pi's own post-warming redraw drives idle updates; unchanged frames are O(1), with no timer, full-history rescan, fabricated event, or use of pre-request cost estimates. This does not touch Context or Model speed. Reliable snapshots seed both the cursor and event deduplication ledger, and retired UI callbacks cannot read a replaced session. `agent_settled` also reconciles persisted usage and refreshes public Context after final boundary entries, requesting one render only when visible facts change.
+- Standalone `usage` entries (including cache warming and unknown kinds) belong to the same billed-session ledger. Initial/reliable snapshots count them alongside messages and summaries. Before a live editor or settings preview reads its state, an in-memory cursor checks the public `getLeafId()` and walks only unseen `getEntry(id).parentId` links, applying standalone usage and compaction/branch-summary usage once. Pi's own post-warming redraw drives idle updates; unchanged frames are O(1), with no timer, full-history rescan, fabricated event, or use of pre-request cost estimates. This does not touch Context or Model speed. Reliable snapshots seed both the cursor and event deduplication ledger, and retired UI callbacks cannot read a replaced session. `agent_settled` also reconciles persisted usage and refreshes public Context after final boundary entries, requesting one render only when visible facts change.
 - Assistant/tool-result usage comes from `message_end` deltas and is deduplicated by stable public IDs when available.
 - Context always comes from `ctx.getContextUsage()`, with selected-model capacity only a fallback when the public result is absent. Selection/thinking metadata updates do not overwrite Context; a virtual selection can have different limits from its physical responding model.
 - Git scheduling is independent from render decisions.
@@ -181,7 +181,7 @@ When pi-glance installs its editor it records the previous factory. On disable o
 
 An enabled-to-enabled config save does not reinstall the editor or footer, preserving the live editor instance and Pi-owned editing state. Pi disposes the Glance footer when another extension replaces it; that notification detaches the status source and releases ownership. Disable and shutdown only restore the built-in footer while Glance still owns the slot. Disabled startup leaves both editor and footer slots untouched.
 
-Pi has no public footer getter. The supported Pi 0.86.1+ layout permits Glance's footer to occupy zero rows in both modes.
+Pi has no public footer getter. Pi 1.0+ permits Glance's footer to occupy zero rows in both modes.
 
 ## Extension statuses
 
@@ -281,26 +281,24 @@ Config stores two Glance palettes:
 { theme: { light: GlanceThemeName, dark: GlanceThemeName } }
 ```
 
-Palette selection prefers public appearance (Pi 0.99+) and falls back for older hosts:
+Palette selection uses the public Pi 1.0 `Theme.appearance` property directly:
 
 ```text
 Pi theme.appearance === "light" -> theme.light
 Pi theme.appearance === "dark"  -> theme.dark
-otherwise, exact theme.name "light" / "dark" -> corresponding slot
-otherwise -> theme.light
 ```
 
-The current theme is read lazily so `system` appearance changes and custom themes select the correct slot without querying terminal colors or changing Pi's theme.
+The current theme is read lazily so `system` appearance changes and custom themes select the correct slot without querying terminal colors or changing Pi's theme. Standalone previews default to light; `npm run preview:working -- --dark` selects the dark slot.
 
 Both slots can select any of the 22 palettes. `/glance` does not change Pi themes. Colors use Pi's reported terminal capability: RGB when truecolor is available, ANSI 256 otherwise.
 
 For Bash input (`getText().trimStart().startsWith("!")`), the live frame uses the editor's public `borderColor` callback. Pi updates this callback when input mode or theme changes. Normal input, title, and status keep Glance colors; unfocused borders remain dimmed. Changing only the border does not invalidate the status cache.
 
-At extremely narrow widths, the inherited editor is given enough room for a two-column character plus padding and cursor space, then clipped through the frame. Pi 0.86.1 retains the one-column wide-grapheme recursion, so this guard and recognition of truncated scroll borders remain necessary. Thinking shortcuts now rely solely on Pi's `thinking_level_select` event; the old editor key callback and duplicate refresh plan have been removed.
+At extremely narrow widths, the inherited editor is given enough room for a two-column character plus padding and cursor space, then clipped through the frame. Pi 1.0.0 and 1.0.4 still recurse on wide graphemes in a one-column layout, so this guard and recognition of truncated scroll borders remain necessary. Thinking changes arrive through Pi's public `thinking_level_select` event.
 
 ## Configuration
 
-- Current on-disk schema version: `15`.
+- Current on-disk schema version: `15`, independent of the package and Pi versions. Configuration migrations preserve existing user files; they do not provide compatibility with older Pi hosts.
 - New-install and settings-reset defaults use Nerd Font icons, smart workspace paths, one top-margin row, and all seven status items enabled. Other defaults include a three-row editor, Text activity, full-border effect area, light/dark palette slots, input/output Tokens with cache rate, and automatic provider/thinking labels. Defaults fill missing or invalid values; the deliberate migrations are pre-v12 Git Summary and pre-v15 Text activity.
 - Every pre-v15 config (including legacy top/perimeter/off and boolean modes) is forced to `activityMode: text` on load. Existing enabled state, speed, color and area are retained; old top/true maps to top, other areas to perimeter. New multiplier and blink rate default to 0.50. Normalized in-memory config already has schema 15, so choosing Sweep and saving persists that choice without applying migration again. Loading never rewrites the file; only explicit Save installs the new schema atomically. Reset defaults to Text.
 - Missing or invalid `editor.workingSweepColor` defaults to `theme`, preserving the previous beam. Pre-v14 configs gain it in memory only; Save persists the chosen value. Git's pre-v12 migration threshold and saved extension ordering/visibility remain unchanged.
@@ -315,13 +313,13 @@ At extremely narrow widths, the inherited editor is given enough room for a two-
 - `index.ts` resolves the Pi agent directory and creates the config store when the extension starts. Importing the modules does not read a config file.
 - File-store tests use separate temporary directories.
 
-## Compatibility and packaging
+## Supported versions and packaging
 
-- Minimum supported Pi and pinned development SDK: `0.86.1`, for the unified native activity indicator and zero-height footer behavior.
+- Minimum supported Pi and pinned development SDK: `1.0.0`. Only Pi 1.0 and later are supported.
 - Node floor: `>=22.19.0`.
-- Pi packages are `>=0.86.1` peer dependencies supplied by Pi and are not bundled.
+- Pi packages are `>=1.0.0` peer dependencies supplied by Pi and are not bundled.
 - Production source is shipped directly as TypeScript: root `index.ts` plus `src/**/*.ts`. Tests and fixtures are not shipped.
-- CI and GitHub Release share a four-job matrix: Node 22.19/24 × Pi 0.86.1/1.0.0. Each job verifies actual SDK versions, typechecks, and runs the behavior/package suite with an isolated agent directory. The newer SDK is installed without modifying the pinned minimum-version manifest or lockfile. Branch CI does not run on tags.
+- CI and GitHub Release share a four-job matrix: Node 22.19/24 × Pi 1.0.0/1.0.4. Each job verifies actual SDK versions, typechecks, and runs the behavior/package suite with an isolated agent directory. The newer SDK is installed without modifying the pinned minimum-version manifest or lockfile. Branch CI does not run on tags.
 - Tests import the project interfaces directly. Import-graph checks detect cycles and forbidden dependencies; separate fixtures verify palette data.
 - Display tests separate config upgrades, the shared save transaction, footer lifecycle, fitting and settings interactions. Live/preview parity compares the real entry points, not a copy of the renderer inside test helpers. Color-data checks cover all palette/color/depth combinations; UI tests use representative choices and scroll boundaries instead of repeating the same save matrix for every preference.
 - The package test compares `npm pack --dry-run` output with the full production file list.

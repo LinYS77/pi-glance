@@ -10,7 +10,6 @@ import type {
 	ExtensionContext,
 	ExtensionEvent,
 	MessageEndEvent,
-	MessageUpdateEvent,
 	ReadonlyFooterDataProvider,
 	SessionCompactEvent,
 	SessionShutdownEvent,
@@ -29,7 +28,6 @@ import { GitRefresher } from "./git.js";
 import type { ScheduleActivityFrame } from "./activity-animation.js";
 import { RuntimeRefreshSession } from "./refresh-session.js";
 import type { GlanceRenderStyleContext } from "../theme/adapter.js";
-import { readPiAmbientTone } from "../theme/tone.js";
 import type { ExtensionStatusSource, GitSnapshot, GlanceConfig, GlanceState } from "../types.js";
 
 export type GlancePaneResult = { action: "save"; config: GlanceConfig } | { action: "cancel" };
@@ -85,7 +83,6 @@ export interface GlanceRuntime {
 		sessionTree(event: SessionTreeEvent, ctx: ExtensionContext): Promise<void>;
 		sessionCompact(event: SessionCompactEvent, ctx: ExtensionContext): Promise<void>;
 		providerRequest(event: BeforeProviderRequestEvent, ctx: ExtensionContext): void;
-		messageUpdate(event: MessageUpdateEvent, ctx: ExtensionContext): void;
 		uiPromptStart(event: UIPromptStartEvent, ctx: ExtensionContext): void;
 		uiPromptEnd(event: UIPromptEndEvent, ctx: ExtensionContext): void;
 		messageEnd(event: MessageEndEvent, ctx: ExtensionContext): Promise<void>;
@@ -106,7 +103,7 @@ function isTuiMode(ctx: ExtensionContext): boolean {
 
 function runtimeRenderStyleContext(ctx: ExtensionContext, getTrueColor: () => boolean): GlanceRenderStyleContext {
 	return {
-		getAmbientTone: () => readPiAmbientTone(ctx.ui),
+		getAmbientTone: () => ctx.ui.theme.appearance,
 		getTrueColor,
 	};
 }
@@ -396,9 +393,6 @@ export function createGlanceRuntime(adapters: GlanceRuntimeAdapters): GlanceRunt
 			},
 			providerRequest: (_event, _ctx) => {
 				refreshSession.providerRequest();
-			},
-			messageUpdate: (event, _ctx) => {
-				refreshSession.messageUpdate(event);
 			},
 			uiPromptStart: (_event, _ctx) => {
 				waitingForUi = true;

@@ -53,13 +53,13 @@ test("live and preview use current palette, color capability and explicit overri
 	const config = defaultConfig(); config.icons = "plain"; config.editor.topMarginRows = 0;
 	config.theme = { light: "one-light", dark: "tokyo-night" }; onlySegments(config, ["model"]);
 	const state = testState();
-	let tone: "light" | "dark" | "unknown" = "light", trueColor = true;
+	let tone: "light" | "dark" = "light", trueColor = true;
 	let override: ResolvedGlanceStyles | undefined;
 	const context = { getAmbientTone: () => tone, getTrueColor: () => trueColor, get styles() { return override; } };
 	const editor = editorFor(config, state, { renderStyleContext: context }); editor.setText("keep my draft");
 	for (const [nextTone, rgb, injected] of [
 		["light", true, undefined], ["dark", true, undefined], ["dark", false, undefined],
-		["unknown", true, undefined], ["light", true, resolveBuiltInGlanceStyles("nord")],
+		["light", true, resolveBuiltInGlanceStyles("nord")],
 		["light", true, undefined],
 	] as const) {
 		tone = nextTone; trueColor = rgb; override = injected;

@@ -45,7 +45,7 @@ export interface RuntimeTestContextOptions {
 	entries?: StateSessionEntry[];
 	branch?: StateSessionEntry[];
 	invokeFooterFactory?: boolean;
-	uiTheme?: unknown;
+	uiTheme?: ReturnType<typeof fakePiTheme>;
 	initialEditorFactory?: RuntimeCapturedEditorFactory;
 }
 
@@ -69,7 +69,7 @@ export interface RuntimeTestContext {
 	setModel(model: RuntimeMutableModelInfo | undefined): void;
 	setContextUsage(usage: RuntimeMutableContextUsage | undefined): void;
 	setSessionEntries(entries: StateSessionEntry[]): void;
-	setUiTheme(theme: unknown): void;
+	setUiTheme(theme: ReturnType<typeof fakePiTheme>): void;
 	setCurrentEditorFactory(factory: RuntimeCapturedEditorFactory | undefined): void;
 }
 
@@ -198,9 +198,9 @@ export function sessionBranchSummary(options: { id?: string; usage?: Record<stri
 	return { type: "branch_summary", id: options.id ?? "branch-summary-1", usage: options.usage };
 }
 
-export function fakePiTheme(name = "runtime-current-pi-theme") {
+export function fakePiTheme(name = "system", appearance: "light" | "dark" = "light") {
 	return {
-		name,
+		name, appearance,
 		getColorMode: () => "test-mode",
 		fg: (_color: string, text: string) => `<<pi-theme:${text}>>`,
 	};
@@ -251,7 +251,7 @@ export function createRuntimeTestContext(options: RuntimeTestContextOptions = {}
 	let contextUsage: RuntimeMutableContextUsage | undefined = options.contextUsage ?? { tokens: 42, contextWindow: 200_000, percent: 0.021 };
 	let entries: StateSessionEntry[] = options.entries ?? [];
 	let branch: StateSessionEntry[] = options.branch ?? [];
-	let uiTheme = options.uiTheme;
+	let uiTheme = options.uiTheme ?? fakePiTheme();
 	let currentEditorFactory = options.initialEditorFactory;
 	const mode = options.mode ?? "tui";
 	const hasUI = options.hasUI ?? (mode === "tui" || mode === "rpc");
@@ -357,7 +357,7 @@ export function createRuntimeTestContext(options: RuntimeTestContextOptions = {}
 		setSessionEntries: (nextEntries: StateSessionEntry[]) => {
 			entries = nextEntries;
 		},
-		setUiTheme: (theme: unknown) => {
+		setUiTheme: (theme) => {
 			uiTheme = theme;
 		},
 		setCurrentEditorFactory: (factory: RuntimeCapturedEditorFactory | undefined) => {

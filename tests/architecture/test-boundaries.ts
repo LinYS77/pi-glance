@@ -5,7 +5,6 @@ import { test } from "node:test";
 import { dependencyPath, importsFrom, IO_NETWORK_PROCESS_IMPORTS, readProductionSources, runtimeCycles, type SourceFile } from "../support/source-graph.js";
 
 const ROOT = process.cwd();
-const LEGACY_NAMESPACE = ["@mariozechner", ""].join("/");
 const ALLOWED_PI_IMPORTS = new Set([
 	"@earendil-works/pi-ai",
 	"@earendil-works/pi-coding-agent",
@@ -38,11 +37,10 @@ function assertCompatibilityBaseline(packageText: string, lockText: string): voi
 	const lock = JSON.parse(lockText) as {
 		packages?: Record<string, { engines?: Record<string, string>; devDependencies?: Record<string, string>; peerDependencies?: Record<string, string> }>;
 	};
-	// Unified editor activity indicators require Pi 0.86.1.
 	const expectedDevDependencies = {
-		"@earendil-works/pi-ai": "0.86.1",
-		"@earendil-works/pi-coding-agent": "0.86.1",
-		"@earendil-works/pi-tui": "0.86.1",
+		"@earendil-works/pi-ai": "1.0.0",
+		"@earendil-works/pi-coding-agent": "1.0.0",
+		"@earendil-works/pi-tui": "1.0.0",
 		"@types/node": "24.12.4",
 		typescript: "5.9.3",
 	};
@@ -51,15 +49,14 @@ function assertCompatibilityBaseline(packageText: string, lockText: string): voi
 	assert.equal(manifest.engines?.node, ">=22.19.0", "package.json should preserve Pi's Node floor");
 	assert.equal(lock.packages?.[""]?.engines?.node, ">=22.19.0", "package-lock should preserve Pi's Node floor");
 	for (const packageName of ALLOWED_PI_IMPORTS) {
-		assert.equal(manifest.peerDependencies?.[packageName], ">=0.86.1", `${packageName} should declare the Pi API floor`);
-		assert.equal(lock.packages?.[""]?.peerDependencies?.[packageName], ">=0.86.1", `package-lock should preserve the Pi API floor for ${packageName}`);
+		assert.equal(manifest.peerDependencies?.[packageName], ">=1.0.0", `${packageName} should declare the Pi API floor`);
+		assert.equal(lock.packages?.[""]?.peerDependencies?.[packageName], ">=1.0.0", `package-lock should preserve the Pi API floor for ${packageName}`);
 	}
 }
 
 function assertPublicPiImports(files: SourceFile[]): void {
 	for (const file of files) {
 		for (const record of importsFrom(file)) {
-			if (record.specifier.startsWith(LEGACY_NAMESPACE)) fail(`${file.path}: legacy Pi import ${record.specifier}`);
 			if (record.specifier.startsWith("@earendil-works/pi-") && !ALLOWED_PI_IMPORTS.has(record.specifier)) {
 				fail(`${file.path}: private/deep Pi import ${record.specifier}`);
 			}
@@ -87,18 +84,9 @@ function assertNoCorePatching(files: SourceFile[]): void {
 
 function assertProductGuardrails(files: SourceFile[]): void {
 	const forbidden: Array<[RegExp, string]> = [
-		[/\bthemeMode\b/, "themeMode"],
-		[/\bFOLLOW_PI_THEME_ID\b/, "FOLLOW_PI_THEME_ID"],
-		[/\btheme\s*:\s*["']pi["']/, 'theme: "pi"'],
-		[/\btheme\s*:\s*["']auto["']/, 'theme: "auto"'],
-		[/ctx\.ui\.setTheme\s*\(/, "ctx.ui.setTheme()"],
-		[/getAllThemes\s*\(/, "getAllThemes()"],
-		[/getTheme\s*\(/, "getTheme()"],
-		[/setTheme\s*\(/, "setTheme()"],
-		[/resolvePiThemeStyles|createPiRenderStyleContext|enablePiThemeStyles|readPiUiTheme|PiThemeLike|PiThemeColorToken|PiThemeStyleOptions/, "deleted Pi style seam"],
+		[/setTheme\s*\(/, "changing the Pi theme"],
 		[/sessionManager\.getBranch\s*\(/, "production sessionManager.getBranch()"],
 	];
-	assert.equal(files.some((file) => file.path === "render-style-context.ts"), false, "deleted render-style-context.ts must not return");
 	for (const file of files) {
 		for (const [pattern, label] of forbidden) {
 			if (pattern.test(file.text)) fail(`${file.path}: forbidden product path ${label}`);
@@ -160,7 +148,6 @@ const files = await readProductionSources();
 const packageText = await readFile(join(ROOT, "package.json"), "utf8");
 const lockText = await readFile(join(ROOT, "package-lock.json"), "utf8");
 
-assert.equal(files.some((file) => file.text.includes(LEGACY_NAMESPACE)), false, "production source must not contain the legacy Pi namespace");
 test("Pi dependency baseline and peer packaging", () => assertCompatibilityBaseline(packageText, lockText));
 test("only public Pi imports", () => assertPublicPiImports(files));
 test("no Pi or global monkey-patching", () => assertNoCorePatching(files));

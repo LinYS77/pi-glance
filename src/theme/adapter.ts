@@ -94,6 +94,6 @@ function resolveColorMode(context: GlanceRenderStyleContext): GlanceColorMode {
 
 export function resolveGlanceRenderStyles(theme: GlanceThemePair, context: GlanceRenderStyleContext = {}, sweepColor: WorkingSweepColor = "theme"): ResolvedGlanceStyles {
 	if (context.styles) return context.styles;
-	const ambientTone = context.ambientTone ?? context.getAmbientTone?.() ?? "unknown";
+	const ambientTone = context.ambientTone ?? context.getAmbientTone?.() ?? "light";
 	return resolveBuiltInGlanceStyles(selectGlanceTheme(theme, ambientTone), resolveColorMode(context), sweepColor);
 }

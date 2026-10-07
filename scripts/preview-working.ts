@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { performance } from "node:perf_hooks";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
@@ -36,11 +35,7 @@ const state: GlanceState = {
 	},
 	version: 0,
 };
-let tone: GlanceAmbientTone = "unknown";
-try {
-	const theme = JSON.parse(readFileSync(join(agentDir, "settings.json"), "utf8")).theme;
-	if (theme === "light" || theme === "dark") tone = theme;
-} catch { /* Use the same unknown-tone fallback as Glance. */ }
+let tone: GlanceAmbientTone = "light";
 if (process.argv.includes("--light")) tone = "light";
 if (process.argv.includes("--dark")) tone = "dark";
 const requestedTheme = process.argv.find(arg => arg.startsWith("--theme="))?.slice("--theme=".length);

@@ -1,4 +1,4 @@
-import type { ExtensionContext, MessageEndEvent, MessageUpdateEvent, SessionCompactEvent } from "@earendil-works/pi-coding-agent";
+import type { ExtensionContext, MessageEndEvent, SessionCompactEvent } from "@earendil-works/pi-coding-agent";
 import { lifecycleInputsFromContext, thinkingInputsFromContext, usageTotalsFromEntries, usageTotalsFromEntry, usageTotalsFromMessage, type StateInputs, type StateLifecycleInputs, type StateMessageInputs, type StateSessionEntry } from "./snapshot.js";
 import {
 	addUsageTotals,
@@ -15,12 +15,6 @@ import {
 } from "./state.js";
 import { ModelSpeedRunTracker, type ModelSpeedStateIntent } from "./throughput-run-tracker.js";
 import type { GitSnapshot, GlanceConfig, GlanceState, UsageTotals } from "../types.js";
-
-export interface RuntimeMessageUpdateInput {
-	type?: MessageUpdateEvent["type"];
-	message: StateMessageInputs;
-	assistantMessageEvent: { type: MessageUpdateEvent["assistantMessageEvent"]["type"] };
-}
 
 export interface RuntimeMessageEndInput {
 	type?: MessageEndEvent["type"];
@@ -343,10 +337,6 @@ export class RuntimeRefreshSession {
 
 	providerRequest(): void {
 		this.modelSpeedTracker.requestStart(() => this.host.nowMs());
-	}
-
-	messageUpdate(event: RuntimeMessageUpdateInput): void {
-		this.modelSpeedTracker.messageUpdate(event.message, event.assistantMessageEvent, () => this.host.nowMs());
 	}
 
 	uiPromptStart(): void {

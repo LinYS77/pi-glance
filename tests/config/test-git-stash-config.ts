@@ -5,7 +5,7 @@ import { normalizeStashShortcut } from "../../src/input/shortcut.js";
 import { shortcutConflict } from "../../src/input/keybinding.js";
 import { configFromText, configToText, defaultConfig, normalizeConfig } from "../../src/config/model.js";
 
-test("v0.7 uses Summary for new installs and every legacy dirty preference without enabling disabled Git", () => {
+test("Summary defaults and config migration preserve disabled Git", () => {
 	assert.equal(defaultConfig().git.changes, "summary");
 	for (const version of [undefined, 1, 5, 8, 9, 10, 11]) for (const showDirty of [true, false, undefined]) {
 		const config = normalizeConfig({ version, git: { showDirty }, segments: [{ id: "git", enabled: false }] });

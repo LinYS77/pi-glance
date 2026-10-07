@@ -28,7 +28,6 @@ export default function piGlance(pi: ExtensionAPI): void {
 	pi.on("session_tree", runtime.events.sessionTree);
 	pi.on("session_compact", runtime.events.sessionCompact);
 	pi.on("before_provider_request", runtime.events.providerRequest);
-	pi.on("message_update", runtime.events.messageUpdate);
 	pi.on("ui_prompt_start", runtime.events.uiPromptStart);
 	pi.on("ui_prompt_end", runtime.events.uiPromptEnd);
 	pi.on("message_end", runtime.events.messageEnd);

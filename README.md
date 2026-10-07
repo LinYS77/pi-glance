@@ -64,12 +64,12 @@ Previews use example data.
 ## Notes
 
 - Nerd Font icons are enabled by default. For regular fonts, select `Plain` in `/glance` → **Appearance** → **Icons**.
-- Upgrading switches activity to **Text**. Choose **Sweep** under **Activity** to restore effects; previous speeds and colors are kept.
+- Activity defaults to **Text**. Choose **Sweep** under **Activity** for border effects.
 - Git **Summary** shows changed files and tracked `+ / −` lines. **Auto fetch** checks upstream every 5 minutes; disable under **Status line → Git**.
 - Drafts persist per session until restored. `--no-session` keeps them in memory.
 - **Extensions** shows compatible plugins' status text. Toggle, reorder or inspect under **Status line**; empty groups stay hidden.
 - Other editor or footer extensions may override parts of Glance's display.
-- Requires Pi 0.86.1+ and Node.js 22.19.0 or newer.
+- Requires Pi 1.0.0+ and Node.js 22.19.0 or newer.
 
 ## Update
 

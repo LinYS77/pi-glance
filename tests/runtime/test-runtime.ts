@@ -145,10 +145,6 @@ for (const matrixCase of [
 		invoke: (harness, test) => harness.runtime.events.toolExecutionEnd({}, test.ctx as ExtensionContext),
 	},
 	{
-		name: "message_update",
-		invoke: (harness, test) => harness.runtime.events.messageUpdate({ message: assistantMessage({ usage: { output: 4, totalTokens: 4 } }), assistantMessageEvent: { type: "text_delta" } }, test.ctx as ExtensionContext),
-	},
-	{
 		name: "ui_prompt_start",
 		invoke: (harness, test) => harness.runtime.events.uiPromptStart({ reason: "ui_prompt", kind: "confirm" }, test.ctx as ExtensionContext),
 	},
@@ -324,47 +320,37 @@ await test("runtime editor should honor Pi's false truecolor capability with ANS
 	assert.equal(paneRenderStyleContext.getTrueColor?.(), false, "/glance preview should receive the same lazy false truecolor capability");
 });
 
-await test("TUI install should not eagerly read UI theme tone before render", async () => {
-	const currentPiTheme = fakePiTheme("light");
-	const git = createGitHarness();
+await test("editor and settings read the current Pi appearance lazily", async () => {
+	const currentPiTheme = fakePiTheme("system", "light");
 	const test = createContext({ uiTheme: currentPiTheme });
-	const harness = createRuntimeHarness({ loadConfigSyncConfig: defaultConfig(), showPaneResults: [{ action: "cancel" }], git });
+	const harness = createRuntimeHarness({ loadConfigSyncConfig: defaultConfig(), showPaneResults: [{ action: "cancel" }], git: createGitHarness() });
 
 	harness.runtime.events.sessionStart({}, test.ctx);
-	assert.equal(test.getThemeReads(), 0, "TUI install should not eagerly read UI theme tone before render");
-	assert.equal(test.editorFactories.length, 1, "enabled TUI install should still register one editor factory with a current Pi theme present");
+	assert.equal(test.getThemeReads(), 0, "installation should not resolve the theme before rendering");
 	const editor = invokeEditorFactory(test, 0, () => undefined) as { focused: boolean; setText(text: string): void; render(width: number): string[] };
 	editor.focused = true;
-	editor.setText("ambient provider check");
-	currentPiTheme.name = "dark";
-	const darkEditorFrame = editor.render(100).join("\n");
-	assert.ok(darkEditorFrame.includes(fg(PALETTES.dark.border, "╭")), "live editor should lazily resolve exact Pi UI theme name dark to the dark Glance palette");
-	assert.equal(darkEditorFrame.includes("<<pi-theme:"), false, "current Pi UI theme presence should not activate Pi token color styles in the editor");
+	editor.setText("appearance check");
+	currentPiTheme.appearance = "dark";
 	currentPiTheme.name = "light";
-	const lightEditorFrame = editor.render(100).join("\n");
-	assert.ok(lightEditorFrame.includes(fg(PALETTES.light.border, "╭")), "live editor should re-read exact Pi UI theme name light on later renders");
-	currentPiTheme.name = "my-dark-theme";
-	const customEditorFrame = editor.render(100).join("\n");
-	assert.ok(customEditorFrame.includes(fg(PALETTES.light.border, "╭")), "custom Pi UI theme names should resolve as unknown and fall back to the light Glance palette");
-	test.setUiTheme(undefined);
-	const missingEditorFrame = editor.render(100).join("\n");
-	assert.ok(missingEditorFrame.includes(fg(PALETTES.light.border, "╭")), "missing Pi UI theme should resolve as unknown and fall back to the light Glance palette");
-	assert.ok(test.getThemeReads() >= 4, "editor render should lazily read UI theme tone through the ambient seam on each style resolution");
+	const darkFrame = editor.render(100).join("\n");
+	assert.ok(darkFrame.includes(fg(PALETTES.dark.border, "╭")), "appearance selects the dark palette even when the name says light");
+	assert.equal(darkFrame.includes("<<pi-theme:"), false, "Glance uses its own palette");
+	currentPiTheme.appearance = "light";
+	assert.ok(editor.render(100).join("\n").includes(fg(PALETTES.light.border, "╭")), "later renders follow appearance changes");
+	test.setUiTheme(fakePiTheme("custom-light-theme", "dark"));
+	assert.ok(editor.render(100).join("\n").includes(fg(PALETTES.dark.border, "╭")), "replacing the host theme refreshes the palette");
 
-	test.setUiTheme(currentPiTheme);
-	currentPiTheme.name = "dark";
 	await harness.runtime.commands.openPane("", test.ctx);
-	const paneRenderStyleContext = assertAmbientPaneOptions(harness.showPaneOptions[0], "current Pi UI theme presence");
-	assert.equal(paneRenderStyleContext.getAmbientTone?.(), "dark", "pane preview context should lazily resolve the current Pi UI theme name to dark");
+	const styleContext = assertAmbientPaneOptions(harness.showPaneOptions[0], "Pi appearance");
+	assert.equal(styleContext.getAmbientTone?.(), "dark");
 	const previewState = harness.showPanePreviewStates[0];
-	assert.ok(previewState, "pane ambient tone test should capture preview state");
-	const panePreview = renderInputSurface(previewState, harness.showPaneInitials[0]!, 100, {
-		...paneRenderStyleContext,
-		contentLines: ["preview"],
-		focused: true,
+	assert.ok(previewState);
+	const preview = renderInputSurface(previewState, harness.showPaneInitials[0]!, 100, {
+		...styleContext, contentLines: ["preview"], focused: true,
 	}).join("\n");
-	assert.ok(panePreview.includes(fg(PALETTES.dark.border, "╭")), "/glance preview should receive lazy dark ambient tone through Glance palettes");
-	assert.equal(panePreview.includes("<<pi-theme:"), false, "/glance preview should not activate Pi token color styles");
+	assert.ok(preview.includes(fg(PALETTES.dark.border, "╭")), "settings preview uses the same current appearance");
+	test.setUiTheme(currentPiTheme);
+	assert.equal(styleContext.getAmbientTone?.(), "light", "an open preview follows theme replacement");
 });
 
 await test("model_select counter baseline should include the session_start entries read", async () => {

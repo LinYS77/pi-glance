@@ -250,7 +250,7 @@ export function normalizeConfig(raw: unknown): GlanceConfig {
 			showThinking: parseStringEnum(model.showThinking, MODEL_THINKING_MODES, defaults.model.showThinking),
 		},
 		git: {
-			// v0.7 deliberately moves every legacy dirty preference to Summary.
+			// Pre-v12 dirty flags migrate to Summary.
 			changes: typeof record.version === "number" && record.version < 12
 				? "summary"
 				: parseStringEnum(git.changes, GIT_CHANGES_MODES, "summary"),

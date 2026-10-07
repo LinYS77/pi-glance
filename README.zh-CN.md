@@ -64,12 +64,12 @@ pi install npm:pi-glance
 ## 说明
 
 - 默认使用 Nerd Font 图标。使用普通字体时，可在 `/glance` → **Appearance** → **Icons** 中选择 `Plain`。
-- 本次升级统一切换为 **Text** 文字模式。可在 **Activity** 选择 **Sweep** 恢复动效；原速度和配色保留。
-- Git 默认及旧配置升级均使用 **Summary**，显示变更文件数和已跟踪内容的增删行数。**Auto fetch** 每 5 分钟更新上游，可在 **Status line → Git** 关闭。
+- 活动状态默认使用 **Text** 文字模式，可在 **Activity** 选择 **Sweep** 边框动效。
+- Git 默认使用 **Summary**，显示变更文件数和已跟踪内容的增删行数。**Auto fetch** 每 5 分钟更新上游，可在 **Status line → Git** 关闭。
 - 草稿按会话保存在本机，重载后可取回，恢复后删除；`--no-session` 仅使用内存。
 - **Extensions** 在顶部显示兼容插件发布的状态文字。可在 **Status line** 中开关、排序或查看详情；无状态时不占位。
 - 其他编辑器或页脚扩展可能覆盖 Glance 的部分显示。
-- 需要 Pi 0.86.1+、Node.js 22.19.0 或更高版本。
+- 需要 Pi 1.0.0+、Node.js 22.19.0 或更高版本。
 
 ## 更新
 

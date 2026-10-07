@@ -340,9 +340,7 @@ function createSessionHarness(initialConfig: GlanceConfig = cloneConfig()): Sess
 	assert.equal(harness.getRenderCount(), 0, "agentStart with no visible throughput change should not render");
 	harness.setNowMs(1000);
 	harness.session.providerRequest();
-	harness.session.messageUpdate({ message: eventMessage("assistant", { usage: { output: 10, totalTokens: 10 } }), assistantMessageEvent: { type: "text_delta" } });
 	harness.setNowMs(1500);
-	harness.session.messageUpdate({ message: eventMessage("assistant", { usage: { output: 10, totalTokens: 10 } }), assistantMessageEvent: { type: "text_delta" } });
 	harness.setOnRender(() => {
 		assert.ok(state.throughput.currentRun, "messageEnd should set current-run model speed before render");
 	});
@@ -367,7 +365,7 @@ function createSessionHarness(initialConfig: GlanceConfig = cloneConfig()): Sess
 	harness.session.agentSettled(ctx.ctx);
 	harness.setOnRender(undefined);
 	const settledSpeed = state.throughput.lastRun as { elapsedMs: number } | null;
-	assert.equal(settledSpeed?.elapsedMs, 500, "agentSettled should preserve active model stream duration");
+	assert.equal(settledSpeed?.elapsedMs, 500, "agentSettled should preserve completed request duration");
 	const renderAfterSettled = harness.getRenderCount();
 	harness.session.agentStart();
 	assert.equal(state.throughput.lastRun, null, "a new logical run should clear the previous trusted model speed");
@@ -384,9 +382,7 @@ function createSessionHarness(initialConfig: GlanceConfig = cloneConfig()): Sess
 	harness.session.agentStart();
 	harness.setNowMs(1000);
 	harness.session.providerRequest();
-	harness.session.messageUpdate({ message: eventMessage("assistant", { usage: { output: 4, totalTokens: 4 } }), assistantMessageEvent: { type: "text_delta" } });
 	harness.setNowMs(1400);
-	harness.session.messageUpdate({ message: eventMessage("assistant", { usage: { output: 4, totalTokens: 4 } }), assistantMessageEvent: { type: "text_delta" } });
 	await harness.session.messageEnd(messageEnd(eventMessage("assistant", { usage: { output: 4, totalTokens: 4 } })), ctx.ctx);
 	assert.ok(state.throughput.currentRun, "setup message stream should set current-run model speed");
 	harness.setOnRender(() => {
@@ -406,7 +402,7 @@ function createSessionHarness(initialConfig: GlanceConfig = cloneConfig()): Sess
 	assert.ok(state.throughput.lastRun, "agentSettled should leave final model speed visible");
 	assert.equal(state.throughput.currentRun, null, "agentSettled should leave provisional model speed cleared");
 	const settledSpeed = state.throughput.lastRun as { elapsedMs: number } | null;
-	assert.equal(settledSpeed?.elapsedMs, 400, "agentSettled should preserve active model stream duration");
+	assert.equal(settledSpeed?.elapsedMs, 400, "agentSettled should preserve completed request duration");
 	assert.equal(ctx.getEntryReads(), entryBaseline, "agentEnd/agentSettled should not scan entries after baseline");
 	assert.equal(ctx.getBranchReads(), branchBaseline, "agentEnd/agentSettled should not scan branch after baseline");
 }

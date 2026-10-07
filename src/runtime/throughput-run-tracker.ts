@@ -105,11 +105,6 @@ export class ModelSpeedRunTracker {
 		};
 	}
 
-	/** Chunk delivery and thinking events do not control request-duration timing. */
-	messageUpdate(_message: unknown, _assistantMessageEvent: unknown, _nowMs: ModelSpeedClock): ModelSpeedStateIntent {
-		return NONE_INTENT;
-	}
-
 	/** Exclude Pi's coalesced blocking extension UI prompt span. */
 	uiPromptStart(nowMs: ModelSpeedClock): void {
 		if (this.uiPromptActive) return;

@@ -18,8 +18,8 @@ jobs:
           - "22.19.0"
           - "24.x"
         pi-version:
-          - "0.86.1"
           - "1.0.0"
+          - "1.0.4"
     env:
       PI_OFFLINE: "1"
     steps:
@@ -40,8 +40,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Install compatibility SDK without changing the lockfile
-        if: matrix.pi-version != '0.86.1'
+      - name: Install newer Pi SDK without changing the lockfile
+        if: matrix.pi-version != '1.0.0'
         env:
           PI_VERSION: ${{ matrix.pi-version }}
         run: >-

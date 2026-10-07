@@ -148,7 +148,7 @@ export class GlanceEditor extends CustomEditor {
 
 		const styles = this.currentStyles(config);
 		const metrics = measureInputSurfaceFrame(width);
-		// Pi 0.86 still recurses on a wide grapheme in a one-column layout.
+		// Pi 1.0 still recurses on a wide grapheme in a one-column layout.
 		// Reserve two columns plus the native padding/cursor, then clip the frame.
 		const editorWidth = Math.max(metrics.editorContentWidth, 3, 2 + this.getPaddingX() * 2);
 		const lines = super.render(editorWidth);

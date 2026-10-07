@@ -2,7 +2,6 @@ import { strict as assert } from "node:assert";
 import { PALETTES, fg, fg256, rgbToAnsi256 } from "../../src/theme/palette.js";
 import { resolveBuiltInGlanceStyles, resolveGlanceRenderStyles, type GlanceColorMode } from "../../src/theme/adapter.js";
 import { selectGlanceTheme } from "../../src/theme/selection.js";
-import { readPiAmbientTone } from "../../src/theme/tone.js";
 import { GLANCE_THEME_CATALOG } from "../../src/theme/catalog.js";
 import { GLANCE_THEMES, GLANCE_THEME_IDS, isGlanceThemeName, themeLabel } from "../../src/theme/themes.js";
 import type { GlancePalette, Rgb, SegmentId } from "../../src/types.js";
@@ -92,10 +91,8 @@ assert.equal(isGlanceThemeName("dracula"), false, "unknown theme should not vali
 const selectedThemePair = { light: "one-light", dark: "tokyo-night" } as const;
 assert.equal(selectGlanceTheme(selectedThemePair, "light"), "one-light", "theme selection should return the light slot for light ambient tone");
 assert.equal(selectGlanceTheme(selectedThemePair, "dark"), "tokyo-night", "theme selection should return the dark slot for dark ambient tone");
-assert.equal(selectGlanceTheme(selectedThemePair, "unknown"), "one-light", "theme selection should fall back to the light slot for unknown ambient tone");
 assert.equal(resolveGlanceRenderStyles(selectedThemePair, { ambientTone: "light" }).cacheKey, "glance:one-light:truecolor", "render style resolver should use the light slot for ambient light");
 assert.equal(resolveGlanceRenderStyles(selectedThemePair, { ambientTone: "dark" }).cacheKey, "glance:tokyo-night:truecolor", "render style resolver should use the dark slot for ambient dark");
-assert.equal(resolveGlanceRenderStyles(selectedThemePair, { ambientTone: "unknown" }).cacheKey, "glance:one-light:truecolor", "render style resolver should use the light slot for ambient unknown");
 assert.equal(resolveGlanceRenderStyles(selectedThemePair).cacheKey, "glance:one-light:truecolor", "render style resolver should default missing ambient tone to the light slot");
 assert.equal(resolveGlanceRenderStyles(selectedThemePair, { getAmbientTone: () => "dark" }).cacheKey, "glance:tokyo-night:truecolor", "render style resolver should use lazy getAmbientTone when no static tone is provided");
 assert.equal(
@@ -109,19 +106,6 @@ assert.equal(
 	explicitStyleOverride,
 	"render style resolver should return an explicit styles override without applying ambient tone selection",
 );
-
-assert.equal(readPiAmbientTone({ theme: { name: "light" } }), "light", "ambient tone reader should map exact public Pi theme name light to light tone");
-assert.equal(readPiAmbientTone({ theme: { name: "dark" } }), "dark", "ambient tone reader should map exact public Pi theme name dark to dark tone");
-for (const host of [undefined, {}, { theme: undefined }, { theme: {} }, { theme: { name: undefined } }] as const) {
-	assert.equal(readPiAmbientTone(host), "unknown", "ambient tone reader should return unknown for missing host/theme/name");
-}
-for (const name of ["my-dark-theme", "dark-plus", "catppuccin-latte", "high-contrast-light", "Light", "DARK", " dark "] as const) {
-	assert.equal(readPiAmbientTone({ theme: { name } }), "unknown", `${name} should not be classified by substring/case/trim heuristics`);
-}
-const colorModeOnlyHost = { theme: { name: "catppuccin-latte", getColorMode: () => "dark" } };
-assert.equal(readPiAmbientTone(colorModeOnlyHost), "unknown", "ambient tone reader should ignore getColorMode because it is color depth, not tone");
-assert.equal(selectGlanceTheme(selectedThemePair, readPiAmbientTone(colorModeOnlyHost)), "one-light", "unknown ambient tone from reader should select the light slot");
-assert.equal(selectGlanceTheme(selectedThemePair, readPiAmbientTone({ theme: { name: "dark" } })), "tokyo-night", "dark ambient tone from reader should select the dark slot");
 
 function assertRgb(themeId: string, path: string, color: Rgb): void {
 	for (const channel of ["r", "g", "b"] as const) {

@@ -95,7 +95,7 @@ for (const themeId of GLANCE_THEME_IDS) {
 		assert.equal(
 			renderGlanceLine(state, config, 120, state.providers.availableCount),
 			`${fg(palette.segments[id].fg, text)}${RESET}`,
-			`${themeId}.${id} status segment should keep byte-equivalent legacy palette styling through adapter`,
+			`${themeId}.${id} status segment should keep exact palette styling through the adapter`,
 		);
 	}
 }
@@ -141,11 +141,6 @@ await test("status-line should resolve a theme pair through the light slot for a
 		"status-line should resolve a theme pair through the dark slot for ambient dark",
 	);
 	assert.equal(
-		renderGlanceLine(modelState(1), config, 120, 1, { ambientTone: "unknown" }),
-		`${fg(PALETTES["one-light"].segments.model.fg, "ai GPT 5.5")}${RESET}`,
-		"status-line should resolve a theme pair through the light slot for ambient unknown",
-	);
-	assert.equal(
 		renderGlanceLine(modelState(1), config, 120, 1),
 		`${fg(PALETTES["one-light"].segments.model.fg, "ai GPT 5.5")}${RESET}`,
 		"status-line should default missing ambient tone to the light slot",
@@ -185,7 +180,7 @@ for (const themeId of ["light", "dark", "high-contrast-light"] as const) {
 	assert.equal(
 		joined,
 		`${fg(palette.error, "ctx 90%")}${fg(palette.separator, " · ")}${fg(palette.segments.model.fg, "ai GPT 5.5")}${RESET}`,
-		`${themeId} context error + separator + model join should keep byte-equivalent legacy palette styling and reset behavior`,
+		`${themeId} context error + separator + model join should keep exact palette styling and reset behavior`,
 	);
 }
 
@@ -197,11 +192,11 @@ for (const themeId of ["light", "dark"] as const) {
 		next.display.showProvider = "always";
 	});
 	const width = 12;
-	const legacyLine = `${fg(palette.segments.model.fg, "ai openai/GPT 5.5")}${RESET}`;
+	const expectedLine = `${fg(palette.segments.model.fg, "ai openai/GPT 5.5")}${RESET}`;
 	assert.equal(
 		renderGlanceLine(state, config, width, 2),
-		truncateToWidth(legacyLine, width, fg(palette.dim, "…")),
-		`${themeId} truncation should keep byte-equivalent legacy dim ellipsis styling through adapter`,
+		truncateToWidth(expectedLine, width, fg(palette.dim, "…")),
+		`${themeId} truncation should keep dim ellipsis styling through the adapter`,
 	);
 }
 
