@@ -51,7 +51,7 @@ Pi session-level retries exclude failed attempts and their backoff. SDK-internal
 
 Run `/glance` for **Appearance**, **Status line**, **Activity**, and **Input** settings. `Tab` switches sections, arrows adjust, and `S` saves.
 
-The full-width preview sits below settings. Closing preserves input and cursor.
+Full-width preview below. Closing preserves input and cursor.
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/LinYS77/pi-glance/main/assets/settings.png" alt="pi-glance settings pane">
@@ -78,6 +78,8 @@ Previews use example data.
 ```bash
 pi update npm:pi-glance
 ```
+
+[Changelog](./CHANGELOG.md)
 
 ## Contributing
 

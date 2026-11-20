@@ -5,7 +5,7 @@ name: GitHub Release
     branches:
       - main
     paths:
-      - ".github/release-notes/*.md"
+      - "CHANGELOG.md"
     tags:
       - "v*"
 
@@ -33,10 +33,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           tag="v$(node -p "require('./package.json').version")"
-          notes=".github/release-notes/${tag}.md"
-          test -f "$notes"
           published_tags=$(gh release list --limit 100 --json tagName --jq '.[].tagName')
           if grep -Fxq "$tag" <<< "$published_tags"; then
+            notes="$RUNNER_TEMP/release-notes.md"
+            node scripts/release-notes.mjs > "$notes"
             gh release edit "$tag" --notes-file "$notes"
           fi
 
@@ -52,13 +52,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Create release from checked-in notes
+      - name: Create release from changelog
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          notes=".github/release-notes/${GITHUB_REF_NAME}.md"
-          test -f "$notes"
           test "$GITHUB_REF_NAME" = "v$(node -p "require('./package.json').version")"
+          notes="$RUNNER_TEMP/release-notes.md"
+          node scripts/release-notes.mjs > "$notes"
           gh release create "$GITHUB_REF_NAME" \
             --verify-tag \
             --title "pi-glance ${GITHUB_REF_NAME#v}" \

@@ -33,6 +33,7 @@
     "index.ts",
     "src/**/*.ts",
     "README*.md",
+    "CHANGELOG.md",
     "LICENSE"
   ],
   "pi": {

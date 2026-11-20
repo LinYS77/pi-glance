@@ -26,85 +26,7 @@ export interface StateLifecycleInputs extends StateThinkingInputs {
 }
 
 export interface StateInputs extends StateLifecycleInputs {
-	usage: UsageTotals;
-}
-
-interface StateMessageCostInputs {
-	total?: number;
-	input?: number;
-	output?: number;
-	cacheRead?: number;
-	cacheWrite?: number;
-}
-
-export interface StateUsageInputs {
-	totalTokens?: number;
-	input?: number;
-	output?: number;
-	cacheRead?: number;
-	cacheWrite?: number;
-	cost?: StateMessageCostInputs;
-}
-
-export interface StateMessageInputs {
-	role?: string;
-	stopReason?: string;
-	responseId?: unknown;
-	toolCallId?: unknown;
-	usage?: StateUsageInputs;
-}
-
-export interface StateSessionEntry {
-	type?: string;
-	id?: unknown;
-	parentId?: string | null;
-	message?: StateMessageInputs;
-	usage?: StateUsageInputs;
-}
-
-function emptyUsageTotals(): UsageTotals {
-	return { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 };
-}
-
-function usageCost(usage: StateUsageInputs | undefined): number {
-	const cost = usage?.cost;
-	if (!cost) return 0;
-	if (Number.isFinite(cost.total)) return cost.total ?? 0;
-	return (cost.input ?? 0) + (cost.output ?? 0) + (cost.cacheRead ?? 0) + (cost.cacheWrite ?? 0);
-}
-
-export function usageTotalsFromUsage(usage: StateUsageInputs | undefined): UsageTotals {
-	return {
-		input: usage?.input ?? 0,
-		output: usage?.output ?? 0,
-		cacheRead: usage?.cacheRead ?? 0,
-		cacheWrite: usage?.cacheWrite ?? 0,
-		cost: usageCost(usage),
-	};
-}
-
-export function usageTotalsFromMessage(message: StateMessageInputs): UsageTotals {
-	if (message.role !== "assistant" && message.role !== "toolResult") return emptyUsageTotals();
-	return usageTotalsFromUsage(message.usage);
-}
-
-export function usageTotalsFromEntry(entry: StateSessionEntry): UsageTotals {
-	if (entry.type === "message" && entry.message) return usageTotalsFromMessage(entry.message);
-	if ((entry.type === "usage" || entry.type === "compaction" || entry.type === "branch_summary") && entry.usage) return usageTotalsFromUsage(entry.usage);
-	return emptyUsageTotals();
-}
-
-export function usageTotalsFromEntries(entries: readonly StateSessionEntry[]): UsageTotals {
-	const usage = emptyUsageTotals();
-	for (const entry of entries) {
-		const delta = usageTotalsFromEntry(entry);
-		usage.input += delta.input;
-		usage.output += delta.output;
-		usage.cacheRead += delta.cacheRead;
-		usage.cacheWrite += delta.cacheWrite;
-		usage.cost += delta.cost;
-	}
-	return usage;
+	usage: Readonly<UsageTotals>;
 }
 
 function availableProviderCountFromContext(ctx: ExtensionContext): number {
@@ -157,12 +79,5 @@ export function lifecycleInputsFromContext(
 		cwd: ctx.sessionManager.getCwd() || ctx.cwd,
 		...thinkingInputsFromContext(ctx, thinkingLevel),
 		contextUsage: readContextUsage(),
-	};
-}
-
-export function stateInputsFromContext(ctx: ExtensionContext, thinkingLevel: string): StateInputs {
-	return {
-		...lifecycleInputsFromContext(ctx, thinkingLevel),
-		usage: usageTotalsFromEntries(ctx.sessionManager.getEntries()),
 	};
 }

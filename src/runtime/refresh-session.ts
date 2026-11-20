@@ -1,7 +1,7 @@
 import type { ExtensionContext, MessageEndEvent, SessionCompactEvent } from "@earendil-works/pi-coding-agent";
-import { contextUsageInputsFromContext, lifecycleInputsFromContext, thinkingInputsFromContext, usageTotalsFromEntries, usageTotalsFromEntry, usageTotalsFromMessage, type StateContextUsageInputs, type StateInputs, type StateLifecycleInputs, type StateMessageInputs, type StateSessionEntry } from "./snapshot.js";
+import { BilledSessionLedger, type StateMessageInputs, type StateSessionEntry } from "./billed-session-ledger.js";
+import { contextUsageInputsFromContext, lifecycleInputsFromContext, thinkingInputsFromContext, type StateContextUsageInputs, type StateInputs, type StateLifecycleInputs } from "./snapshot.js";
 import {
-	addUsageTotals,
 	clearCurrentRunModelSpeed,
 	createInitialState,
 	refreshContextUsage,
@@ -14,7 +14,7 @@ import {
 	setUsageTotals,
 } from "./state.js";
 import { ModelSpeedRunTracker, type ModelSpeedStateIntent } from "./throughput-run-tracker.js";
-import type { GitSnapshot, GlanceConfig, GlanceState, UsageTotals } from "../types.js";
+import type { GitSnapshot, GlanceConfig, GlanceState } from "../types.js";
 
 export interface RuntimeMessageEndInput {
 	type?: MessageEndEvent["type"];
@@ -55,7 +55,6 @@ interface RefreshPlan {
 	snapshot: SnapshotMode;
 	refreshWorkspace: boolean;
 	refreshModel: boolean;
-	refreshUsageTotals: boolean;
 	refreshContext: boolean;
 	git: GitRefreshMode;
 	render: RenderMode;
@@ -72,7 +71,6 @@ const ENSURE_ONLY: RefreshPlan = {
 	snapshot: "none",
 	refreshWorkspace: false,
 	refreshModel: false,
-	refreshUsageTotals: false,
 	refreshContext: false,
 	git: "never",
 	render: "never",
@@ -84,7 +82,6 @@ const LIFECYCLE_MODEL_IMMEDIATE: RefreshPlan = {
 	snapshot: "lifecycle",
 	refreshWorkspace: true,
 	refreshModel: true,
-	refreshUsageTotals: false,
 	refreshContext: true,
 	git: "immediate",
 	render: "changed",
@@ -98,7 +95,6 @@ const LIFECYCLE_MODEL_ON_WORKSPACE_CHANGE: RefreshPlan = {
 const RELIABLE_MODEL_IMMEDIATE: RefreshPlan = {
 	...LIFECYCLE_MODEL_IMMEDIATE,
 	snapshot: "reliable",
-	refreshUsageTotals: true,
 };
 
 const LIFECYCLE_NO_MODEL_ON_WORKSPACE_CHANGE: RefreshPlan = {
@@ -127,7 +123,6 @@ const THINKING_LEVEL_SELECT: RefreshPlan = {
 	snapshot: "thinking",
 	refreshWorkspace: false,
 	refreshModel: true,
-	refreshUsageTotals: false,
 	refreshContext: false,
 	git: "never",
 	render: "changed",
@@ -167,9 +162,7 @@ export class RuntimeRefreshSession {
 		window: number | undefined;
 		usage: StateContextUsageInputs | undefined;
 	};
-	private appliedUsageObjects = new WeakSet<object>();
-	private appliedUsageKeys = new Set<string>();
-	private seenEntryIds = new Set<string>();
+	private billedSession = new BilledSessionLedger();
 	private readonly modelSpeedTracker = new ModelSpeedRunTracker();
 
 	constructor(private readonly host: RuntimeRefreshSessionHost) {}
@@ -192,28 +185,16 @@ export class RuntimeRefreshSession {
 	}
 
 	private readStateInputs(ctx: ExtensionContext): StateInputs {
-		const entries = ctx.sessionManager.getEntries();
-		this.seenEntryIds = new Set(entries.map(entry => entry.id));
-		// Reliable snapshots have already billed these entries. Late event delivery
-		// must use the same deduplication ledger as incremental persistence reads.
-		for (const entry of entries) {
-			if (entry.type === "message" && entry.message) {
-				this.claimUsageDelta(entry.message, this.messageUsageKey(entry.message));
-			} else if (entry.type === "usage" || entry.type === "compaction" || entry.type === "branch_summary") {
-				this.claimUsageDelta(entry, this.entryUsageKey(entry));
-			}
-		}
+		const usage = this.billedSession.rebuild(ctx.sessionManager.getEntries());
 		return {
 			...lifecycleInputsFromContext(ctx, this.host.getThinkingLevel(), () => this.readContextUsage(ctx, true)),
-			usage: usageTotalsFromEntries(entries),
+			usage,
 		};
 	}
 
 	private resetAccumulators(): void {
 		this.contextSnapshot = undefined;
-		this.seenEntryIds.clear();
-		this.appliedUsageObjects = new WeakSet<object>();
-		this.appliedUsageKeys = new Set<string>();
+		this.billedSession = new BilledSessionLedger();
 		this.modelSpeedTracker.reset();
 	}
 
@@ -229,6 +210,7 @@ export class RuntimeRefreshSession {
 
 	sessionShutdown(): void {
 		this.resetAccumulators();
+		this.state = undefined;
 	}
 
 	ensureState(ctx: ExtensionContext): GlanceState {
@@ -237,51 +219,12 @@ export class RuntimeRefreshSession {
 		return this.state;
 	}
 
-	/** Background usage and boundary summaries can be persisted without a matching event. */
 	private syncPersistedUsage(ctx: ExtensionContext): boolean {
-		let changed = false;
-		let id = ctx.sessionManager.getLeafId();
-		// Unchanged frames are O(1); only newly appended ancestors are inspected.
-		while (id && !this.seenEntryIds.has(id)) {
-			const entry: StateSessionEntry | undefined = ctx.sessionManager.getEntry(id);
-			if (!entry) break;
-			this.seenEntryIds.add(id);
-			if (entry.type === "usage" || entry.type === "compaction" || entry.type === "branch_summary") {
-				changed = this.applyUsageDelta(entry, usageTotalsFromEntry(entry), this.entryUsageKey(entry)) || changed;
-			}
-			id = entry.parentId ?? null;
-		}
-		return changed;
+		return this.billedSession.advance(ctx.sessionManager) && this.publishBilledUsage();
 	}
 
-	private usageTotalsAreZero(delta: UsageTotals): boolean {
-		return delta.input === 0 && delta.output === 0 && delta.cacheRead === 0 && delta.cacheWrite === 0 && delta.cost === 0;
-	}
-
-	private claimUsageDelta(source: object, key: string | undefined): boolean {
-		if (key) {
-			if (this.appliedUsageKeys.has(key)) return false;
-			this.appliedUsageKeys.add(key);
-			return true;
-		}
-		if (this.appliedUsageObjects.has(source)) return false;
-		this.appliedUsageObjects.add(source);
-		return true;
-	}
-
-	private applyUsageDelta(source: object, delta: UsageTotals, key?: string): boolean {
-		if (!this.state || this.usageTotalsAreZero(delta) || !this.claimUsageDelta(source, key)) return false;
-		return addUsageTotals(this.state, delta);
-	}
-
-	private messageUsageKey(message: StateMessageInputs): string | undefined {
-		if (message.role === "assistant" && typeof message.responseId === "string" && message.responseId) return `assistant:${message.responseId}`;
-		if (message.role === "toolResult" && typeof message.toolCallId === "string" && message.toolCallId) return `toolResult:${message.toolCallId}`;
-		return undefined;
-	}
-
-	private entryUsageKey(entry: StateSessionEntry): string | undefined {
-		return typeof entry.id === "string" && entry.id ? `${entry.type ?? "entry"}:${entry.id}` : undefined;
+	private publishBilledUsage(): boolean {
+		return this.state !== undefined && setUsageTotals(this.state, this.billedSession.totals);
 	}
 
 	private applyGitScheduling(plan: RefreshPlan, workspaceChanged: boolean): void {
@@ -290,14 +233,13 @@ export class RuntimeRefreshSession {
 		else if (plan.git === "onWorkspaceChange" && workspaceChanged) this.host.scheduleGitRefresh(true);
 	}
 
-	private applyLifecycleSnapshot(inputs: StateLifecycleInputs, plan: RefreshPlan, usage?: UsageTotals): boolean {
+	private applyLifecycleSnapshot(inputs: StateLifecycleInputs, plan: RefreshPlan): boolean {
 		if (!this.state) return false;
 		let changed = false;
 		const workspaceChanged = plan.refreshWorkspace ? refreshWorkspace(this.state, inputs) : false;
 		changed = workspaceChanged || changed;
 		changed = setProviderCount(this.state, inputs.availableProviderCount) || changed;
 		if (plan.refreshModel) changed = refreshModel(this.state, inputs, this.host.getConfig()) || changed;
-		if (plan.refreshUsageTotals && usage) changed = setUsageTotals(this.state, usage) || changed;
 		if (plan.refreshContext) changed = refreshContextUsage(this.state, inputs) || changed;
 		this.applyGitScheduling(plan, workspaceChanged);
 		return changed;
@@ -316,7 +258,8 @@ export class RuntimeRefreshSession {
 
 		if (plan.snapshot === "reliable") {
 			const inputs = this.readStateInputs(ctx);
-			return this.applyLifecycleSnapshot(inputs, plan, inputs.usage);
+			const usageChanged = this.publishBilledUsage();
+			return this.applyLifecycleSnapshot(inputs, plan) || usageChanged;
 		}
 
 		return this.applyLifecycleSnapshot(lifecycleInputsFromContext(ctx, this.host.getThinkingLevel(), () => this.readContextUsage(ctx, forceContext)), plan);
@@ -374,19 +317,15 @@ export class RuntimeRefreshSession {
 
 	async messageEnd(event: RuntimeMessageEndInput, ctx: ExtensionContext): Promise<void> {
 		const message = event.message;
-		const hadState = this.state !== undefined;
-		const delta = usageTotalsFromMessage(message);
+		const billed = this.state !== undefined && this.billedSession.recordMessage(message);
 		const modelSpeedIntent = this.modelSpeedTracker.messageEnd(message, () => this.host.nowMs());
 		const plan = message.role === "assistant"
 			? ASSISTANT_MESSAGE_END
-			: message.role === "toolResult" && !this.usageTotalsAreZero(delta)
-				? USAGE_MESSAGE_END
-				: ENSURE_ONLY;
+			: billed ? USAGE_MESSAGE_END : ENSURE_ONLY;
 		await this.refresh(ctx, plan, {
 			forceContext: message.role === "assistant",
 			beforeRender: () => {
-				let changed = false;
-				if (hadState) changed = this.applyUsageDelta(message, delta, this.messageUsageKey(message)) || changed;
+				let changed = billed && this.publishBilledUsage();
 				if (this.state) changed = applyModelSpeedIntent(this.state, modelSpeedIntent) || changed;
 				return changed;
 			},
@@ -396,13 +335,11 @@ export class RuntimeRefreshSession {
 	async sessionCompact(event: RuntimeSessionCompactInput, ctx: ExtensionContext): Promise<void> {
 		const hadState = this.state !== undefined;
 		const entry = event.compactionEntry;
-		const delta = usageTotalsFromEntry(entry);
 		const modelSpeedIntent = this.modelSpeedTracker.compactionRetry(event.willRetry === true);
 		await this.refresh(ctx, LIFECYCLE_MODEL_IMMEDIATE, {
 			forceContext: true,
 			beforeRender: () => {
-				let changed = false;
-				if (hadState) changed = this.applyUsageDelta(entry, delta, this.entryUsageKey(entry)) || changed;
+				let changed = hadState && this.billedSession.recordBoundary(entry) && this.publishBilledUsage();
 				if (this.state) changed = applyModelSpeedIntent(this.state, modelSpeedIntent) || changed;
 				return changed;
 			},

@@ -19,7 +19,7 @@ jobs:
           - "24.x"
         pi-version:
           - "1.0.0"
-          - "1.2.0"
+          - "1.6.0"
     env:
       PI_OFFLINE: "1"
     steps:

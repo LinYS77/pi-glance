@@ -5,12 +5,12 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { Type } from "typebox";
 import { createAssistantMessageEventStream, type AssistantMessage } from "@earendil-works/pi-ai";
-import { createAgentSession, DefaultResourceLoader, ModelRuntime, SessionManager, SettingsManager } from "@earendil-works/pi-coding-agent";
+import { createAgentSession, DefaultResourceLoader, ModelRuntime, SessionManager, SettingsManager, type ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { defaultConfig } from "../../src/config/model.js";
 import { RuntimeRefreshSession } from "../../src/runtime/refresh-session.js";
 
 // Run actual Pi request, tool, warming and settlement events; only the provider and clock are local.
-for (const warmAt of ["tool", "context", "stream"] as const) test(`Pi cache warming during ${warmAt} preserves throughput request boundaries`, async () => {
+for (const warmAt of ["tool", "context", "stream", "idle"] as const) test(`Pi cache warming during ${warmAt} preserves throughput request boundaries`, async () => {
 	const root = await mkdtemp(join(tmpdir(), "glance-throughput-host-"));
 	const config = defaultConfig();
 	let now = 0, primaryCalls = 0, warmingCalls = 0, requestEvents = 0;
@@ -18,15 +18,18 @@ for (const warmAt of ["tool", "context", "stream"] as const) test(`Pi cache warm
 	let timeout: ReturnType<typeof setTimeout> | undefined;
 	const warmed = new Promise<void>((resolve, reject) => {
 		completeWarm = resolve;
-		timeout = setTimeout(() => reject(new Error("Pi did not warm the cache during the tool wait")), 10_000);
+		timeout = setTimeout(() => reject(new Error(`Pi did not complete cache warming during ${warmAt}`)), 10_000);
 	});
 	const tracked = new RuntimeRefreshSession({
 		getConfig: () => config, ensureConfig: async () => config, getThinkingLevel: () => "off",
 		nowMs: () => now, requestRender: () => {}, scheduleGitRefresh: () => {},
 	});
 	let session: Awaited<ReturnType<typeof createAgentSession>>["session"] | undefined;
+	let startContext: ExtensionContext | undefined;
+	let unsubscribe: (() => void) | undefined;
 	try {
-		const settingsManager = SettingsManager.inMemory({ compaction: { enabled: false }, cacheWarming: "streaming", retry: { enabled: false } });
+		const settingsManager = SettingsManager.inMemory({ compaction: { enabled: false }, cacheWarming: warmAt === "idle" ? "idle" : "streaming", retry: { enabled: false } });
+		const cacheLifetime = warmAt === "idle" ? 11 : 10.001;
 		const loader = new DefaultResourceLoader({
 			cwd: root, agentDir: root, settingsManager, noExtensions: true, noSkills: true,
 			noPromptTemplates: true, noThemes: true, noContextFiles: true,
@@ -34,7 +37,7 @@ for (const warmAt of ["tool", "context", "stream"] as const) test(`Pi cache warm
 				pi.registerProvider("glance-throughput-test", {
 					api: "openai-completions", baseUrl: "https://example.invalid", apiKey: "DEMO-not-a-credential",
 					models: [{ id: "local", name: "DEMO local", reasoning: false, input: ["text"], contextWindow: 200_000,
-						maxTokens: 128, cost: { input: 10, output: 1, cacheRead: 0.01, cacheWrite: 0 }, promptCache: { short: 10.001, long: 10.001 } }],
+						maxTokens: 128, cost: { input: 10, output: 1, cacheRead: 0.01, cacheWrite: 0 }, promptCache: { short: cacheLifetime, long: cacheLifetime } }],
 					streamSimple(model, _context, options) {
 						const stream = createAssistantMessageEventStream();
 						const warm = options?.maxTokens === 1;
@@ -48,13 +51,13 @@ for (const warmAt of ["tool", "context", "stream"] as const) test(`Pi cache warm
 								await options?.onPayload?.({ demo: true }, model);
 								stream.push({ type: "start", partial: message });
 								if (warmAt === "stream" && !warm && call === 1) await warmed;
-								if (!warm && call === 1) {
+								if (!warm && call === 1 && warmAt !== "idle") {
 									message.content = [{ type: "toolCall", id: "wait-1", name: "wait_for_warm", arguments: {} }];
 									message.stopReason = "toolUse";
 								} else { message.content = [{ type: "text", text: "DEMO response" }]; message.stopReason = "stop"; }
 								now = warm ? (warmAt === "stream" ? 1_600 : 3_500) : call === 1 ? 2_000 : 7_000;
 								stream.push({ type: "done", reason: message.stopReason, message }); stream.end();
-								if (warm) completeWarm();
+								if (warm && warmAt !== "idle") completeWarm();
 							} catch (error) {
 								message.stopReason = "error"; message.errorMessage = String(error);
 								stream.push({ type: "error", reason: "error", error: message }); stream.end();
@@ -65,7 +68,7 @@ for (const warmAt of ["tool", "context", "stream"] as const) test(`Pi cache warm
 				});
 				pi.on("cache_warming_decision", () => ({ action: warmingCalls === 0 ? "warm" : "stop" }));
 				pi.on("context", async () => { if (warmAt === "context" && primaryCalls === 1) await warmed; });
-				pi.on("session_start", (_event, ctx) => { tracked.sessionStart(ctx); });
+				pi.on("session_start", (_event, ctx) => { startContext = ctx; tracked.sessionStart(ctx); });
 				pi.on("agent_start", () => tracked.agentStart());
 				pi.on("turn_start", (_event, ctx) => tracked.turnStart(ctx));
 				pi.on("before_provider_request", () => { requestEvents++; tracked.providerRequest(); });
@@ -88,7 +91,33 @@ for (const warmAt of ["tool", "context", "stream"] as const) test(`Pi cache warm
 		await session.setModel(model);
 		await session.bindExtensions({});
 		session.setActiveToolsByName(["wait_for_warm"]);
+		if (warmAt === "idle") {
+			unsubscribe = session.subscribe(event => {
+				if (event.type === "entry_appended" && event.entry.type === "usage" && event.entry.kind === "cache_warm") completeWarm();
+			});
+		}
 		await session.prompt("DEMO local test");
+		if (warmAt === "idle") {
+			assert.ok(startContext);
+			assert.equal(primaryCalls, 1);
+			assert.equal(warmingCalls, 0, "the first run settles before the replay");
+			const before = structuredClone(tracked.getState()!);
+			assert.equal(before.throughput.lastRun?.tokensPerSecond, 20);
+			await warmed;
+			const after = tracked.ensureState(startContext);
+			assert.equal(after.usage.output, before.usage.output + 1);
+			assert.equal(after.usage.cost, before.usage.cost + 0.2, "read the actual persisted replay bill");
+			const billed = structuredClone(after.usage);
+			assert.deepEqual(tracked.ensureState(startContext).usage, billed, "repeated draws do not double-count");
+			assert.deepEqual(after.context, before.context);
+			assert.deepEqual(after.throughput, before.throughput);
+			await session.prompt("DEMO next foreground run");
+			assert.equal(primaryCalls, 2);
+			assert.equal(warmingCalls, 1);
+			assert.equal(requestEvents, 3);
+			assert.equal(tracked.getState()?.throughput.lastRun?.tokensPerSecond, 60);
+			return;
+		}
 		assert.equal(primaryCalls, 2);
 		assert.equal(warmingCalls, 1);
 		assert.equal(requestEvents, 3, "Pi's warming callback shares the public request event");
@@ -102,6 +131,7 @@ for (const warmAt of ["tool", "context", "stream"] as const) test(`Pi cache warm
 		}
 	} finally {
 		clearTimeout(timeout);
+		unsubscribe?.();
 		session?.dispose();
 		await rm(root, { recursive: true, force: true });
 	}

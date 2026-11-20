@@ -1,6 +1,6 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { defaultConfig } from "../../src/config/model.js";
-import type { StateSessionEntry } from "../../src/runtime/snapshot.js";
+import type { StateSessionEntry } from "../../src/runtime/billed-session-ledger.js";
 import type { GitSnapshot, GlanceConfig } from "../../src/types.js";
 
 export interface MutableModelInfo {

@@ -84,6 +84,9 @@ test("usage behind later entries is counted once across message events, branch r
 	assert.ok(Math.abs(state.usage.cost - 0.365015) < 1e-12);
 	await harness.runtime.events.sessionTree({}, ctx.ctx);
 	const reconciled = structuredClone(state.usage);
+	assert.equal(reconciled.output, 31, "live totals and a structural rebuild must agree");
+	assert.equal(reconciled.cacheRead, 50_000);
+	assert.ok(Math.abs(reconciled.cost - 0.365015) < 1e-12);
 	for (let i = 0; i < 10; i++) editor.render(240);
 	assert.deepEqual(state.usage, reconciled, "a full reconciliation must also advance the incremental cursor");
 	const otherBranch = { ...warming, id: "other-branch", parentId: assistant.id, kind: "future-operation" };
@@ -92,6 +95,9 @@ test("usage behind later entries is counted once across message events, branch r
 	assert.equal(state.usage.output, 32);
 	assert.equal(state.usage.cacheRead, 100_000, "new branches retain billed usage from the abandoned branch");
 	assert.ok(Math.abs(state.usage.cost - 0.38003) < 1e-12);
+	const branchedTotals = structuredClone(state.usage);
+	await harness.runtime.events.sessionTree({}, ctx.ctx);
+	assert.deepEqual(state.usage, branchedTotals, "cursor and full rebuild agree across branches");
 	harness.runtime.events.sessionStart({}, ctx.ctx);
 	const reloaded = invokeEditorFactory(ctx, 1, () => {}) as GlanceEditor;
 	const restoredFrame = stripTerminalSequences(reloaded.render(240).join("\n"));

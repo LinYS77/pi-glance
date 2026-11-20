@@ -172,7 +172,7 @@ export interface GlanceState {
 		window: number;
 		percent: number | null;
 	};
-	usage: UsageTotals;
+	usage: Readonly<UsageTotals>;
 	throughput: {
 		lastRun: ModelSpeedMeasurement | null;
 		currentRun: ModelSpeedMeasurement | null;

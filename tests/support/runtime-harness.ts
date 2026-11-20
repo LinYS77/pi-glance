@@ -3,7 +3,7 @@ import type { ExtensionCommandContext, ExtensionContext, ReadonlyFooterDataProvi
 import { defaultConfig } from "../../src/config/model.js";
 import type { ConfigLoadResult } from "../../src/config/store.js";
 import { createGlanceRuntime, type CreateGitRefresherOptions, type GlancePaneResult, type GlanceRuntimeAdapters, type RuntimeGitRefresher, type RuntimeShowPaneOptions } from "../../src/runtime/runtime.js";
-import type { StateSessionEntry } from "../../src/runtime/snapshot.js";
+import type { StateSessionEntry } from "../../src/runtime/billed-session-ledger.js";
 import type { GitSnapshot, GlanceConfig, GlanceState } from "../../src/types.js";
 
 export type RuntimeMode = "tui" | "rpc" | "json" | "print";

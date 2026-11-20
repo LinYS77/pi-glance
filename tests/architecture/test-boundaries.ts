@@ -130,7 +130,7 @@ function assertHighValueImportRules(files: SourceFile[]): void {
 
 	const runtime = files.find((file) => file.path === "src/runtime/runtime.ts");
 	assert.ok(runtime, "runtime.ts should exist");
-	const forbiddenRuntimeImports = new Set(["../surface/frame.js", "../surface/layout.js", "../surface/status-line.js", "../surface/renderer.js", "../settings/pane.js", "../segments/render.js", "./state.js", "./snapshot.js"]);
+	const forbiddenRuntimeImports = new Set(["../surface/frame.js", "../surface/layout.js", "../surface/status-line.js", "../surface/renderer.js", "../settings/pane.js", "../segments/render.js", "./state.js", "./snapshot.js", "./billed-session-ledger.js"]);
 	for (const record of importsFrom(runtime)) {
 		if (forbiddenRuntimeImports.has(record.specifier)) fail(`runtime.ts: orchestration must not import ${record.specifier}`);
 	}
@@ -172,7 +172,7 @@ test("runtime local imports form an acyclic graph", () => {
 });
 
 test("pure models stay transitively free of IO and Pi runtime dependencies", () => {
-	for (const path of ["src/input/stash.ts", "src/input/shortcut.ts", "src/config/model.ts", "src/config/settings.ts", "src/settings/model.ts", "src/settings/catalog.ts", "src/runtime/git-snapshot.ts", "src/runtime/throughput.ts", "src/runtime/throughput-run-tracker.ts"]) {
+	for (const path of ["src/input/stash.ts", "src/input/shortcut.ts", "src/config/model.ts", "src/config/settings.ts", "src/settings/model.ts", "src/settings/catalog.ts", "src/runtime/git-snapshot.ts", "src/runtime/billed-session-ledger.ts", "src/runtime/throughput.ts", "src/runtime/throughput-run-tracker.ts"]) {
 		const forbidden = dependencyPath(files, path, (specifier) => IO_NETWORK_PROCESS_IMPORTS.has(specifier) || specifier.startsWith("@earendil-works/pi-"));
 		assert.equal(forbidden, undefined, forbidden?.join(" -> "));
 	}

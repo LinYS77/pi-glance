@@ -79,6 +79,8 @@ Pi 会话层重试会排除失败请求及其退避等待；SDK 内部或上游�
 pi update npm:pi-glance
 ```
 
+[更新日志](./CHANGELOG.md)
+
 ## 参与贡献
 
 欢迎提交 Issue 和 Pull Request。开发说明见 [CONTEXT.md](./CONTEXT.md)。

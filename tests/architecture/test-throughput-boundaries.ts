@@ -44,7 +44,7 @@ for (const file of files) {
 const entry = byPath.get("index.ts");
 const runtime = byPath.get("src/runtime/runtime.ts");
 assert.ok(entry && runtime);
-assert.match(entry.text, /pi\.on\("before_provider_request", runtime\.events\.providerRequest\)/, "wire the pre-request boundary through the public Pi event");
+assert.match(entry.text, /pi\.on\("before_provider_request", tuiEvent\(runtime\.events\.providerRequest\)\)/, "wire the pre-request boundary through the public Pi event");
 assert.match(runtime.text, /performance\.now\(\)/, "use a monotonic production clock");
 
 console.log("✓ Output throughput safety guardrails passed");

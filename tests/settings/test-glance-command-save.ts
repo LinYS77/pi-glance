@@ -29,7 +29,7 @@ interface TestContext {
 	notifications: Notification[];
 	surfaceCalls: string[];
 	customResults: PaneResult[];
-	renderedPanes: string[][];
+	renderedPanes: (readonly string[])[];
 }
 
 function createPi(): CapturedPi {
@@ -61,7 +61,7 @@ function getCommand(pi: CapturedPi, name: string): CommandHandler {
 
 function createContext(customResults: PaneResult[]): TestContext {
 	const { ctx, notifications, surfaceCalls } = createRuntimeTestContext({ cwd: process.cwd(), trusted: false, persistent: false });
-	const renderedPanes: string[][] = [];
+	const renderedPanes: (readonly string[])[] = [];
 	const fakeTui = { requestRender() {} } as unknown as TUI;
 	const fakeTheme = { fg: (_tone: string, text: string) => text } as unknown as Theme;
 	ctx.ui.custom = async <T>(factory: (tui: TUI, theme: Theme, keys: KeybindingsManager, done: (result: T) => void) => Component | Promise<Component>) => {

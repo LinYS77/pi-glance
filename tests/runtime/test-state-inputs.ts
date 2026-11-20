@@ -1,7 +1,8 @@
 import { strict as assert } from "node:assert";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { defaultConfig } from "../../src/config/model.js";
-import { lifecycleInputsFromContext, stateInputsFromContext, thinkingInputsFromContext, usageTotalsFromEntries, usageTotalsFromMessage, type StateSessionEntry } from "../../src/runtime/snapshot.js";
+import { BilledSessionLedger, type StateSessionEntry } from "../../src/runtime/billed-session-ledger.js";
+import { lifecycleInputsFromContext, thinkingInputsFromContext } from "../../src/runtime/snapshot.js";
 import { createInitialState, setProviderCount } from "../../src/runtime/state.js";
 
 function message(role: string, options: { usage?: Record<string, unknown>; stopReason?: string } = {}): StateSessionEntry {
@@ -22,8 +23,6 @@ interface FakeContextOptions {
 	contextUsage?: { tokens: number | null; contextWindow: number; percent: number | null };
 	availableProviders?: readonly unknown[];
 	scopedProviders?: readonly unknown[];
-	entries?: readonly StateSessionEntry[];
-	branch?: readonly StateSessionEntry[];
 }
 
 function fakeContext(options: FakeContextOptions = {}): ExtensionContext {
@@ -37,20 +36,20 @@ function fakeContext(options: FakeContextOptions = {}): ExtensionContext {
 		getContextUsage: () => options.contextUsage,
 		sessionManager: {
 			getCwd: () => options.sessionCwd,
-			getEntries: () => options.entries ?? [],
-			getBranch: () => options.branch ?? [],
 		},
 	} as unknown as ExtensionContext;
 }
 
-const fallbackInputs = stateInputsFromContext(fakeContext({ cwd: "/fallback", sessionCwd: "" }), "medium");
+const emptyUsage = new BilledSessionLedger().totals;
+
+const fallbackInputs = lifecycleInputsFromContext(fakeContext({ cwd: "/fallback", sessionCwd: "" }), "medium");
 assert.equal(fallbackInputs.cwd, "/fallback", "cwd should fall back to ctx.cwd when session cwd is empty");
 assert.equal(fallbackInputs.thinkingLevel, "medium", "thinking level should be copied from caller input");
 
-const sessionCwdInputs = stateInputsFromContext(fakeContext({ cwd: "/fallback", sessionCwd: "/workspace" }), "high");
+const sessionCwdInputs = lifecycleInputsFromContext(fakeContext({ cwd: "/fallback", sessionCwd: "/workspace" }), "high");
 assert.equal(sessionCwdInputs.cwd, "/workspace", "session cwd should win over ctx.cwd");
 
-const modelInputs = stateInputsFromContext(
+const modelInputs = lifecycleInputsFromContext(
 	fakeContext({
 		model: {
 			id: "claude-test",
@@ -67,9 +66,9 @@ assert.deepEqual(
 	{ id: "claude-test", name: "Claude Test Friendly", provider: "anthropic", contextWindow: 200000 },
 	"model extraction should copy the public id/name/provider/contextWindow facts",
 );
-assert.equal(stateInputsFromContext(fakeContext({ model: undefined }), "off").model, undefined, "undefined ctx.model should produce undefined model inputs");
+assert.equal(lifecycleInputsFromContext(fakeContext({ model: undefined }), "off").model, undefined, "undefined ctx.model should produce undefined model inputs");
 
-const contextUsageInputs = stateInputsFromContext(
+const contextUsageInputs = lifecycleInputsFromContext(
 	fakeContext({ contextUsage: { tokens: null, contextWindow: 128000, percent: null } }),
 	"off",
 );
@@ -78,23 +77,23 @@ assert.deepEqual(
 	{ tokens: null, contextWindow: 128000, percent: null },
 	"present context usage should be copied exactly",
 );
-assert.equal(stateInputsFromContext(fakeContext({ contextUsage: undefined }), "off").contextUsage, undefined, "missing context usage should stay undefined");
-assert.equal(stateInputsFromContext(fakeContext({ availableProviders: ["openai", "anthropic", "openai", ""] }), "off").availableProviderCount, 2, "provider count should deduplicate non-empty available provider names from modelRegistry");
-assert.equal(stateInputsFromContext(fakeContext({ availableProviders: [] }), "off").availableProviderCount, 1, "provider count should keep one-provider fallback when no available models are configured");
-assert.equal(stateInputsFromContext(fakeContext({ availableProviders: [undefined, 123] }), "off").availableProviderCount, 1, "provider count should ignore invalid provider names and keep fallback minimum");
+assert.equal(lifecycleInputsFromContext(fakeContext({ contextUsage: undefined }), "off").contextUsage, undefined, "missing context usage should stay undefined");
+assert.equal(lifecycleInputsFromContext(fakeContext({ availableProviders: ["openai", "anthropic", "openai", ""] }), "off").availableProviderCount, 2, "provider count should deduplicate non-empty available provider names from modelRegistry");
+assert.equal(lifecycleInputsFromContext(fakeContext({ availableProviders: [] }), "off").availableProviderCount, 1, "provider count should keep one-provider fallback when no available models are configured");
+assert.equal(lifecycleInputsFromContext(fakeContext({ availableProviders: [undefined, 123] }), "off").availableProviderCount, 1, "provider count should ignore invalid provider names and keep fallback minimum");
 assert.equal(
-	stateInputsFromContext(fakeContext({ availableProviders: ["openai", "anthropic", "local"], scopedProviders: ["anthropic", "anthropic"] }), "off").availableProviderCount,
+	lifecycleInputsFromContext(fakeContext({ availableProviders: ["openai", "anthropic", "local"], scopedProviders: ["anthropic", "anthropic"] }), "off").availableProviderCount,
 	1,
 	"non-empty ctx.scopedModels should define the provider count instead of the full model registry",
 );
 assert.equal(
-	stateInputsFromContext(fakeContext({ availableProviders: ["openai", "anthropic"], scopedProviders: [] }), "off").availableProviderCount,
+	lifecycleInputsFromContext(fakeContext({ availableProviders: ["openai", "anthropic"], scopedProviders: [] }), "off").availableProviderCount,
 	2,
 	"empty ctx.scopedModels should fall back to every available registry model",
 );
 
 {
-	const state = createInitialState(stateInputsFromContext(fakeContext({ availableProviders: ["a", "b"] }), "off"), defaultConfig());
+	const state = createInitialState({ ...lifecycleInputsFromContext(fakeContext({ availableProviders: ["a", "b"] }), "off"), usage: emptyUsage }, defaultConfig());
 	const version = state.version;
 	assert.equal(setProviderCount(state, 2), false);
 	assert.equal(state.version, version, "an unchanged provider count cannot invalidate the display");
@@ -105,11 +104,11 @@ assert.equal(
 	assert.equal(state.version, version + 1);
 }
 
-const friendlyModelState = createInitialState(modelInputs, defaultConfig());
+const friendlyModelState = createInitialState({ ...modelInputs, usage: emptyUsage }, defaultConfig());
 assert.equal(friendlyModelState.model.displayName, "Claude Test Friendly", "state should prefer Pi's public model.name over id shortening");
 const customNameConfig = defaultConfig();
 customNameConfig.model.customNames["claude-test"] = "User Override";
-assert.equal(createInitialState(modelInputs, customNameConfig).model.displayName, "User Override", "configured custom model names should continue to override Pi model.name");
+assert.equal(createInitialState({ ...modelInputs, usage: emptyUsage }, customNameConfig).model.displayName, "User Override", "configured custom model names should continue to override Pi model.name");
 
 const cheapThinkingInputs = thinkingInputsFromContext(
 	{
@@ -177,40 +176,19 @@ assert.deepEqual(
 );
 
 assert.deepEqual(
-	usageTotalsFromMessage(message("user", { usage: { input: 100, output: 200, cacheRead: 300, cacheWrite: 400, cost: { total: 999 } } }).message ?? {}),
-	{ input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 },
-	"usageTotalsFromMessage should ignore user messages",
-);
-assert.deepEqual(
-	usageTotalsFromMessage(message("assistant", { usage: { input: 1, output: 2, cacheRead: 3, cacheWrite: 4, cost: { total: 0.25, input: 10 } } }).message ?? {}),
-	{ input: 1, output: 2, cacheRead: 3, cacheWrite: 4, cost: 0.25 },
-	"usageTotalsFromMessage should prefer finite cost.total over cost components",
-);
-assert.deepEqual(
-	usageTotalsFromMessage(message("toolResult", { usage: { input: 5, output: 6, cacheRead: 7, cacheWrite: 8, cost: { input: 0.1, output: 0.2, cacheRead: 0.3, cacheWrite: 0.4 } } }).message ?? {}),
-	{ input: 5, output: 6, cacheRead: 7, cacheWrite: 8, cost: 1 },
-	"usageTotalsFromMessage should include usage-bearing tool results and fall back to cost components",
-);
-assert.deepEqual(
-	usageTotalsFromMessage(message("assistant").message ?? {}),
-	{ input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 },
-	"usageTotalsFromMessage should default missing usage to zero",
-);
-
-assert.deepEqual(
-	usageTotalsFromEntries([
+	new BilledSessionLedger().rebuild([
 		message("user", { usage: { input: 100, output: 200, cacheRead: 300, cacheWrite: 400, cost: { total: 999 } } }),
 		{ type: "tool", message: { role: "assistant", usage: { input: 100 } } } as StateSessionEntry,
 		message("assistant", { usage: { input: 1, output: 2, cacheRead: 3, cacheWrite: 4, cost: { total: 0.25, input: 10 } } }),
-		message("assistant", { usage: { input: 5, output: 6, cacheRead: 7, cacheWrite: 8, cost: { input: 0.1, output: 0.2, cacheRead: 0.3, cacheWrite: 0.4 } } }),
+		message("toolResult", { usage: { input: 5, output: 6, cacheRead: 7, cacheWrite: 8, cost: { input: 0.1, output: 0.2, cacheRead: 0.3, cacheWrite: 0.4 } } }),
 		message("assistant"),
 	]),
 	{ input: 6, output: 8, cacheRead: 10, cacheWrite: 12, cost: 1.25 },
-	"usage totals should include assistant messages only, prefer finite cost.total, fall back to cost components, and default missing usage to 0",
+	"billed messages prefer finite cost.total, fall back to cost components, and default missing usage to 0",
 );
 
 assert.deepEqual(
-	usageTotalsFromEntries([
+	new BilledSessionLedger().rebuild([
 		message("assistant", { usage: { input: 1, output: 2, cacheRead: 3, cacheWrite: 4, cost: { total: 0.1 } } }),
 		message("toolResult", { usage: { input: 10, output: 20, cacheRead: 30, cacheWrite: 40, cost: { total: 1 } } }),
 		{ type: "compaction", usage: { input: 100, output: 200, cacheRead: 300, cacheWrite: 400, cost: { total: 10 } } },
@@ -225,16 +203,11 @@ const usageEntries = [
 	{ type: "usage", kind: "future-operation", usage: { input: 20, output: 2, cacheWrite: 30, cost: { total: 0.25 } } },
 	{ type: "message", message: { role: "system", usage: { input: 999, cost: { total: 999 } } } },
 ];
-const persistedUsage = stateInputsFromContext(fakeContext({
-	entries: usageEntries,
-	contextUsage: { tokens: null, contextWindow: 200_000, percent: null },
-}), "off");
-assert.deepEqual(persistedUsage.usage, { input: 20, output: 3, cacheRead: 50_000, cacheWrite: 30, cost: 0.265015 },
+const persistedUsage = new BilledSessionLedger().rebuild(usageEntries);
+assert.deepEqual(persistedUsage, { input: 20, output: 3, cacheRead: 50_000, cacheWrite: 30, cost: 0.265015 },
 	"all standalone usage kinds must count as billed work, without treating system messages as usage");
-assert.deepEqual(persistedUsage.contextUsage, { tokens: null, contextWindow: 200_000, percent: null },
-	"cache warming must not make unknown Pi context usage appear known");
 
-const publicContextTruthInputs = stateInputsFromContext(
+const publicContextTruthInputs = lifecycleInputsFromContext(
 	{
 		cwd: "/public-context-truth",
 		model: { id: "truth-model", provider: "truth-provider", contextWindow: 100_000 },
@@ -244,30 +217,12 @@ const publicContextTruthInputs = stateInputsFromContext(
 			getCwd: () => "/public-context-truth",
 			getEntries: () => [],
 			getBranch: () => {
-				throw new Error("stateInputsFromContext must not derive context truth from the session branch");
+				throw new Error("Context truth must not come from the session branch");
 			},
 		},
 	} as unknown as ExtensionContext,
 	"off",
 );
 assert.deepEqual(publicContextTruthInputs.contextUsage, { tokens: null, contextWindow: 100_000, percent: null }, "state inputs should trust ctx.getContextUsage nulls directly without a branch-derived shadow state");
-
-assert.deepEqual(
-	stateInputsFromContext(
-		fakeContext({
-			entries: [message("assistant", { usage: { input: 2, output: 3, cost: { total: 0.5 } } })],
-		}),
-		"low",
-	),
-	{
-		cwd: "/fallback",
-		model: undefined,
-		thinkingLevel: "low",
-		contextUsage: undefined,
-		usage: { input: 2, output: 3, cacheRead: 0, cacheWrite: 0, cost: 0.5 },
-		availableProviderCount: 1,
-	},
-	"stateInputsFromContext should combine cwd, thinking, complete session usage totals, and public context facts",
-);
 
 console.log("✓ state input extraction checks passed");

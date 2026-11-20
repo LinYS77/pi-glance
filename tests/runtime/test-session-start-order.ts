@@ -56,17 +56,28 @@ async function main(): Promise<void> {
 
 		await getHandler(enabledPi, "session_shutdown")({ type: "session_shutdown" }, enabledContext);
 
+		const configDir = join(agentDir, "pi-glance");
+		await mkdir(configDir, { recursive: true });
+		const configPath = join(configDir, "config.json");
+		await writeFile(configPath, "{ invalid config", "utf8");
 		for (const mode of ["rpc", "json", "print"] as const) {
 			const nonTuiPi = createPi();
 			piGlance(nonTuiPi.api);
-			const { ctx, surfaceCalls: nonTuiCalls } = createRuntimeTestContext({ mode, trusted: false, persistent: false });
+			const { ctx, surfaceCalls, notifications, getEntryReads } = createRuntimeTestContext({ mode, hasUI: true, trusted: false, persistent: false });
+			ctx.getContextUsage = () => assert.fail(`${mode} must not calculate Context`);
+			ctx.modelRegistry.getAvailable = () => assert.fail(`${mode} must not enumerate models`);
 			const nonTuiResult = getHandler(nonTuiPi, "session_start")({ type: "session_start" }, ctx);
-			assert.equal(isPromiseLike(nonTuiResult), false, `${mode} session_start should stay synchronous for default enabled config`);
-			assert.deepEqual(nonTuiCalls, [], `${mode} session_start should not install or clear TUI footer/editor`);
+			assert.equal(isPromiseLike(nonTuiResult), false, `${mode} session_start stays synchronous`);
+			for (const [type, handler] of nonTuiPi.handlers) {
+				if (type === "session_start") continue;
+				await handler({ type, message: { role: "assistant" }, compactionEntry: { type: "compaction" } }, ctx);
+			}
+			assert.equal(getEntryReads(), 0, `${mode} must not scan the session ledger`);
+			assert.deepEqual(surfaceCalls, []);
+			assert.deepEqual(notifications, [], "headless lifecycle should not load and diagnose TUI config");
 		}
 
-		await mkdir(join(agentDir, "pi-glance"), { recursive: true });
-		await writeFile(join(agentDir, "pi-glance", "config.json"), `${JSON.stringify({ enabled: false })}\n`, "utf8");
+		await writeFile(configPath, `${JSON.stringify({ enabled: false })}\n`, "utf8");
 
 		const disabledPi = createPi();
 		piGlance(disabledPi.api);

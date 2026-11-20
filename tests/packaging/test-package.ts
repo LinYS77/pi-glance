@@ -24,19 +24,23 @@ test("npm package includes the complete source tree and excludes development fil
 	assert.equal(Object.keys(manifest.dependencies ?? {}).length, 0, "no bundled runtime dependencies");
 	const packed = new Set(pack.files.map((file) => file.path));
 	const sources = await readProductionSources();
-	const expected = new Set([...sources.map((file) => file.path), "package.json", "README.md", "README.zh-CN.md", "LICENSE"]);
+	const expected = new Set([...sources.map((file) => file.path), "package.json", "README.md", "README.zh-CN.md", "CHANGELOG.md", "LICENSE"]);
 	assert.deepEqual([...packed].sort(), [...expected].sort(), "ship all runtime TypeScript, but no tests, fixtures, build output or local state");
 });
 
-test("release version, lockfile and checked-in notes agree", async () => {
+test("GitHub notes use the current npm version section from the shipped changelog", async () => {
 	const manifest = JSON.parse(await readFile("package.json", "utf8"));
 	const lock = JSON.parse(await readFile("package-lock.json", "utf8"));
 	assert.equal(lock.version, manifest.version);
 	assert.equal(lock.packages[""].version, manifest.version);
-	const notesFile = `v${manifest.version}.md`;
-	assert.deepEqual(await readdir(".github/release-notes"), [notesFile]);
-	const notes = await readFile(join(".github/release-notes", notesFile), "utf8");
-	assert.ok(notes.startsWith(`# pi-glance ${manifest.version}\n`));
+	const changelog = await readFile("CHANGELOG.md", "utf8");
+	const heading = `## [${manifest.version}]`;
+	const section = changelog.split(/^## /m).slice(1).find(entry => `## ${entry.split("\n", 1)[0]}`.startsWith(heading));
+	assert.ok(section, "Pi must find the published version in the changelog");
+	const body = section.slice(section.indexOf("\n") + 1).trim();
+	assert.ok(body.length > 0);
+	const { stdout: notes } = await promisify(execFile)(process.execPath, ["scripts/release-notes.mjs"]);
+	assert.equal(notes, `# pi-glance ${manifest.version}\n\n${body}\n`);
 	assert.ok(notes.length < 1500, "release notes should stay short");
 });
 

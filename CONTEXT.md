@@ -10,12 +10,12 @@ Pi still handles text editing and terminal layout. Glance does not provide a sep
 
 - **Input surface** — the Pi-owned editor area plus the Glance frame and inline status facts around it.
 - **Glance state** — the in-memory, render-ready facts consumed by the input surface.
-- **Billed-session facts** — usage and cost accumulated across every persisted Pi session entry that carries provider usage.
+- **Billed-session facts** — usage and cost accumulated across every persisted Pi session entry that carries provider usage. `BilledSessionLedger` owns normalization, event deduplication, and the persisted cursor.
 - **Context truth** — Pi's current public `ctx.getContextUsage()` result. `null` means unknown and is not inferred from another source.
 - **Output throughput** — complete provider output, including reasoning, divided by summed observed model request durations. This is not raw decode speed.
 - **Ambient tone** — `light` or `dark`, read directly from public Pi `theme.appearance`.
 - **Theme slot** — the configured Glance palette selected for a light or dark ambient tone.
-- **Refresh session** — `RuntimeRefreshSession` handles lifecycle events, usage deduplication, Output throughput tracking, Git refresh scheduling, and render decisions.
+- **Refresh session** — `RuntimeRefreshSession` coordinates lifecycle fact updates, Output throughput tracking, Git refresh scheduling, and render decisions.
 - **Config store** — reads a configuration file and replaces it atomically on save. Its path is supplied when the extension is created.
 - **Segment tone** — `normal`, `warning`, or `error`, supplied alongside display content by a segment feature. It is distinct from the light/dark ambient tone.
 
@@ -61,14 +61,15 @@ The following are outside Glance's scope:
 ## Runtime architecture
 
 ```text
-index.ts                              stable Pi package entry and path selection
+index.ts                              Pi package entry, paths and TUI-only event dispatch
   -> src/config/store.ts              config reads and atomic writes
        -> src/config/model.ts         defaults, validation, migration, transforms
           src/config/settings.ts      shared setting descriptors and choices
   -> src/input/store.ts               private, atomic per-session draft files
   -> src/runtime/runtime.ts           Pi wiring and input-surface ownership
        -> refresh-session.ts          lifecycle semantics and render decisions
-            -> snapshot.ts            public Pi facts -> Glance inputs
+            -> snapshot.ts            public Pi workspace, model and Context
+            -> billed-session-ledger.ts  billing rebuild, deltas and cursor
             -> state.ts               visible-state mutations
             -> throughput-run-tracker.ts
        -> git.ts                      local polling and summary collection
@@ -100,9 +101,9 @@ tests/fixtures/                       independent expected theme data
 scripts/                              developer utilities, not test implementations
 ```
 
-`src/runtime/runtime.ts` connects Pi events to the refresh session and manages editor/footer installation. State updates belong in `state.ts`, session accounting in `refresh-session.ts`, and frame rendering in `src/surface/`.
+`index.ts` dispatches lifecycle events for TUI sessions only. RPC, JSON and print do not load Glance config or collect status facts; `/glance` can still report that it requires TUI mode. A TUI with the Glance frame disabled still collects facts for the settings preview. `src/runtime/runtime.ts` manages editor/footer installation and delegates updates to the refresh session. `state.ts` publishes render-ready snapshots; the billed-session ledger never changes Context or Output throughput.
 
-Configuration rules, setting descriptors, settings state and catalog, Git status parsing, and Output throughput tracking have no file/process IO or Pi runtime imports, including through local dependencies. File access stays in `src/config/store.ts` and `src/input/store.ts`; Git process IO stays in `src/runtime/git-command.ts`.
+Configuration rules, setting descriptors, settings state and catalog, Git status parsing, session billing, and Output throughput tracking have no file/process IO or Pi runtime imports, including through local dependencies. File access stays in `src/config/store.ts` and `src/input/store.ts`; Git process IO stays in `src/runtime/git-command.ts`.
 
 `RuntimeRefreshSession` exposes lifecycle methods such as `modelSelect`, `sessionTree`, `messageEnd`, and `agentSettled`. It handles snapshot selection and update ordering internally.
 
@@ -110,7 +111,7 @@ Each built-in segment returns display content, a color level, and any custom ico
 
 ## Refresh and render rules
 
-- `session_start` and structural `session_tree` may reconcile full persisted entries.
+- `session_start` and structural `session_tree` rebuild the whole-session bill and seed the cursor/deduplication indexes in one pass over persisted entries. A new session owns a new ledger; archived or forked sessions retain their independent drafts.
 - Ordinary lifecycle events use public lifecycle snapshots and event deltas; they do not rescan all entries.
 - Compaction usage comes from `SessionCompactEvent.compactionEntry` or persisted boundary summaries, deduplicated by public entry ID.
 - Standalone `usage` entries (including cache warming and unknown kinds) belong to the same billed-session ledger. Initial/reliable snapshots count them alongside messages and summaries. Before a live editor or settings preview reads its state, an in-memory cursor checks the public `getLeafId()` and walks only unseen `getEntry(id).parentId` links, applying standalone usage and compaction/branch-summary usage once. Pi's own post-warming redraw drives idle updates; unchanged frames are O(1), with no timer, full-history rescan, fabricated event, or use of pre-request cost estimates. This does not touch Context or Output throughput. Reliable snapshots seed both the cursor and event deduplication ledger, and retired UI callbacks cannot read a replaced session. `agent_settled` also reconciles persisted usage and refreshes public Context after final boundary entries, requesting one render only when visible facts change.
@@ -324,18 +325,18 @@ At extremely narrow widths, the inherited editor is given enough room for a two-
 - Node floor: `>=22.19.0`.
 - Pi packages are `>=1.0.0` peer dependencies supplied by Pi and are not bundled.
 - Production source is shipped directly as TypeScript: root `index.ts` plus `src/**/*.ts`. Tests and fixtures are not shipped.
-- CI and GitHub Release share a four-job matrix: Node 22.19/24 × Pi 1.0.0/1.2.0. Each job verifies actual SDK versions, typechecks, and runs the behavior/package suite with an isolated agent directory. The newer SDK is installed without modifying the pinned minimum-version manifest or lockfile. Branch CI does not run on tags.
+- CI and GitHub Release share a four-job matrix: Node 22.19/24 × Pi 1.0.0/1.6.0. Each job verifies actual SDK versions, typechecks, and runs the behavior/package suite with an isolated agent directory. The newer SDK is installed without modifying the pinned minimum-version manifest or lockfile. Branch CI does not run on tags.
 - Tests import the project interfaces directly. Import-graph checks detect cycles and forbidden dependencies; separate fixtures verify palette data.
 - Display tests separate config upgrades, the shared save transaction, footer lifecycle, fitting and settings interactions. Live/preview parity compares the real entry points, not a copy of the renderer inside test helpers. Color-data checks cover all palette/color/depth combinations; UI tests use representative choices and scroll boundaries instead of repeating the same save matrix for every preference.
 - The package test compares `npm pack --dry-run` output with the full production file list.
 
 ## Repository files
 
-`package.json`'s `files` list controls the npm package contents. Only runtime TypeScript, READMEs, the manifest and license are shipped; tests, scripts, assets and local state stay out of the tarball. The package-content test checks this exact file list.
+`package.json`'s `files` list controls the npm package contents. Only runtime TypeScript, READMEs, `CHANGELOG.md`, the manifest and license are shipped; tests, scripts, assets and local state stay out of the tarball. The package-content test checks this exact file list.
 
-`docs/` and `.pi/` are reserved for local notes and Pi settings and are ignored by Git. `.github/release-notes/` keeps the current release notes; previous versions remain in Git history and GitHub Releases. `npm run clean` removes only `.tmp-test/`, leaving dependencies, local settings and release tarballs intact. `npm run build:dev` cleans before compiling.
+`docs/` and `.pi/` are reserved for local notes and Pi settings and are ignored by Git. `CHANGELOG.md` is the single release-notes source. Pi 1.5+ can show its versioned entries after a package update; `node scripts/release-notes.mjs` extracts only the current package version for GitHub. Keep new entries under `Unreleased` until bumping the package and lockfile for a release. `npm run clean` removes only `.tmp-test/`, leaving dependencies, local settings and release tarballs intact. `npm run build:dev` cleans before compiling.
 
-`npm ci`, `npm run check` and `npm test` install dependencies, typecheck, and run the full test suite. `npm run test:pane` covers the settings suite, including interaction, preview and save behavior; `npm run test:config` covers validation, migration and file storage. Use `npm run pack:dry` to inspect the package or `npm pack` to create a release tarball. The packaging tests also check that the manifest, lockfile and current release notes use the same version.
+`npm ci`, `npm run check` and `npm test` install dependencies, typecheck, and run the full test suite. `npm run test:pane` covers the settings suite, including interaction, preview and save behavior; `npm run test:config` covers validation, migration and file storage. Use `npm run pack:dry` to inspect the package or `npm pack` to create a release tarball. The packaging tests also check that the manifest, lockfile and generated release notes use the same version.
 
 Developer utilities:
 - `npm run bench:render` measures live editor and settings render time in RGB/ANSI256, both sweep modes, and 80/160-column terminals. It uses a fixed clock and example data, with no terminal or config writes. Compare runs on the same Node version and machine; timings are not CI pass/fail thresholds.
