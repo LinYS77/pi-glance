@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.7.8] - 2026-11-21
 
 - Validate Pi 1.6 while retaining Pi 1.0 support. Pi 1.5 and later can show this changelog after an update.
 - Skip Glance configuration and status collection in non-interactive sessions.
